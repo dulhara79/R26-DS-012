@@ -120,7 +120,7 @@ Input: 60-second multivariate window (11 features, 50% overlap)
                                             Risk Probability [0, 1]
 ```
 
-
+---
 
 ### 📱 Component 2 - Temporal Behavioral Graph Framework *(Layathma B.M.A.S.)*
 
@@ -308,7 +308,6 @@ ICD-10 codes used: F41.0, F41.1, F41.3, F41.9, F40.00, F40.10
 ![TLS](https://img.shields.io/badge/HTTPS-TLS%201.3-green?style=flat-square)
 ![JWT](https://img.shields.io/badge/Auth-JWT-black?style=flat-square)
 
----
 
 
 **Core commitments across all components:**
