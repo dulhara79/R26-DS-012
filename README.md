@@ -80,54 +80,6 @@ The system spans the full clinical pipeline: from a custom-built chest-strap wea
 | Clinical NLP requires 1,000+ labeled examples | Most hospitals can annotate only 10–20 records per condition |
 | Interventions are one-size-fits-all | What works for one person fails for another |
 
----
-
-## 🏗 Framework Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                     MULTIMODAL INPUT LAYER                          │
-│                                                                     │
-│  🫀 ECG / HRV       📱 Smartphone Sensors     📋 Clinical Notes    │
-│  🌡 Temperature      📍 GPS / Mobility         🏥 NHSL Patient Data │
-│  🫁 Respiration      🌙 Circadian Rhythms                          │
-│  📐 Accelerometry    💬 Communication Patterns                      │
-└──────────────┬──────────────────┬──────────────┬────────────────────┘
-               │                  │              │
-               ▼                  ▼              ▼
-┌──────────────────┐  ┌───────────────────┐  ┌──────────────────────┐
-│   COMPONENT 1    │  │   COMPONENT 2     │  │    COMPONENT 4       │
-│ Wearable LSTM-AE │  │ Temporal Behav.   │  │  TC-WPN Few-Shot     │
-│ Anomaly Detection│  │ Graph (GATv2)     │  │  Clinical NLP        │
-│ + Forecasting    │  │                   │  │                      │
-│ w₁ = 0.25       │  │ w₂ = 0.20        │  │ w₄ = 0.40           │
-└──────────┬───────┘  └────────┬──────────┘  └──────────┬───────────┘
-           │                   │                         │
-           └───────────────────┼─────────────────────────┘
-                               ▼
-               ┌───────────────────────────────┐
-               │       LATE FUSION LAYER        │
-               │  Composite Anxiety Risk Score  │
-               │   🟢 GREEN / 🟡 AMBER /        │
-               │   🔴 RED / ⚫ DARK RED         │
-               └───────────────┬───────────────┘
-                               │
-                               ▼
-               ┌───────────────────────────────┐
-               │       COMPONENT 3             │
-               │  KNN-CBR Intervention Engine  │
-               │  + Continuous Learning Loop   │
-               │  w₃ = 0.15 (adaptation)       │
-               └───────────────┬───────────────┘
-                               │
-               ┌───────────────┴────────────────┐
-               │                                │
-               ▼                                ▼
-  ┌────────────────────────┐     ┌──────────────────────────┐
-  │  Patient-Facing App    │     │   Clinician Dashboard    │
-  │  (Flutter Mobile)      │     │   (XAI Explanations)     │
-  └────────────────────────┘     └──────────────────────────┘
-```
 
 ---
 
