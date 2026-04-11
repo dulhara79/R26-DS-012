@@ -14,6 +14,11 @@
 
 <br/>
 
+<p align="center">
+  <img src="full.png" alt="image" width="900"/>
+</p>
+
+
 *Four tightly integrated components. One unified framework. Zero reliance on labeled anxiety episodes.*
 
 <br/>
