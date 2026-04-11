@@ -2,14 +2,13 @@
 
 <img src="https://img.shields.io/badge/SLIIT-Research%20Project-0057A8?style=for-the-badge&logoColor=white" />
 <img src="https://img.shields.io/badge/Project%20ID-R26--DS--012-2E75B6?style=for-the-badge" />
-<img src="https://img.shields.io/badge/Status-Phase%201%20Complete-28A745?style=for-the-badge" />
-<img src="https://img.shields.io/badge/Phase%202-Ethics%20Clearance%20Pending-FFA500?style=for-the-badge" />
+
 
 <br/><br/>
 
 # 🧠 A Multimodal Digital Biomarker Framework for Personalized Vulnerability Mapping and Acute Escalation Forecasting in Young Adults with Anxiety Disorders
 
-**R26-DS-012 | B.Sc. (Hons) Information Technology — Specialized in Data Science**  
+**R26-DS-012 | B.Sc. (Hons) Information Technology Specialized in Data Science**  
 **Sri Lanka Institute of Information Technology (SLIIT)**  
 **Department of Computer Science | March 2026**
 
