@@ -195,19 +195,6 @@ features = [
 
 > *Drv4 excluded on physiological grounds: stress-condition RMSSD exceeded baseline RMSSD, indicating wrist PPG motion artifact invalidating the stress label. This is not a statistical exclusion.
 
-#### ✅ Phase 1 Results (NB01–NB08)
-
-| Metric | Value |
-|--------|-------|
-| Combined AUROC (LOSO) | **0.9702 ± 0.059** |
-| WESAD AUROC | **0.9915** |
-| WESAD Precision | **1.0000** |
-| AffectiveROAD AUROC | **0.9470** |
-| EmoWear External FAR | **0.0000** (125 unseen windows) |
-| Mean Early Warning Time | **11.83 ± 6.39 min** |
-| Post-Personalization AUROC | **0.9788** |
-
----
 
 ### 📱 Component 2 — Temporal Behavioral Graph Framework *(Layathma B.M.A.S.)*
 
