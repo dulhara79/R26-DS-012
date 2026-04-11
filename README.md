@@ -4,9 +4,9 @@
 <img src="https://img.shields.io/badge/Project%20ID-R26--DS--012-2E75B6?style=for-the-badge" />
 
 
-<br/><br/>
+<br/>
 
-# 🧠 A Multimodal Digital Biomarker Framework for Personalized Vulnerability Mapping and Acute Escalation Forecasting in Young Adults with Anxiety Disorders
+# A Multimodal Digital Biomarker Framework for Personalized Vulnerability Mapping and Acute Escalation Forecasting in Young Adults with Anxiety Disorders
 
 **R26-DS-012 | B.Sc. (Hons) Information Technology Specialized in Data Science**  
 **Sri Lanka Institute of Information Technology (SLIIT)**  
