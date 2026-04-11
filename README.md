@@ -54,14 +54,13 @@
 
 ## 🌐 Overview
 
-Anxiety disorders affect an estimated **301 million people globally**, yet the median delay between onset and first treatment contact exceeds **a decade**. In Sri Lanka, around 100 psychiatrists serve a population of 22 million, with only 10% of affected individuals ever accessing specialist services.
+Anxiety disorders affect an estimated 301 million people globally, yet the median delay between onset and first treatment contact exceeds **a decade**. In Sri Lanka, around 100 psychiatrists serve a population of 22 million, with only 10% of affected individuals ever accessing specialist services.
 
 Existing tools are either too expensive, too reactive, or too general. Clinical appointments are episodic. Consumer wearables use population-level heuristics. AI systems require thousands of labeled examples that simply don't exist in most clinical settings.
 
 **This research builds something different.**
 
 This is a four-component unified framework that monitors anxiety continuously, predicts escalation before it happens, recommends personalized interventions, and adapts to each individual- all without requiring a single labeled anxiety episode for training.
-
 The system spans the full clinical pipeline: from a custom-built chest-strap wearable and passive smartphone sensing, through a continuously learning intervention engine, to a few-shot clinical NLP model that works with just 10–20 labeled clinical notes.
 
 ---
@@ -131,11 +130,11 @@ The system spans the full clinical pipeline: from a custom-built chest-strap wea
 
 ---
 
-### 🫀 Component 1 — Wearable Biosensor Forecasting *(Sendanayake H.D.)*
+### 🫀 Component 1 - Wearable Biosensor Forecasting *(Sendanayake H.D.)*
 
-> *Self-supervised anomaly detection and 5–10 minute early warning forecasting using a custom chest-strap wearable.*
+> *Self-supervised anomaly detection and 5-10 minute early warning forecasting using a custom chest-strap wearable.*
 
-**The core idea:** Train a model only on what "normal" looks like for each person. Then, when their physiology starts deviating from that normal, flag it — before a full anxiety escalation occurs. No labeled anxiety episodes needed.
+**The core idea:** Train a model only on what "normal" looks like for each person. Then, when their physiology starts deviating from that normal, flag it before a full anxiety escalation occurs. No labeled anxiety episodes needed.
 
 #### 🔧 Hardware
 
@@ -196,11 +195,11 @@ features = [
 > *Drv4 excluded on physiological grounds: stress-condition RMSSD exceeded baseline RMSSD, indicating wrist PPG motion artifact invalidating the stress label. This is not a statistical exclusion.
 
 
-### 📱 Component 2 — Temporal Behavioral Graph Framework *(Layathma B.M.A.S.)*
+### 📱 Component 2 - Temporal Behavioral Graph Framework *(Layathma B.M.A.S.)*
 
 > *Passive smartphone sensing modeled as temporal graphs, with GATv2 learning anxiety-predictive behavioral patterns.*
 
-**The core idea:** Your phone already knows when you stop going places, when you stop sleeping properly, when you stop talking to people. Model those behavioral fingerprints as a graph over time — then let a graph neural network learn which patterns predict rising anxiety.
+**The core idea:** Your phone already knows when you stop going places, when you stop sleeping properly, when you stop talking to people. Model those behavioral fingerprints as a graph over time- then let a graph neural network learn which patterns predict rising anxiety.
 
 #### 📡 Passive Sensing Streams
 
@@ -241,11 +240,11 @@ Behavioral phenotypes identified via K-Means (k=3):
 
 ---
 
-### 💊 Component 3 — Personalized Intervention Framework *(Seneviratne K.A.U.A.)*
+### 💊 Component 3 - Personalized Intervention Framework *(Seneviratne K.A.U.A.)*
 
 > *A continuously learning KNN-CBR engine that recommends personalized anxiety interventions and adapts from physiological feedback.*
 
-**The core idea:** When the system detects elevated risk, it doesn't just alert you — it recommends a specific intervention (breathing exercise, grounding technique, CBT prompt) based on what has actually worked for similar people before. And it keeps learning from whether the intervention helped.
+**The core idea:** When the system detects elevated risk, it doesn't just alert you- it recommends a specific intervention (breathing exercise, grounding technique, CBT prompt) based on what has actually worked for similar people before. And it keeps learning from whether the intervention helped.
 
 #### 🔁 System Flow
 
@@ -281,11 +280,11 @@ Tri-modal Risk Vector (23 features)
 
 ---
 
-### 🏥 Component 4 — Clinical NLP / TC-WPN *(Kaushalya I.G.D.)*
+### 🏥 Component 4 - Clinical NLP / TC-WPN *(Kaushalya I.G.D.)*
 
-> *A few-shot meta-learning model for clinical anxiety detection from sparse longitudinal clinical notes — designed for deployment at NHSL.*
+> *A few-shot meta-learning model for clinical anxiety detection from sparse longitudinal clinical notes designed for deployment at Hospitals.*
 
-**The core idea:** A hospital psychiatrist can realistically annotate maybe 15 notes. Standard NLP models need 5,000. TC-WPN bridges that gap by meta-training on a large external corpus and adapting to the local clinical context with just 10–20 labeled examples — while accounting for the fact that a note from last week matters more than one from three years ago.
+**The core idea:** A hospital psychiatrist can realistically annotate maybe 15 notes. Standard NLP models need 5,000. TC-WPN bridges that gap by meta-training on a large external corpus and adapting to the local clinical context with just 10-20 labeled examples, while accounting for the fact that a note from last week matters more than one from three years ago.
 
 #### 🧬 TC-WPN Algorithm
 
@@ -335,7 +334,7 @@ ICD-10 codes used: F41.0, F41.1, F41.3, F41.9, F40.00, F40.10
 | IT22107596 | Sendanayake H.D. | 🫀 Wearable Biosensor Forecasting |
 | IT22171542 | Layathma B.M.A.S. | 📱 Temporal Behavioral Graph Framework |
 | IT22093950 | Seneviratne K.A.U.A. | 💊 Personalized Intervention Framework |
-| IT22130648 | Kaushalya I.G.D. | 🏥 Clinical NLP — TC-WPN |
+| IT22130648 | Kaushalya I.G.D. | 🏥 Clinical NLP - TC-WPN |
 
 ---
 
@@ -363,47 +362,10 @@ ICD-10 codes used: F41.0, F41.1, F41.3, F41.9, F40.00, F40.10
 
 ---
 
-## 📈 Key Results (Phase 1)
-
-> Phase 1 used benchmark datasets only. Phase 2 (real-world wearable + NHSL data) awaits ethics clearance.
-
-### Component 1 — LSTM-AE (NB05, LOSO)
-
-```
-Combined AUROC:          0.9702 ± 0.059
-WESAD AUROC:             0.9915   |   WESAD Precision: 1.0000
-AffectiveROAD AUROC:     0.9470
-EmoWear External FAR:    0.0000   (125 unseen baseline windows)
-```
-
-### Component 1 — Masked LSTM-AE (NB06)
-
-```
-AffectiveROAD F1:        +20.7% vs standard LSTM-AE
-False Alarm Rate:        ~4× higher (tradeoff acknowledged)
-```
-
-### Component 1 — Forecasting Module (NB07)
-
-```
-Combined AUROC:          0.8824
-Mean Early Warning Time: 11.83 ± 6.39 minutes
-Subjects with advance alerts: 6 / 25
-```
-
-### Component 1 — Personalization (NB08)
-
-```
-Global AUROC → Personalized AUROC:  0.9702 → 0.9788
-Largest gains:  Drv7 +0.0904 | Drv8 +0.0549 | Drv5 +0.0469 | S9 +0.0397
-Sub-ceiling subjects improved:      6 / 10
-```
-
----
 
 ## 🛠 Tech Stack
 
-### Component 1 — Wearable & ML
+### Component 1: Wearable & ML
 ![Python](https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=flat-square&logo=pytorch&logoColor=white)
 ![NeuroKit2](https://img.shields.io/badge/NeuroKit2-Signal%20Processing-blue?style=flat-square)
@@ -411,18 +373,18 @@ Sub-ceiling subjects improved:      6 / 10
 ![Google Colab](https://img.shields.io/badge/Colab-T4%20GPU-F9AB00?style=flat-square&logo=googlecolab&logoColor=black)
 ![ESP32-C3](https://img.shields.io/badge/ESP32--C3-Firmware-E7352C?style=flat-square)
 
-### Component 2 — Graph ML
+### Component 2: Graph ML
 ![PyTorch Geometric](https://img.shields.io/badge/PyG-Graph%20Neural%20Net-orange?style=flat-square)
 ![Android](https://img.shields.io/badge/Android-Passive%20Sensing-3DDC84?style=flat-square&logo=android&logoColor=white)
 ![Firebase](https://img.shields.io/badge/Firebase-FFCA28?style=flat-square&logo=firebase&logoColor=black)
 
-### Component 3 — Intervention Engine
+### Component 3: Intervention Engine
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
 ![Flutter](https://img.shields.io/badge/Flutter-02569B?style=flat-square&logo=flutter&logoColor=white)
 ![scikit-learn](https://img.shields.io/badge/scikit--learn-F7931E?style=flat-square&logo=scikit-learn&logoColor=white)
 ![Firebase](https://img.shields.io/badge/Firebase-FCM-FFCA28?style=flat-square&logo=firebase&logoColor=black)
 
-### Component 4 — Clinical NLP
+### Component 4: Clinical NLP
 ![HuggingFace](https://img.shields.io/badge/HuggingFace-ClinicalBERT-FFD21E?style=flat-square&logo=huggingface&logoColor=black)
 ![FastAPI](https://img.shields.io/badge/FastAPI-Inference%20API-009688?style=flat-square&logo=fastapi&logoColor=white)
 ![MIMIC-IV](https://img.shields.io/badge/MIMIC--IV-PhysioNet-1A73E8?style=flat-square)
@@ -435,31 +397,6 @@ Sub-ceiling subjects improved:      6 / 10
 
 ---
 
-## 📅 Project Timeline
-
-```
-Week  1–4   ████░░░░░░░░░░░░░░░░░░░░  Data engineering + hardware
-Week  5–10  ░░░░████████░░░░░░░░░░░░  ML model development
-Week  9–13  ░░░░░░░░████████░░░░░░░░  Continuous learning + fine-tuning
-Week 10–15  ░░░░░░░░░░░░████████░░░░  API backend development
-Week 13–18  ░░░░░░░░░░░░░░░░████████  Flutter mobile application
-Week 18–21  ░░░░░░░░░░░░░░░░░░░░████  Evaluation + ablation studies
-Week 21–24  ░░░░░░░░░░░░░░░░░░░░░░░░  Documentation + viva preparation
-
-Current status: Phase 1 complete ✅ | Phase 2 awaiting ethics clearance ⏳
-```
-
----
-
-## 🔒 Ethics & Data Governance
-
-| Component | Ethics Body | Status |
-|-----------|-------------|--------|
-| C1 — Wearable (real-world) | SLIIT Research Ethics Committee | Pending |
-| C2 — Behavioral Graph | SLIIT Research Ethics Committee | Pending |
-| C3 — Intervention Framework | No IRB required (synthetic dataset for core development) | N/A |
-| C4 — MIMIC-IV access | PhysioNet DUA + CITI certification | In progress |
-| C4 — NHSL patient data | NHSL Ethics Review Committee | Pending (coordinated with Dr. Chathurie Suraweera) |
 
 **Core commitments across all components:**
 - 🔐 No raw sensor data transmitted beyond component boundaries — only risk scores
@@ -478,17 +415,6 @@ Current status: Phase 1 complete ✅ | Phase 2 awaiting ethics clearance ⏳
 | 🏥 **SDG 3** — Good Health and Well-Being | Proactive, accessible, continuous anxiety monitoring for a population with severe psychiatrist shortages |
 | ⚖️ **SDG 10** — Reduced Inequalities | Smartphone-based passive sensing requires no expensive clinical infrastructure; scalable across socioeconomic boundaries |
 | 🔬 **SDG 9** — Industry, Innovation, Infrastructure | Novel graph-based AI, self-supervised wearable biosensing, and few-shot meta-learning advancing the intersection of data science and digital health |
-
----
-
-## 📄 Publication
-
-Target venues for Phase 1 findings:
-- IEEE Access
-- Frontiers in Digital Health
-- ACM CHI (Human Factors in Computing Systems)
-
-Intellectual property: Provisional patent filing planned at NIPO (National Intellectual Property Office of Sri Lanka) for the TC-WPN architecture and Temporal Behavioral Graph construction method.
 
 ---
 
