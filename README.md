@@ -8,9 +8,9 @@
 
 # A Multimodal Digital Biomarker Framework for Personalized Vulnerability Mapping and Acute Escalation Forecasting in Young Adults with Anxiety Disorders
 
-**R26-DS-012 | B.Sc. (Hons) Information Technology Specialized in Data Science**  
+**B.Sc. (Hons) Information Technology Specialized in Data Science**  
 **Sri Lanka Institute of Information Technology (SLIIT)**  
-**Department of Computer Science | March 2026**
+**Department of Computer Science | 2026**
 
 <br/>
 
@@ -35,10 +35,10 @@
 - [The Problem](#-the-problem)
 - [Framework Architecture](#-framework-architecture)
 - [Components](#-components)
-  - [Component 1 — Wearable Biosensor Forecasting](#-component-1--wearable-biosensor-forecasting-sendanayake-hd)
-  - [Component 2 — Temporal Behavioral Graph Framework](#-component-2--temporal-behavioral-graph-framework-layathma-bmas)
-  - [Component 3 — Personalized Intervention Framework](#-component-3--personalized-intervention-framework-seneviratne-kaua)
-  - [Component 4 — Clinical NLP (TC-WPN)](#-component-4--clinical-nlp--tc-wpn-kaushalya-igd)
+  - [Component 1 - Wearable Biosensor Forecasting](#-component-1--wearable-biosensor-forecasting-sendanayake-hd)
+  - [Component 2 - Temporal Behavioral Graph Framework](#-component-2--temporal-behavioral-graph-framework-layathma-bmas)
+  - [Component 3 - Personalized Intervention Framework](#-component-3--personalized-intervention-framework-seneviratne-kaua)
+  - [Component 4 - Clinical NLP (TC-WPN)](#-component-4--clinical-nlp--tc-wpn-kaushalya-igd)
 - [Research Team](#-research-team)
 - [Supervisors](#-supervisors)
 - [Datasets](#-datasets)
@@ -54,13 +54,13 @@
 
 ## 🌐 Overview
 
-Anxiety disorders affect an estimated **301 million people globally** — yet the median delay between onset and first treatment contact exceeds **a decade**. In Sri Lanka, fewer than **60 psychiatrists** serve a population of 22 million, with only 10% of affected individuals ever accessing specialist services.
+Anxiety disorders affect an estimated **301 million people globally**, yet the median delay between onset and first treatment contact exceeds **a decade**. In Sri Lanka, around 100 psychiatrists serve a population of 22 million, with only 10% of affected individuals ever accessing specialist services.
 
 Existing tools are either too expensive, too reactive, or too general. Clinical appointments are episodic. Consumer wearables use population-level heuristics. AI systems require thousands of labeled examples that simply don't exist in most clinical settings.
 
 **This research builds something different.**
 
-R26-DS-012 is a four-component unified framework that monitors anxiety continuously, predicts escalation before it happens, recommends personalized interventions, and adapts to each individual — all without requiring a single labeled anxiety episode for training.
+This is a four-component unified framework that monitors anxiety continuously, predicts escalation before it happens, recommends personalized interventions, and adapts to each individual- all without requiring a single labeled anxiety episode for training.
 
 The system spans the full clinical pipeline: from a custom-built chest-strap wearable and passive smartphone sensing, through a continuously learning intervention engine, to a few-shot clinical NLP model that works with just 10–20 labeled clinical notes.
 
