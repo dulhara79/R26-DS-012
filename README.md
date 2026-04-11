@@ -275,20 +275,6 @@ ICD-10 codes used: F41.0, F41.1, F41.3, F41.9, F40.00, F40.10
 
 ---
 
-## 🗂 Datasets
-
-| Dataset | Access | Used In |
-|---------|--------|---------|
-| [WESAD](https://archive.ics.uci.edu/dataset/465/wesad+wearable+stress+and+affect+detection) | Public | C1 |
-| [AffectiveROAD](https://affect.media.mit.edu/affectiveroad/) | Public | C1 |
-| [PPG-DaLiA](https://archive.ics.uci.edu/dataset/495/ppg+dalia) | Public | C1 |
-| [EmoWear](https://github.com/mjkillough/emowear) | Public | C1 (external validation) |
-| [MIMIC-IV](https://physionet.org/content/mimiciv/2.2/) | PhysioNet DUA + CITI | C4 |
-| [StudentLife](https://studentlife.cs.dartmouth.edu/) | Public | C2 (external validation) |
-| NHSL Clinical Notes | IRB Approved — NHSL Ethics Review Committee | C4 |
-
----
-
 
 ## 🛠 Tech Stack
 
@@ -339,9 +325,9 @@ ICD-10 codes used: F41.0, F41.1, F41.3, F41.9, F40.00, F40.10
 
 | SDG | How This Research Contributes |
 |-----|-------------------------------|
-| 🏥 **SDG 3** — Good Health and Well-Being | Proactive, accessible, continuous anxiety monitoring for a population with severe psychiatrist shortages |
-| ⚖️ **SDG 10** — Reduced Inequalities | Smartphone-based passive sensing requires no expensive clinical infrastructure; scalable across socioeconomic boundaries |
-| 🔬 **SDG 9** — Industry, Innovation, Infrastructure | Novel graph-based AI, self-supervised wearable biosensing, and few-shot meta-learning advancing the intersection of data science and digital health |
+| 🏥 **SDG 3**- Good Health and Well-Being | Proactive, accessible, continuous anxiety monitoring for a population with severe psychiatrist shortages |
+| ⚖️ **SDG 10**- Reduced Inequalities | Smartphone-based passive sensing requires no expensive clinical infrastructure; scalable across socioeconomic boundaries |
+| 🔬 **SDG 9**- Industry, Innovation, Infrastructure | Novel graph-based AI, self-supervised wearable biosensing, and few-shot meta-learning advancing the intersection of data science and digital health |
 
 ---
 
@@ -364,17 +350,5 @@ If you use any part of this work, please cite:
 ---
 
 <div align="center">
-
-**Sri Lanka Institute of Information Technology (SLIIT)**  
-Department of Computer Science | Faculty of Computing  
-Malabe, Sri Lanka
-
-*Supervised by Prof. Samantha Thelijjagoda and Dr. Mahima Weerasinghe*  
-*External Guidance by Dr. Chathurie Suraweera, NHSL / University of Colombo*
-
-<br/>
-
-![SLIIT](https://img.shields.io/badge/SLIIT-Faculty%20of%20Computing-0057A8?style=for-the-badge)
-![Year](https://img.shields.io/badge/2025--2026-Academic%20Year-2E75B6?style=for-the-badge)
 
 </div>
