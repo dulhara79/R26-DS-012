@@ -15,7 +15,7 @@
 <br/>
 
 <p align="center">
-  <img src="full.png" alt="image" width="900"/>
+  <img src="full.png" alt="image" width="500"/>
 </p>
 
 
