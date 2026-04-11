@@ -38,7 +38,6 @@
 
 - [Overview](#-overview)
 - [The Problem](#-the-problem)
-- [Framework Architecture](#-framework-architecture)
 - [Components](#-components)
   - [Component 1 - Wearable Biosensor Forecasting](#-component-1--wearable-biosensor-forecasting-sendanayake-hd)
   - [Component 2 - Temporal Behavioral Graph Framework](#-component-2--temporal-behavioral-graph-framework-layathma-bmas)
@@ -46,13 +45,8 @@
   - [Component 4 - Clinical NLP (TC-WPN)](#-component-4--clinical-nlp--tc-wpn-kaushalya-igd)
 - [Research Team](#-research-team)
 - [Supervisors](#-supervisors)
-- [Datasets](#-datasets)
-- [Key Results (Phase 1)](#-key-results-phase-1)
 - [Tech Stack](#-tech-stack)
-- [Project Timeline](#-project-timeline)
-- [Ethics & Data Governance](#-ethics--data-governance)
 - [SDG Alignment](#-sdg-alignment)
-- [Publication](#-publication)
 - [Citation](#-citation)
 
 ---
@@ -84,8 +78,6 @@ The system spans the full clinical pipeline: from a custom-built chest-strap wea
 ---
 
 ## 🧩 Components
-
----
 
 ### 🫀 Component 1 - Wearable Biosensor Forecasting *(Sendanayake H.D.)*
 
@@ -128,28 +120,6 @@ Input: 60-second multivariate window (11 features, 50% overlap)
                                             Risk Probability [0, 1]
 ```
 
-#### 📊 Locked 11-Feature Set
-
-```python
-features = [
-    "mean_HR",     "mean_RR",     "SDNN",
-    "RMSSD",       "pNN50",       "mean_BR",
-    "std_BR",      "mean_temp",   "std_temp",
-    "mean_acc_mag","std_acc_mag"
-]
-# Window: 60 seconds | Overlap: 50%
-```
-
-#### 📁 Benchmark Datasets Used
-
-| Dataset | Subjects | Modality | Role |
-|---------|----------|----------|------|
-| WESAD | 15 | Chest ECG, respiration, accelerometer | Primary training + evaluation |
-| AffectiveROAD | 12 (Drv4 excluded*) | Wrist PPG, driving scenario | Cross-dataset evaluation |
-| PPG-DaLiA | 11 | PPG, accelerometer | Baseline augmentation |
-| EmoWear | 42 active | Wrist PPG | External validation only |
-
-> *Drv4 excluded on physiological grounds: stress-condition RMSSD exceeded baseline RMSSD, indicating wrist PPG motion artifact invalidating the stress label. This is not a statistical exclusion.
 
 
 ### 📱 Component 2 - Temporal Behavioral Graph Framework *(Layathma B.M.A.S.)*
