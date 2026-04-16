@@ -320,15 +320,6 @@ ICD-10 codes used: F41.0, F41.1, F41.3, F41.9, F40.00, F40.10
 
 ---
 
-## 🌍 SDG Alignment
-
-| SDG | How This Research Contributes |
-|-----|-------------------------------|
-| 🏥 **SDG 3**- Good Health and Well-Being | Proactive, accessible, continuous anxiety monitoring for a population with severe psychiatrist shortages |
-| ⚖️ **SDG 10**- Reduced Inequalities | Smartphone-based passive sensing requires no expensive clinical infrastructure; scalable across socioeconomic boundaries |
-| 🔬 **SDG 9**- Industry, Innovation, Infrastructure | Novel graph-based AI, self-supervised wearable biosensing, and few-shot meta-learning advancing the intersection of data science and digital health |
-
----
 
 ## 📝 Citation
 
