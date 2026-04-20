@@ -107,42 +107,35 @@ def convert_csv_to_pkl():
         df = pd.read_csv(csv_path)
         dataset_list = []
 
-        # Iterate with a progress bar since tokenization takes time
         for _, row in tqdm(df.iterrows(), total=len(df), desc="Tokenizing"):
             text = str(row.get("clinical_note_text", ""))
-
-            # Tokenize the note
             tokens = sliding_window_tokenize(text, tokenizer)
 
-            # Evaluator Fixes: Exact Key Matching for EpisodeSampler
             record = {
                 "note_id": str(row.get("note_id", "unknown")),
                 "subject_id": str(row.get("subject_id", "unknown")),
                 "label": int(row.get("has_anxiety", 0)),
-                "weight": float(row.get("section_quality", 1.0)),
-                "note_timestamp": str(row.get("charttime", "")),  # FIXED key
+                # EVALUATOR FIX: Map to training_weight, NOT section_quality!
+                "weight": float(row.get("training_weight", 1.0)),
+                "note_timestamp": str(row.get("charttime", "")),
                 "visit_number": int(row.get("visit_number", 1)),
                 "days_since_first_visit": float(row.get("days_since_first_visit", 0.0)),
                 "days_since_last_visit": float(row.get("days_since_last_visit", 0.0)),
                 "total_visits": int(row.get("total_visits", 1)),
                 "note_age_days": float(row.get("note_age_days", 0.0)),
-                "section_quality": 1.0,  # FIXED key (Placeholder required by Sampler)
-                "cleaned_text": text,  # FIXED key
+                "section_quality": float(row.get("section_quality", 1.0)),
+                "cleaned_text": text,
                 "input_ids": tokens["input_ids"],
                 "attention_mask": tokens["attention_mask"],
                 "n_chunks": tokens["n_chunks"],
                 "raw_token_count": tokens["raw_token_count"],
             }
-
             dataset_list.append(record)
 
-        # Save to PKL
         pkl_filename = filename.replace(".csv", ".pkl")
         pkl_path = PKL_DIR / pkl_filename
-
         with open(pkl_path, "wb") as f:
             pickle.dump(dataset_list, f)
-
         print(f"  ✓ Saved: {pkl_filename} ({len(dataset_list):,} records)")
 
     print("\n" + "=" * 80)

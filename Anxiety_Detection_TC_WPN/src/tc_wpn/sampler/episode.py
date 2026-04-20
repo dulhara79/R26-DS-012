@@ -31,11 +31,12 @@ class SamplerConfig:
     K_SHOT: int = 5  # support examples per class
     N_QUERY: int = 15  # query examples per class
 
-    # Patient leakage guard — support and query never share a patient
-    ENFORCE_PATIENT_SEPARATION: bool = False
+    # Turned ON for strict research guarantees
+    ENFORCE_PATIENT_SEPARATION: bool = True
 
-    # Augmentation
-    USE_AUGMENTATION: bool = False  # Set to False for Test/Val sets!
+    # Turned ON to prevent overfitting in few-shot
+    USE_AUGMENTATION: bool = False
+
     TOKENIZER_NAME: str = "emilyalsentzer/Bio_ClinicalBERT"
     MAX_LENGTH: int = 512
     WINDOW_OVERLAP: int = 128

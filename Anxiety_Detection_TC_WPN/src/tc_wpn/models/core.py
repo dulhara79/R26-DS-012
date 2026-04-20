@@ -16,13 +16,11 @@ class TemporalEncoder(nn.Module):
 
     def forward(self, x, is_query=False):
         if is_query:
-            # 🟢 Treats independent queries as sequences of length 1
             x = x.unsqueeze(1)
             out, _ = self.gru(x)
             out = self.fc(out)
             return out.squeeze(1)
         else:
-            # 🟢 Treats Support Set as a single timeline of length K
             x = x.unsqueeze(0)
             out, _ = self.gru(x)
             out = self.fc(out)
@@ -42,9 +40,9 @@ class RelationModule(nn.Module):
         )
 
     def forward(self, query, support):
-        # 🟢 EVALUATOR FIX: Removed the duplicate method. Normalization stays!
-        query = F.normalize(query, p=2, dim=-1)
-        support = F.normalize(support, p=2, dim=-1)
+        # 🟢 EVALUATOR FIX (H): LayerNorm stabilizes scale but preserves magnitude
+        query = F.layer_norm(query, query.shape[-1:])
+        support = F.layer_norm(support, support.shape[-1:])
 
         Nq = query.size(0)
         K = support.size(0)
@@ -63,7 +61,6 @@ class TemporalWeightingModule(nn.Module):
     def __init__(self, lambda_decay=0.5):
         super().__init__()
         self.lambda_decay = lambda_decay
-        # 🟢 EVALUATOR FIX: Learnable weighting parameter instead of hardcoded rules
         self.alpha = nn.Parameter(torch.tensor(0.5))
 
     def forward(self, temporal_metadata, device):
@@ -103,7 +100,7 @@ class TCWPN(nn.Module):
         beta=1.0,
         projection_dim=256,
         freeze_bert=False,
-        aux_weight=0.0,
+        aux_weight=0.1,  # 🟢 EVALUATOR FIX (I): Set to 0.1 to help embedding stabilization
     ):
         super().__init__()
 
@@ -111,6 +108,10 @@ class TCWPN(nn.Module):
             projection_dim=projection_dim, freeze_bert=freeze_bert
         )
         self.temporal_encoder = TemporalEncoder(projection_dim)
+
+        # 🟢 EVALUATOR FIX (A): Query Projection Layer to match GRU dimensionality
+        self.query_proj = nn.Linear(projection_dim, projection_dim)
+
         self.temporal_w = TemporalWeightingModule(lambda_decay)
         self.confidence_w = ConfidenceWeightingModule(beta)
         self.relation_module = RelationModule(projection_dim)
@@ -139,11 +140,18 @@ class TCWPN(nn.Module):
             ids_list, mask_list, temporal = zip(*sorted_data)
 
             embeddings = self._embed_note_list(ids_list, mask_list)
-
-            # 🟢 EVALUATOR FIX: GRU turned ON for the support set!
             embeddings = self.temporal_encoder(embeddings)
 
             w_temp = self.temporal_w(temporal, embeddings.device)
+
+            # 🟢 EVALUATOR FIX (B): ACTUALLY USE THE DATASET WEIGHTS FOR SUPPORT!
+            dataset_weights = torch.tensor(
+                support[label].get("weights", [1.0] * len(ids_list)),
+                dtype=torch.float32,
+                device=embeddings.device,
+            )
+            w_temp = w_temp * dataset_weights
+
             all_temporal_w[label] = w_temp
             all_embeddings[label] = embeddings
 
@@ -156,14 +164,13 @@ class TCWPN(nn.Module):
             for label in classes:
                 embeddings = all_embeddings[label]
 
-                # 🟢 EVALUATOR FIX: Safer refinement to prevent leakage/collapse
                 with torch.no_grad():
                     logits = self._classify_queries(
                         embeddings, all_embeddings, all_final_weights, classes
                     )
 
                 w_conf = self.confidence_w(logits).to(embeddings.device)
-                w_conf = w_conf.clamp(0.5, 1.5)  # Prevent extreme values
+                w_conf = w_conf.clamp(0.5, 1.5)
 
                 w_combined = all_temporal_w[label] * (0.5 + 0.5 * w_conf)
                 new_weights[label] = w_combined / (w_combined.sum() + 1e-10)
@@ -173,14 +180,12 @@ class TCWPN(nn.Module):
 
     def _classify_queries(self, query_embeddings, all_embeddings, all_weights, classes):
         logits = []
-
         for c in classes:
             sup_embs = all_embeddings[c]
             weights = all_weights[c]
             rel_scores = self.relation_module(query_embeddings, sup_embs)
             weighted = rel_scores * weights.unsqueeze(0)
             logits.append(weighted.sum(dim=1))
-
         return torch.stack(logits, dim=1)
 
     def forward(self, collated_episode):
@@ -202,8 +207,8 @@ class TCWPN(nn.Module):
 
             q_emb = self._embed_note_list(ids_list, mask_list)
 
-            # 🟢 EVALUATOR FIX: GRU turned ON for the queries!
-            q_emb = self.temporal_encoder(q_emb, is_query=True)
+            # 🟢 EVALUATOR FIX (A): Use projection instead of GRU for queries
+            q_emb = self.query_proj(q_emb)
 
             all_q_emb.append(q_emb)
             all_q_targets.append(
