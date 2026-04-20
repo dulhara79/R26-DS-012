@@ -1,0 +1,10 @@
+pandas
+numpy
+tqdm
+matplotlib
+seaborn
+pandas-stubs
+transformers
+torch 
+sentencepiece
+scikit-learn
