@@ -29,6 +29,20 @@ class TemporalEncoder(nn.Module):
             return out.squeeze(0)
 
 
+# class RelationModule(nn.Module):
+#     def __init__(self, input_dim):
+#         super().__init__()
+#         # 🟢 High-Capacity Relation Network
+#         self.relation = nn.Sequential(
+#             nn.Linear(input_dim * 4, 256),
+#             nn.ReLU(),
+#             nn.Dropout(0.2),
+#             nn.Linear(256, 128),
+#             nn.ReLU(),
+#             nn.Linear(128, 1)
+#         )
+
+
 class RelationModule(nn.Module):
     def __init__(self, input_dim):
         super().__init__()
@@ -42,7 +56,7 @@ class RelationModule(nn.Module):
         )
 
     def forward(self, query, support):
-        # 🟢 EVALUATOR FIX: Removed the duplicate method. Normalization stays!
+        # 🟢 STEP 3: BOOST SIGNAL (Add normalization here)
         query = F.normalize(query, p=2, dim=-1)
         support = F.normalize(support, p=2, dim=-1)
 
@@ -58,13 +72,26 @@ class RelationModule(nn.Module):
         combined = torch.cat([query_exp, support_exp, diff, prod], dim=-1)
         return self.relation(combined).squeeze(-1)
 
+    def forward(self, query, support):
+        Nq = query.size(0)
+        K = support.size(0)
+
+        query_exp = query.unsqueeze(1).expand(Nq, K, -1)
+        support_exp = support.unsqueeze(0).expand(Nq, K, -1)
+
+        # 🟢 Explicit distance and interaction signals
+        diff = torch.abs(query_exp - support_exp)
+        prod = query_exp * support_exp
+
+        combined = torch.cat([query_exp, support_exp, diff, prod], dim=-1)
+
+        return self.relation(combined).squeeze(-1)
+
 
 class TemporalWeightingModule(nn.Module):
     def __init__(self, lambda_decay=0.5):
         super().__init__()
         self.lambda_decay = lambda_decay
-        # 🟢 EVALUATOR FIX: Learnable weighting parameter instead of hardcoded rules
-        self.alpha = nn.Parameter(torch.tensor(0.5))
 
     def forward(self, temporal_metadata, device):
         ages = torch.tensor(
@@ -79,7 +106,7 @@ class TemporalWeightingModule(nn.Module):
         )
 
         recency = torch.exp(-self.lambda_decay * ages / 365.0)
-        regularity = torch.sigmoid(self.alpha * visits)
+        regularity = torch.where(visits >= 3, 1.0, 0.8 + 0.1 * visits)
 
         return recency * regularity
 
@@ -103,7 +130,7 @@ class TCWPN(nn.Module):
         beta=1.0,
         projection_dim=256,
         freeze_bert=False,
-        aux_weight=0.0,
+        aux_weight=0.0, 
     ):
         super().__init__()
 
@@ -121,6 +148,7 @@ class TCWPN(nn.Module):
         device = next(self.parameters()).device
         return self.embedder.embed_batch(ids_list, mask_list, device=device)
 
+    # 🟢 FULL MODE: GRU and Weighting are BACK ON
     def build_support_features(self, support, n_refinement_passes=1):
         classes = list(support.keys())
         all_embeddings = {}
@@ -139,9 +167,8 @@ class TCWPN(nn.Module):
             ids_list, mask_list, temporal = zip(*sorted_data)
 
             embeddings = self._embed_note_list(ids_list, mask_list)
-
-            # 🟢 EVALUATOR FIX: GRU turned ON for the support set!
-            embeddings = self.temporal_encoder(embeddings)
+            # 🟢 GRU applied to support
+            # embeddings = self.temporal_encoder(embeddings)
 
             w_temp = self.temporal_w(temporal, embeddings.device)
             all_temporal_w[label] = w_temp
@@ -155,16 +182,10 @@ class TCWPN(nn.Module):
             new_weights = {}
             for label in classes:
                 embeddings = all_embeddings[label]
-
-                # 🟢 EVALUATOR FIX: Safer refinement to prevent leakage/collapse
-                with torch.no_grad():
-                    logits = self._classify_queries(
-                        embeddings, all_embeddings, all_final_weights, classes
-                    )
-
+                logits = self._classify_queries(
+                    embeddings.detach(), all_embeddings, all_final_weights, classes
+                ).detach()
                 w_conf = self.confidence_w(logits).to(embeddings.device)
-                w_conf = w_conf.clamp(0.5, 1.5)  # Prevent extreme values
-
                 w_combined = all_temporal_w[label] * (0.5 + 0.5 * w_conf)
                 new_weights[label] = w_combined / (w_combined.sum() + 1e-10)
             all_final_weights = new_weights
@@ -201,9 +222,8 @@ class TCWPN(nn.Module):
             mask_list = query[label]["attention_mask"]
 
             q_emb = self._embed_note_list(ids_list, mask_list)
-
-            # 🟢 EVALUATOR FIX: GRU turned ON for the queries!
-            q_emb = self.temporal_encoder(q_emb, is_query=True)
+            # 🟢 GRU applied to queries (with anti-scrambling flag)
+            # q_emb = self.temporal_encoder(q_emb, is_query=True)
 
             all_q_emb.append(q_emb)
             all_q_targets.append(
