@@ -165,7 +165,7 @@ Node features (9) ──► GATv2Conv (4 heads) ──► BN ──► GATv2Conv
 
 ## Citation
 
-If you use this code, please cite the StudentLife dataset:
+
 
 > R. Wang et al., "StudentLife: Assessing Mental Health, Academic Performance
 > and Behavioral Trends of College Students using Smartphones," *UbiComp 2014*.
