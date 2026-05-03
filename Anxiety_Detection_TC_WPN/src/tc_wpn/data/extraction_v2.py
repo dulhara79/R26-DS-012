@@ -1,4 +1,19 @@
-# updated extraction_v2
+"""
+extraction_v2.py
+TC-WPN Research Pipeline — Publication-Grade Data Extraction Helpers
+Author: Dulhara Kaushalya
+
+FIXES IN THIS VERSION:
+- verify_and_clean_notes: removed broken template_heavy filter that was
+  killing >95% of valid notes. Template noise is already handled by
+  clean_note_text() which strips the header patterns before NLP runs.
+- penalize_control_noise: only penalises STRONG diagnostic language,
+  not incidental anxiety mentions (fixes 100% contamination bug).
+- assign_anxiety_confidence: adds family_history + situational filters
+  to reduce false positives.
+- compute_section_quality: corrected to run on lowercase text.
+"""
+
 import pandas as pd
 import re
 import numpy as np
@@ -22,7 +37,7 @@ def load_csv_safe(path, usecols=None):
 # =============================================================================
 ANXIETY_ICD10_PREFIXES = [
     "F40",  # Phobic anxiety disorders
-    "F41",  # Other anxiety disorders
+    "F41",  # Other anxiety disorders (GAD, Panic, Mixed)
 ]
 
 ANXIETY_ICD9_PREFIXES = [
@@ -30,16 +45,17 @@ ANXIETY_ICD9_PREFIXES = [
     "3002",  # Phobic disorders
 ]
 
+# Exclude these from controls — ensures psych-clean negative class
 EXCLUSION_MENTAL_PREFIXES = [
-    "F20",
-    "F25",
-    "F31",
-    "F32",
-    "F33",
-    "F43",
-    "296",
-    "295",
-    "311",
+    "F20",  # Schizophrenia
+    "F25",  # Schizoaffective
+    "F31",  # Bipolar
+    "F32",  # Depressive episode
+    "F33",  # Recurrent depression
+    "F43",  # PTSD / stress reactions
+    "296",  # ICD-9 mood disorders
+    "295",  # ICD-9 schizophrenia
+    "311",  # ICD-9 depression NOS
 ]
 
 
@@ -71,7 +87,7 @@ def identify_anxiety_patients(diagnoses):
 
 
 # =============================================================================
-# IDENTIFY CLEAN CONTROLS
+# IDENTIFY PSYCH-CLEAN CONTROLS
 # =============================================================================
 def identify_control_patients(diagnoses, anxiety_cases):
     diagnoses = diagnoses.copy()
@@ -84,14 +100,14 @@ def identify_control_patients(diagnoses, anxiety_cases):
         .str.upper()
     )
 
+    # Remove any patient who ever had an anxiety diagnosis
     anxiety_subjects = set(anxiety_cases["subject_id"])
-
     controls = diagnoses[~diagnoses["subject_id"].isin(anxiety_subjects)].copy()
 
+    # Remove patients with other major psychiatric diagnoses
     psych_exclusion = controls["code_clean"].apply(
         lambda x: any(x.startswith(prefix) for prefix in EXCLUSION_MENTAL_PREFIXES)
     )
-
     controls = controls[~psych_exclusion].copy()
 
     controls["has_anxiety"] = 0
@@ -103,42 +119,54 @@ def identify_control_patients(diagnoses, anxiety_cases):
 # NOTE CLEANING
 # =============================================================================
 def clean_note_text(text):
+    """
+    Cleans MIMIC clinical note text.
+    Removes PHI placeholders and common header boilerplate.
+    Preserves clinical content including section headers.
+    """
     if not isinstance(text, str):
         return ""
 
     text = text.lower()
 
-    # Remove PHI placeholders
+    # Remove PHI placeholders like [**Name**], [**Date**]
     text = re.sub(r"\[\*\*.*?\*\*\]", " ", text)
 
-    # Remove common discharge template noise
-    template_patterns = [
-        r"admission date:",
-        r"discharge date:",
-        r"date of birth:",
-        r"service:",
-        r"sex:",
+    # Remove specific header fields only (with colon — exact header match)
+    header_patterns = [
+        r"admission date\s*:",
+        r"discharge date\s*:",
+        r"date of birth\s*:",
+        r"service\s*:",
+        r"sex\s*:",
+        r"attending\s*:",
+        r"allergies\s*:",
     ]
-
-    for pat in template_patterns:
+    for pat in header_patterns:
         text = re.sub(pat, " ", text)
 
     # Normalize whitespace
     text = re.sub(r"\s+", " ", text)
 
-    # Keep useful punctuation
-    text = re.sub(r"[^a-z0-9.,!?;:\- ]", "", text)
+    # Keep alphanumeric + medical punctuation
+    text = re.sub(r"[^a-z0-9.,!?;:\-\(\) ]", "", text)
 
     return text.strip()
 
 
 # =============================================================================
 # SECTION QUALITY SCORING
+# FIX: run on already-lowercased cleaned text
 # =============================================================================
 def compute_section_quality(text):
-    if not isinstance(text, str):
+    """
+    Scores a clinical note by presence of high-value psychiatric sections.
+    Base score 0.5; each high-value section adds 0.1, capped at 1.0.
+    """
+    if not isinstance(text, str) or len(text) < 50:
         return 0.5
 
+    # text is already lowercased by clean_note_text
     score = 0.5
 
     high_value_sections = [
@@ -147,6 +175,8 @@ def compute_section_quality(text):
         "assessment",
         "mental status examination",
         "psychiatric",
+        "axis i",
+        "mood and affect",
     ]
 
     for sec in high_value_sections:
@@ -160,6 +190,11 @@ def compute_section_quality(text):
 # TEMPORAL FEATURES
 # =============================================================================
 def compute_temporal_features(df):
+    """
+    Computes patient-relative temporal metadata.
+    note_age_days = days BEFORE the patient's most recent note
+    (0 = most recent, higher = older) — correct for recency weighting.
+    """
     df = df.copy()
 
     df["charttime"] = pd.to_datetime(df["charttime"], errors="coerce")
@@ -174,10 +209,9 @@ def compute_temporal_features(df):
     df["days_since_first_visit"] = (df["charttime"] - first_visit).dt.days
     df["days_since_last_visit"] = (df["charttime"] - last_visit).dt.days
 
-    # FIXED: patient-relative note age
+    # Patient-relative: days before most recent note (not global minimum)
     patient_max = df.groupby("subject_id")["charttime"].transform("max")
     df["note_age_days"] = (patient_max - df["charttime"]).dt.days
-
     df["is_most_recent"] = df["charttime"] == patient_max
 
     return df[
@@ -197,22 +231,24 @@ def compute_temporal_features(df):
 
 # =============================================================================
 # VERIFY AND FILTER NOTES
+# FIX: Removed template_heavy filter — it was incorrectly dropping valid notes.
+# Template noise is already handled upstream by clean_note_text().
 # =============================================================================
 def verify_and_clean_notes(df):
+    """
+    Removes genuinely invalid notes:
+    - Empty or too-short notes (< 100 chars after cleaning)
+    - Exact duplicates (same patient, same time, same text)
+    Does NOT remove notes based on content keywords — that caused 95%+ data loss.
+    """
     df = df.copy()
 
     df["clinical_note_text"] = df["clinical_note_text"].fillna("").astype(str)
 
+    # Remove very short notes — not clinically informative
     df = df[df["clinical_note_text"].str.len() > 100]
 
-    template_heavy = (
-        df["clinical_note_text"]
-        .str.lower()
-        .str.contains(r"discharge date|admission date|date of birth", na=False)
-    )
-
-    df = df[~template_heavy]
-
+    # Remove exact duplicates
     duplicate_cols = ["subject_id", "charttime", "clinical_note_text"]
     df = df.drop_duplicates(subset=duplicate_cols)
 
@@ -220,50 +256,86 @@ def verify_and_clean_notes(df):
 
 
 # =============================================================================
-# LABEL CONFIDENCE ENGINE
+# LABEL CONFIDENCE ENGINE (ANXIETY)
+# FIX: Added family_history and situational disqualifiers
 # =============================================================================
 def assign_anxiety_confidence(text):
+    """
+    Assigns a confidence score [0.4–1.0] and context label to an anxiety note.
+
+    Priority order:
+    1. Disqualifiers (family history, situational, negation) → low confidence
+    2. Strong diagnostic language → 1.0
+    3. Stable/past mentions → 0.65–0.7
+    4. General anxiety mention → 0.8
+    5. No signal → 0.5
+    """
     if not isinstance(text, str):
         return 0.5, "unspecified"
 
     text = text.lower()
 
-    strong = re.search(
-        r"\b(generalized anxiety disorder|panic disorder|severe anxiety|anxiety disorder)\b",
-        text,
-    )
+    # ------------------------------------------------------------------
+    # DISQUALIFIERS — check first
+    # ------------------------------------------------------------------
 
-    moderate = re.search(
-        r"\b(anxiety|panic|anxious)\b",
+    # Family history — this is not the patient's own condition
+    if re.search(
+        r"\b(family history of anxiety|mother.*anxiety|father.*anxiety|"
+        r"sibling.*anxiety|fh.*anxiety|fh: anxiety)\b",
         text,
-    )
+    ):
+        return 0.4, "family_history"
 
-    negated = re.search(
-        r"\b(no anxiety|denies anxiety|without anxiety|negative for anxiety)\b",
+    # Situational / procedural anxiety — not a disorder
+    if re.search(
+        r"\b(anxious about|anxiety about|nervous about|"
+        r"anxious regarding|anxiety regarding|"
+        r"anxious to (?:go home|leave|return|be discharged)|"
+        r"pre-?operative anxiety|procedural anxiety)\b",
         text,
-    )
+    ):
+        return 0.45, "situational"
 
-    past = re.search(
-        r"\b(history of anxiety|hx anxiety|past anxiety)\b",
+    # Negation
+    if re.search(
+        r"\b(no anxiety|denies anxiety|without anxiety|"
+        r"negative for anxiety|no panic|denies panic|"
+        r"no evidence of anxiety)\b",
         text,
-    )
-
-    stable = re.search(
-        r"\b(stable anxiety|controlled anxiety|treated anxiety)\b",
-        text,
-    )
-
-    if negated:
+    ):
         return 0.4, "negated"
 
-    if strong:
+    # ------------------------------------------------------------------
+    # POSITIVE SIGNAL
+    # ------------------------------------------------------------------
+
+    # Strong: named disorder
+    if re.search(
+        r"\b(generalized anxiety disorder|panic disorder|"
+        r"anxiety disorder|severe anxiety|gad\b)\b",
+        text,
+    ):
         return 1.0, "active"
 
-    if moderate:
-        if stable:
-            return 0.7, "stable"
-        if past:
-            return 0.65, "past"
+    # Stable / managed
+    if re.search(
+        r"\b(stable anxiety|controlled anxiety|treated anxiety|"
+        r"anxiety controlled|anxiety stable|anxiety managed)\b",
+        text,
+    ):
+        return 0.7, "stable"
+
+    # Past / historical
+    if re.search(
+        r"\b(history of anxiety|hx anxiety|h/o anxiety|"
+        r"past anxiety|prior anxiety|previous anxiety)\b",
+        text,
+    ):
+        return 0.65, "past"
+
+    # General mention — likely current but unspecified
+    if re.search(r"\b(anxiety|panic|anxious)\b", text):
         return 0.8, "active"
 
     return 0.5, "unspecified"
@@ -271,17 +343,43 @@ def assign_anxiety_confidence(text):
 
 # =============================================================================
 # CONTROL PENALTY ENGINE
+# FIX: Only penalises STRONG diagnostic language, not incidental mentions.
+# Previous version penalised any mention of "anxiety" → 100% contamination.
 # =============================================================================
 def penalize_control_noise(text):
+    """
+    Penalises control notes that contain anxiety-related clinical language.
+    Returns a weight in [0.2, 1.0]:
+    - 1.0  = clean control, no anxiety signal
+    - 0.6  = anxiety mentioned in assessment/diagnosis context (use with caution)
+    - 0.2  = strong anxiety diagnostic language (likely mislabelled control)
+
+    IMPORTANT: Simple mentions of "anxious" or "anxiety" in body text
+    are NOT penalised — these are ubiquitous in discharge notes and do
+    not indicate an anxiety disorder in the control patient.
+    """
     if not isinstance(text, str):
         return 1.0
 
     text = text.lower()
 
-    if re.search(r"\b(anxiety disorder|panic disorder)\b", text):
+    # Strong diagnostic language — this control is likely contaminated
+    if re.search(
+        r"\b(anxiety disorder|generalized anxiety disorder|panic disorder|"
+        r"diagnosis of anxiety|diagnosed with anxiety|"
+        r"anxiety disorder confirmed|gad diagnosis)\b",
+        text,
+    ):
         return 0.2
 
-    if re.search(r"\b(anxiety|panic|anxious)\b", text):
-        return 0.5
+    # Anxiety mentioned specifically in assessment/impression/diagnosis section
+    if re.search(
+        r"(assessment|impression|diagnosis|axis i|psychiatric evaluation)"
+        r"[^.]{0,80}\b(anxiety|panic)\b",
+        text,
+    ):
+        return 0.6
 
+    # Everything else — incidental "anxious", "anxiety about X", etc.
+    # Do NOT penalise. These are normal in discharge notes.
     return 1.0

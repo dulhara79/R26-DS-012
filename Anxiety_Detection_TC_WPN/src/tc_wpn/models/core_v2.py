@@ -306,7 +306,7 @@ class TCWPN(nn.Module):
                     "note_age_days",
                     0,
                 ),
-                reverse=True,
+                reverse=False,
             )
 
             ids_list, mask_list, temporal, dataset_weights = zip(*sorted_pack)
