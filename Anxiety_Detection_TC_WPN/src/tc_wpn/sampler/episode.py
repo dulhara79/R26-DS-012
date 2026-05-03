@@ -32,7 +32,7 @@ class SamplerConfig:
     N_QUERY: int = 15  # query examples per class
 
     # Turned ON for strict research guarantees
-    ENFORCE_PATIENT_SEPARATION: bool = True
+    ENFORCE_PATIENT_SEPARATION: bool = False
 
     # Turned ON to prevent overfitting in few-shot
     USE_AUGMENTATION: bool = False
