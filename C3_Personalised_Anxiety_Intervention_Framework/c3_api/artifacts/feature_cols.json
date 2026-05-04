@@ -1,0 +1,82 @@
+{
+  "feature_cols": [
+    "age_norm",
+    "gender_enc",
+    "marital_enc",
+    "education_enc",
+    "income_enc",
+    "physiological_risk",
+    "behavioral_risk",
+    "textual_risk",
+    "composite_risk",
+    "risk_tier_enc",
+    "interaction_count_norm",
+    "last_reward_norm",
+    "escalation_count_norm"
+  ],
+  "features": [
+    "age_norm",
+    "gender_enc",
+    "marital_enc",
+    "education_enc",
+    "income_enc",
+    "physiological_risk",
+    "behavioral_risk",
+    "textual_risk",
+    "composite_risk",
+    "risk_tier_enc",
+    "interaction_count_norm",
+    "last_reward_norm",
+    "escalation_count_norm"
+  ],
+  "n_features": 13,
+  "risk_labels": {
+    "0": "Low",
+    "1": "Medium",
+    "2": "High"
+  },
+  "cat_feature_indices": [
+    1,
+    2
+  ],
+  "cat_feature_names": [
+    "gender_enc",
+    "marital_enc"
+  ],
+  "leakage_fixed_cols": [
+    "risk_tier_enc"
+  ],
+  "leakage_fix_value": 0,
+  "composite_risk_formula": "(0.25*physiological_risk + 0.20*behavioral_risk + 0.40*textual_risk) / 0.85",
+  "use_f9": true,
+  "selected_model": "XGBoost_SMOTENC",
+  "shap_global_importance": {
+    "physiological_risk": 2.832,
+    "composite_risk": 1.085,
+    "behavioral_risk": 0.287,
+    "age_norm": 0.15,
+    "textual_risk": 0.079,
+    "gender_enc": 0.072,
+    "income_enc": 0.064,
+    "last_reward_norm": 0.035,
+    "education_enc": 0.001,
+    "marital_enc": 0.0002,
+    "risk_tier_enc": 0.0,
+    "interaction_count_norm": 0.0,
+    "escalation_count_norm": 0.0
+  },
+  "target_col": "risk_tier",
+  "f9_index": 8,
+  "n_train_raw": 4289,
+  "n_train_balanced": 7893,
+  "n_test": 1073,
+  "n_nhanes": 2705,
+  "n_colombia": 2657,
+  "colombia_source": "Restrepo-Henao et al. 2022, Mendeley Data bytb22nf7m",
+  "nhanes_gad7_method": "Ordinal logistic regression, L\u00f6we et al. 2008 coefficients",
+  "f7_colombia_source": "PSS-10 real stress score / 40",
+  "f8_colombia_source": "PHQ-9 real depression score / 27",
+  "smote_applied": "Training split only (never test set)",
+  "leakage_fix_applied": true,
+  "risk_tier_enc_fix": "Set to 0 for all records before training (first-session baseline)"
+}
