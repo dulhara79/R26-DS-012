@@ -178,8 +178,8 @@ def main():
     )
 
     # Young adult cohort only
-    patients = patients[(patients["anchor_age"] >= 18) & (patients["anchor_age"] <= 30)]
-    print(f"✓ Young adult patients (18–30): {len(patients):,}")
+    patients = patients[(patients["anchor_age"] >= 18) & (patients["anchor_age"] <= 65)]
+    print(f"✓ Young adult patients (18–65): {len(patients):,}")
 
     # =========================================================================
     # STEP 2 — BUILD COHORTS
@@ -399,14 +399,8 @@ def main():
     # Anxiety: conf >= 0.7 (named disorder or active general mention)
     # Control: conf >= 0.9 (clean, no diagnostic anxiety language)
     train_high_conf = train_balanced[
-        (
-            (train_balanced["has_anxiety"] == 1)
-            & (train_balanced["label_confidence"] >= 0.7)
-        )
-        | (
-            (train_balanced["has_anxiety"] == 0)
-            & (train_balanced["label_confidence"] >= 0.9)
-        )
+        ((train_balanced["has_anxiety"] == 1) & (train_balanced["label_confidence"] >= 0.75))
+        | ((train_balanced["has_anxiety"] == 0) & (train_balanced["label_confidence"] >= 0.9))
     ]
     train_high_conf.to_csv(
         OUTPUT_DIR / "mimic_anxiety_train_high_conf.csv", index=False
