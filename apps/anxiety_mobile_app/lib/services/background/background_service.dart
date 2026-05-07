@@ -26,11 +26,30 @@ Future<void> initializeService() async {
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  await flutterLocalNotificationsPlugin
+  final androidPlugin = flutterLocalNotificationsPlugin
       .resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin
-      >()
-      ?.createNotificationChannel(channel);
+      >();
+
+  if (androidPlugin != null) {
+    await androidPlugin.createNotificationChannel(channel);
+    await androidPlugin.createNotificationChannel(
+      const AndroidNotificationChannel(
+        'ema_channel',
+        'Daily Check-ins',
+        description: 'Scheduled mood and anxiety ratings',
+        importance: Importance.high,
+      ),
+    );
+    await androidPlugin.createNotificationChannel(
+      const AndroidNotificationChannel(
+        'gad7_channel',
+        'Weekly Assessments',
+        description: 'Weekly GAD-7 clinical questionnaires',
+        importance: Importance.high,
+      ),
+    );
+  }
 
   await service.configure(
     androidConfiguration: AndroidConfiguration(
@@ -70,9 +89,15 @@ void onStart(ServiceInstance service) async {
     debugPrint('Connectivity Setup Error: $e');
   }
 
-  // 2. Setup Foreground Notification
+  // 2. Setup Background Notifications
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
+  
+  await flutterLocalNotificationsPlugin.initialize(
+    const InitializationSettings(
+      android: AndroidInitializationSettings('ic_launcher'),
+    ),
+  );
 
   if (service is AndroidServiceInstance) {
     service

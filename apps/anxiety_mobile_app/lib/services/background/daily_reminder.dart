@@ -3,6 +3,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'service_config.dart';
+import '../../ema_and_gad7.dart';
 
 class DailyReminder {
   static Future<void> checkAndShow(
@@ -10,13 +11,21 @@ class DailyReminder {
   ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+
+      // 0. Respect the enabled toggle from settings
+      final bool enabled = prefs.getBool('rating_enabled') ?? true;
+      if (!enabled) return;
+
       final now = DateTime.now();
       final today = DateFormat('yyyy-MM-dd').format(now);
 
-      // We check for 3 distinct periods: morning, afternoon, evening
+      // 1. Check for 3 distinct periods: morning, afternoon, evening
       await _checkPeriod(prefs, plugin, now, today, 'morning');
       await _checkPeriod(prefs, plugin, now, today, 'afternoon');
       await _checkPeriod(prefs, plugin, now, today, 'evening');
+
+      // 2. Check for Weekly GAD-7 Assessment (Mondays)
+      await _checkWeeklyGad7(prefs, plugin, now, today);
     } catch (e) {
       debugPrint('Daily check error: $e');
     }
@@ -41,8 +50,13 @@ class DailyReminder {
     String lastShown = prefs.getString('ema_notified_$period') ?? "";
     if (lastShown == today) return;
 
-    // 4. Trigger if current time matches target time (check within 1-minute window)
-    if (now.hour == targetHour && now.minute == targetMinute) {
+    // 4. Trigger logic: Current time is at or after target time
+    // We allow a 2-hour window to account for background service delays or phone restarts.
+    final int nowMinutes = now.hour * 60 + now.minute;
+    final int targetMinutes = targetHour * 60 + targetMinute;
+    const int windowMinutes = 120; // 2 hours
+
+    if (nowMinutes >= targetMinutes && nowMinutes < (targetMinutes + windowMinutes)) {
       final title = {
         'morning': '☀️ Morning Check-in',
         'afternoon': '🌤️ Afternoon Check-in',
@@ -65,6 +79,43 @@ class DailyReminder {
       );
 
       await prefs.setString('ema_notified_$period', today);
+    }
+  }
+
+  static Future<void> _checkWeeklyGad7(
+    SharedPreferences prefs,
+    FlutterLocalNotificationsPlugin plugin,
+    DateTime now,
+    String today,
+  ) async {
+    // Only trigger on Mondays
+    if (now.weekday != DateTime.monday) return;
+
+    // Only between 8 AM and 8 PM
+    if (now.hour < 8 || now.hour > 20) return;
+
+    // Check if already notified today (to prevent spamming)
+    String lastNotified = prefs.getString('gad7_notified_today') ?? "";
+    if (lastNotified == today) return;
+
+    // Check if assessment is due for this week
+    if (await isGad7DueThisWeek()) {
+      await plugin.show(
+        999,
+        '📊 Weekly Assessment',
+        'It\'s time for your weekly GAD-7 check-in. Tap to begin.',
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'gad7_channel',
+            'Weekly Assessments',
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
+        ),
+        payload: 'gad7_weekly',
+      );
+
+      await prefs.setString('gad7_notified_today', today);
     }
   }
 
