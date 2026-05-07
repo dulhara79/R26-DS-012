@@ -11,15 +11,18 @@ var DATATYPE_TO_FAMILY = {
   "EMA_Rating_afternoon": "EMA",
   "EMA_Rating_evening":   "EMA",
   "GAD7_Weekly":          "GAD7",
+  "PSS10_Weekly":         "PSS10",
   "Demographics":         "Demographics",
 };
 
 var HEADERS = {
   "Raw": ["Timestamp","Date","Time","Participant ID","Data Type","Value"],
   "EMA": ["Timestamp","Date","Time","Participant ID","Period",
-          "Anxiety Rating (1-5)","Activity Context","Raw JSON"],
+          "Stress","Anxiety","Fatigue","Social","Activity Context","Raw JSON"],
   "GAD7": ["Timestamp","Date","Participant ID","Total Score (0-21)","Severity",
            "Q1","Q2","Q3","Q4","Q5","Q6","Q7","Raw JSON"],
+  "PSS10": ["Timestamp","Date","Participant ID","Total Score (0-40)",
+            "Q1","Q2","Q3","Q4","Q5","Q6","Q7","Q8","Q9","Q10","Raw JSON"],
   "Demographics": ["Timestamp","Date","Participant ID","Age","Gender",
                    "Marital Status","Employment","Financial Status","Education",
                    "Living Situation","Anxiety Diagnosis","On Medication",
@@ -261,13 +264,20 @@ function buildRows(entries, family, userId, tz, ss) {
         var ema    = safeJSON(valStr);
         var period = ema.period || String(item.dataType||"").replace("EMA_Rating_","") || "unknown";
         row = [ts, date, time, userId, capitalize(period),
-               ema.rating !== undefined ? ema.rating : "", ema.context||"", valStr];
+               ema.stress||"", ema.anxiety||"", ema.fatigue||"", ema.social||"",
+               ema.context||"", valStr];
       } else if (family === "GAD7") {
         var gad = safeJSON(valStr);
         var ans = Array.isArray(gad.answers) ? gad.answers : [];
         row = [ts, date, userId,
                gad.total_score !== undefined ? gad.total_score : "", gad.severity||"",
                ans[0]||"",ans[1]||"",ans[2]||"",ans[3]||"",ans[4]||"",ans[5]||"",ans[6]||"",
+               valStr];
+      } else if (family === "PSS10") {
+        var pss = safeJSON(valStr);
+        var ans = Array.isArray(pss.answers) ? pss.answers : [];
+        row = [ts, date, userId, pss.total_score !== undefined ? pss.total_score : "",
+               ans[0]||"",ans[1]||"",ans[2]||"",ans[3]||"",ans[4]||"",ans[5]||"",ans[6]||"",ans[7]||"",ans[8]||"",ans[9]||"",
                valStr];
       } else if (family === "Demographics") {
         var d = safeJSON(valStr);
@@ -385,7 +395,7 @@ function getOrCreateSpreadsheet(userId, props) {
   defaultTab.setName("Summary");
   initSummary(defaultTab, userId);
 
-  ["GAD7", "Demographics", "Errors"].forEach(function(name) {
+  ["GAD7", "PSS10", "Demographics", "Errors"].forEach(function(name) {
     applyHeaders(ss.insertSheet(name), name);
   });
 
@@ -423,6 +433,7 @@ function initSummary(tab, userId) {
     ["Raw Rows (total)", ""],
     ["EMA Rows (total)", ""],
     ["GAD7 Submissions", ""],
+    ["PSS10 Submissions", ""],
     ["Demographics",     ""],
     ["Errors",           ""],
     ["Active Months",    ""],
@@ -445,15 +456,17 @@ function updateSummary(ss, userId) {
     if (n.indexOf("EMA_") === 0)   emaRows += Math.max(0, s.getLastRow()-1);
   });
   var gad  = ss.getSheetByName("GAD7");
+  var pss  = ss.getSheetByName("PSS10");
   var demo = ss.getSheetByName("Demographics");
   var err  = ss.getSheetByName("Errors");
   tab.getRange("B4").setValue(new Date().toISOString());
   tab.getRange("B5").setValue(rawRows);
   tab.getRange("B6").setValue(emaRows);
   tab.getRange("B7").setValue(gad  ? Math.max(0, gad.getLastRow()-1)  : 0);
-  tab.getRange("B8").setValue(demo ? (demo.getLastRow() > 1 ? "Yes" : "No") : "No");
-  tab.getRange("B9").setValue(err  ? Math.max(0, err.getLastRow()-1)  : 0);
-  tab.getRange("B10").setValue(months.sort().join(", ") || "None yet");
+  tab.getRange("B8").setValue(pss  ? Math.max(0, pss.getLastRow()-1)  : 0);
+  tab.getRange("B9").setValue(demo ? (demo.getLastRow() > 1 ? "Yes" : "No") : "No");
+  tab.getRange("B10").setValue(err  ? Math.max(0, err.getLastRow()-1)  : 0);
+  tab.getRange("B11").setValue(months.sort().join(", ") || "None yet");
 }
 
 // ════════════════════════════════════════════════════════════
@@ -703,6 +716,17 @@ function rotateAuthToken(newToken) {
   if (!newToken || newToken.length < 16) { Logger.log("Token must be ≥16 chars."); return; }
   PropertiesService.getScriptProperties().setProperty("AUTH_TOKEN", newToken);
   Logger.log("Rotated. Update _authToken in background_service_helper.dart and rebuild APK.");
+}
+
+function generateAndSetNewToken() {
+  // Generates a secure, 32-character random string (UUID without dashes)
+  var newToken = Utilities.getUuid().replace(/-/g, '');
+  
+  // Save it using your existing function
+  rotateAuthToken(newToken);
+  
+  Logger.log("✅ NEW TOKEN GENERATED: " + newToken);
+  Logger.log("Copy the token above and update _authToken in your Flutter/Dart code!");
 }
 
 function deleteTestData() {

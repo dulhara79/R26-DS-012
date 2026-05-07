@@ -59,6 +59,11 @@ class _DashboardPageState extends State<DashboardPage>
             context,
             MaterialPageRoute(builder: (_) => const Gad7Screen()),
           );
+        } else if (payload == 'pss10_monthly') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const Pss10Screen()),
+          );
         } else {
           showRatingDialog();
         }

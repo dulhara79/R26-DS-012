@@ -49,6 +49,14 @@ Future<void> initializeService() async {
         importance: Importance.high,
       ),
     );
+    await androidPlugin.createNotificationChannel(
+      const AndroidNotificationChannel(
+        'pss_channel',
+        'Monthly Assessments',
+        description: 'Monthly Perceived Stress Scale (PSS-10) assessments',
+        importance: Importance.high,
+      ),
+    );
   }
 
   await service.configure(
@@ -128,10 +136,22 @@ void onStart(ServiceInstance service) async {
   }
 
   // 3. Start Real-Time Sensors
-  final sensorListener = SensorListener();
-  sensorListener.startListening(userId);
+  try {
+    // Immediate Heartbeat to confirm service is alive
+    await BackgroundServiceHelper.sendToSheet(userId, "Service_Status", "Started_Foreground");
+    
+    final sensorListener = SensorListener();
+    sensorListener.startListening(userId);
+    debugPrint("Background Service: Sensors initialized.");
+  } catch (e) {
+    debugPrint("Sensor Initialization Error: $e");
+    await BackgroundServiceHelper.sendToSheet(userId, "Service_Error", "Sensor_Init_Failed: $e");
+  }
 
   // 4. Start Periodic Data Collection (Every 15 Minutes)
+  // Immediate first run
+  DataCollector.collectAndSync(userId);
+  
   Timer.periodic(const Duration(minutes: 15), (timer) async {
     if (service is AndroidServiceInstance) {
       if (await service.isForegroundService()) {

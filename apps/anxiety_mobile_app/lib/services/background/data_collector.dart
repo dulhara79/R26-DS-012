@@ -16,6 +16,7 @@ class DataCollector {
       Position position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 15),
         ),
       );
       Map<String, dynamic> locData = {
