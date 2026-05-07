@@ -51,7 +51,12 @@ Future<void> initializeService() async {
 void onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
-  String userId = prefs.getString('user_id') ?? "Unknown_User";
+  String? userId = prefs.getString('user_id');
+  if (userId == null || userId.isEmpty) {
+    debugPrint("Background Service: No User ID found. Service will not start.");
+    service.stopSelf();
+    return;
+  }
 
   // 1. Initial Retry Logic
   try {

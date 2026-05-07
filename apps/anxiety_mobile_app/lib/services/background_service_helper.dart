@@ -127,6 +127,6 @@ class BackgroundServiceHelper {
 
   static Future<String> getCachedId() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('user_id') ?? "Unknown";
+    return prefs.getString('user_id') ?? "No_User_ID";
   }
 }
