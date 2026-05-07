@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../background_service.dart';
 import '../profile_page.dart';
 import 'dashboard_page.dart';
+import 'informed_consent_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -125,6 +126,25 @@ class _LoginPageState extends State<LoginPage> {
                     onTap: _login,
                   ),
                 ],
+                const SizedBox(height: 40),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const InformedConsentPage(),
+                      ),
+                    );
+                  },
+                  child: Text(
+                    "Review Informed Consent & Privacy",
+                    style: TextStyle(
+                      color: AppTheme.kTextLight,
+                      fontSize: 12,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

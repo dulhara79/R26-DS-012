@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 import 'theme/app_theme.dart';
+import 'pages/informed_consent_page.dart';
 import 'pages/login_page.dart';
 import 'pages/dashboard_page.dart';
 import 'profile_page.dart';
@@ -84,10 +85,13 @@ class SplashRouter extends StatelessWidget {
 
   Future<Widget> _getHome() async {
     final prefs = await SharedPreferences.getInstance();
+    final consentAccepted = prefs.getBool('consent_accepted') ?? false;
     final userId = prefs.getString('user_id');
     final profileComplete = prefs.getBool('profile_complete') ?? false;
 
-    if (userId == null || userId.isEmpty) {
+    if (!consentAccepted) {
+      return const InformedConsentPage();
+    } else if (userId == null || userId.isEmpty) {
       return const LoginPage();
     } else if (!profileComplete) {
       return const ProfilePage();

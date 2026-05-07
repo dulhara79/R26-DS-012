@@ -10,7 +10,10 @@ class SensorListener {
   StreamSubscription? _screenSubscription;
   StreamSubscription? _accelSubscription;
 
+  String? _cachedUserId;
+
   void startListening(String userId) {
+    _cachedUserId = userId;
     _startScreenListener(userId);
     _startAccelerometerListener(userId);
   }
@@ -22,6 +25,7 @@ class SensorListener {
 
   void _startScreenListener(String userId) {
     try {
+      debugPrint("🔍 SensorListener: Starting Screen State Listener...");
       Screen screen = Screen();
       _screenSubscription = screen.screenStateStream?.listen((
         ScreenStateEvent event,
@@ -29,9 +33,9 @@ class SensorListener {
         String status = "Unknown";
         if (event == ScreenStateEvent.SCREEN_ON) status = "Screen_On";
         if (event == ScreenStateEvent.SCREEN_OFF) status = "Screen_Off";
-        if (event == ScreenStateEvent.SCREEN_UNLOCKED)
-          status = "Screen_Unlocked";
+        if (event == ScreenStateEvent.SCREEN_UNLOCKED) status = "Screen_Unlocked";
 
+        debugPrint("📱 Screen Event: $status");
         _sendData(userId, "Screen_Event", status);
       }, onError: (e) => debugPrint("Screen State Stream Error: $e"));
     } catch (e) {
@@ -41,6 +45,7 @@ class SensorListener {
 
   void _startAccelerometerListener(String userId) {
     try {
+      debugPrint("🔍 SensorListener: Starting Accelerometer Listener...");
       _accelSubscription = accelerometerEventStream().listen((
         AccelerometerEvent event,
       ) {
@@ -58,8 +63,8 @@ class SensorListener {
   }
 
   Future<void> _sendData(String userId, String dataType, String value) async {
-    final prefs = await SharedPreferences.getInstance();
-    String currentId = prefs.getString('user_id') ?? userId;
+    // Use cached ID or fallback to provided one
+    String currentId = _cachedUserId ?? userId;
     await BackgroundServiceHelper.sendToSheet(currentId, dataType, value);
   }
 }

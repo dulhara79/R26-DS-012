@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'background_service_helper.dart';
 import 'theme/app_theme.dart';
 import 'pages/dashboard_page.dart';
+import 'pages/informed_consent_page.dart';
 import 'main.dart'; 
 
 class ProfilePage extends StatefulWidget {
@@ -328,6 +329,17 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
               const SizedBox(height: 40),
 
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 24),
+              const Text(
+                'Privacy & Data Rights',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              _buildPrivacyCard(),
+              const SizedBox(height: 32),
+
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -519,4 +531,49 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
+  Widget _buildPrivacyCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.verified_user_outlined, color: Colors.green, size: 20),
+              SizedBox(width: 8),
+              Text(
+                "Consent Status: Active",
+                style: TextStyle(fontWeight: FontWeight.w600, color: Colors.green),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            "Your data is collected anonymously. All identifiers are kept separate from health data as per PDPA guidelines.",
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            "To withdraw from this study and request deletion of your data, please email the research team at: research-team@example.com",
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: AppTheme.kPrimaryDeep,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            "Include your Participant ID in the email to facilitate the request.",
+            style: TextStyle(fontSize: 11, color: Colors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+
 }
