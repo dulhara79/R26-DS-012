@@ -54,6 +54,11 @@ class _DashboardPageState extends State<DashboardPage>
         if (payload != null && payload.startsWith('ema_rating_')) {
           final period = payload.replaceFirst('ema_rating_', '');
           showEmaSheet(period);
+        } else if (payload == 'gad7_weekly') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const Gad7Screen()),
+          );
         } else {
           showRatingDialog();
         }
