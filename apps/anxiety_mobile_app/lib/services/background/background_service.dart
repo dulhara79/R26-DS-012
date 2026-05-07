@@ -77,19 +77,24 @@ Future<void> initializeService() async {
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
+  
+  debugPrint("🔋 Background Service: onStart beginning...");
+  
   final prefs = await SharedPreferences.getInstance();
   String? userId = prefs.getString('user_id');
+  
   if (userId == null || userId.isEmpty) {
     debugPrint("Background Service: No User ID found. Service will not start.");
     service.stopSelf();
     return;
   }
 
-  // 1. Initial Retry Logic
+  // 1. Setup Connectivity & Offline Sync
   try {
     await BackgroundServiceHelper.retryOfflineQueue();
     Connectivity().onConnectivityChanged.listen((result) async {
       if (result != ConnectivityResult.none) {
+        debugPrint("🌐 Connectivity Restored: Retrying sync...");
         await BackgroundServiceHelper.retryOfflineQueue();
       }
     });
@@ -108,12 +113,8 @@ void onStart(ServiceInstance service) async {
   );
 
   if (service is AndroidServiceInstance) {
-    service
-        .on('setAsForeground')
-        .listen((event) => service.setAsForegroundService());
-    service
-        .on('setAsBackground')
-        .listen((event) => service.setAsBackgroundService());
+    service.on('setAsForeground').listen((event) => service.setAsForegroundService());
+    service.on('setAsBackground').listen((event) => service.setAsBackgroundService());
   }
   service.on('stopService').listen((event) => service.stopSelf());
 
@@ -121,60 +122,65 @@ void onStart(ServiceInstance service) async {
   try {
     final battery = Battery();
     battery.onBatteryStateChanged.listen((BatteryState state) async {
-      final level = await battery.batteryLevel;
-      await prefs.setInt('last_battery_level', level);
-      if (level <= 15 && state == BatteryState.discharging) {
-        await BackgroundServiceHelper.sendToSheet(
-          userId,
-          "Critical_Battery_Warning",
-          "Level: $level%",
-        );
+      try {
+        final level = await battery.batteryLevel;
+        await prefs.setInt('last_battery_level', level);
+        if (level <= 15 && state == BatteryState.discharging) {
+          await BackgroundServiceHelper.sendToSheet(userId, "Critical_Battery_Warning", "Level: $level%");
+        }
+      } catch(e) {
+        debugPrint("Battery Event Error: $e");
       }
     });
   } catch (e) {
-    debugPrint("Battery Monitor Error: $e");
+    debugPrint("Battery Monitor Setup Error: $e");
   }
 
-  // 3. Start Real-Time Sensors
+  // 3. Start Real-Time Sensors (Screen, Motion)
   try {
-    // Immediate Heartbeat to confirm service is alive
-    await BackgroundServiceHelper.sendToSheet(userId, "Service_Status", "Started_Foreground");
-    
     final sensorListener = SensorListener();
     sensorListener.startListening(userId);
-    debugPrint("Background Service: Sensors initialized.");
   } catch (e) {
-    debugPrint("Sensor Initialization Error: $e");
-    await BackgroundServiceHelper.sendToSheet(userId, "Service_Error", "Sensor_Init_Failed: $e");
+    debugPrint("SensorListener Setup Error: $e");
   }
 
   // 4. Start Periodic Data Collection (Every 15 Minutes)
-  // Immediate first run
+  // Heartbeat immediately on start
   DataCollector.collectAndSync(userId);
   
   Timer.periodic(const Duration(minutes: 15), (timer) async {
-    if (service is AndroidServiceInstance) {
-      if (await service.isForegroundService()) {
-        flutterLocalNotificationsPlugin.show(
-          ServiceConfig.notificationId,
-          'Research Active',
-          'Last Sync: ${DateTime.now().hour}:${DateTime.now().minute}',
-          const NotificationDetails(
-            android: AndroidNotificationDetails(
-              ServiceConfig.channelId,
-              ServiceConfig.channelName,
-              icon: 'ic_bg_service_small',
-              ongoing: true,
+    debugPrint("⏰ Periodic Task: Triggering 15m collection...");
+    try {
+      if (service is AndroidServiceInstance) {
+        if (await service.isForegroundService()) {
+          flutterLocalNotificationsPlugin.show(
+            ServiceConfig.notificationId,
+            'Research Active',
+            'Syncing data... ${DateTime.now().hour}:${DateTime.now().minute}',
+            const NotificationDetails(
+              android: AndroidNotificationDetails(
+                ServiceConfig.channelId,
+                ServiceConfig.channelName,
+                icon: 'ic_bg_service_small',
+                ongoing: true,
+                importance: Importance.low,
+              ),
             ),
-          ),
-        );
+          );
+        }
       }
+      await DataCollector.collectAndSync(userId);
+    } catch (e) {
+      debugPrint("Periodic Timer Error: $e");
     }
-    await DataCollector.collectAndSync(userId);
   });
 
   // 5. Start Daily Rating Checker (Every 1 Minute)
   Timer.periodic(const Duration(minutes: 1), (timer) async {
-    await DailyReminder.checkAndShow(flutterLocalNotificationsPlugin);
+    try {
+      await DailyReminder.checkAndShow(flutterLocalNotificationsPlugin);
+    } catch(e) {
+      debugPrint("Reminder Timer Error: $e");
+    }
   });
 }

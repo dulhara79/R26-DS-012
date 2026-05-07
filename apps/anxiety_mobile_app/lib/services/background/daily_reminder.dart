@@ -41,7 +41,7 @@ class DailyReminder {
     String today,
     String period,
   ) async {
-    // 1. Get the target time for this period (default to 9am, 2pm, 8pm if not set)
+    // 1. Get the target time for this period
     int targetHour = prefs.getInt('ema_${period}_hour') ?? (period == 'morning' ? 9 : period == 'afternoon' ? 14 : 20);
     int targetMinute = prefs.getInt('ema_${period}_minute') ?? 0;
 
@@ -49,39 +49,52 @@ class DailyReminder {
     String lastSubmitted = prefs.getString('ema_submitted_$period') ?? "";
     if (lastSubmitted == today) return;
 
-    // 3. Check if notification already shown for this period today
-    String lastShown = prefs.getString('ema_notified_$period') ?? "";
-    if (lastShown == today) return;
-
-    // 4. Trigger logic: Current time is at or after target time
-    // We allow a 2-hour window to account for background service delays or phone restarts.
+    // 3. Logic: Trigger if current time is after target time
     final int nowMinutes = now.hour * 60 + now.minute;
     final int targetMinutes = targetHour * 60 + targetMinute;
-    const int windowMinutes = 120; // 2 hours
+    
+    // Define the active window for this period (e.g., 4 hours after target)
+    const int activeWindowMinutes = 240; 
 
-    if (nowMinutes >= targetMinutes && nowMinutes < (targetMinutes + windowMinutes)) {
-      final title = {
-        'morning': '☀️ Morning Check-in',
-        'afternoon': '🌤️ Afternoon Check-in',
-        'evening': '🌙 Evening Check-in',
-      }[period];
+    if (nowMinutes >= targetMinutes && nowMinutes < (targetMinutes + activeWindowMinutes)) {
+      
+      // 4. Check if we should remind again
+      // We show a reminder at most once every 60 minutes if pending
+      int lastReminderTimestamp = prefs.getInt('ema_reminder_ts_$period') ?? 0;
+      int currentTimestamp = DateTime.now().millisecondsSinceEpoch;
+      
+      // If it's been more than 55 mins since last reminder
+      if (currentTimestamp - lastReminderTimestamp > (55 * 60 * 1000)) {
+        final title = {
+          'morning': '☀️ Morning Check-in',
+          'afternoon': '🌤️ Afternoon Check-in',
+          'evening': '🌙 Evening Check-in',
+        }[period];
 
-      await plugin.show(
-        _getNotificationId(period),
-        title,
-        'How are you feeling right now? Tap to rate.',
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            'ema_channel',
-            'Daily Check-ins',
-            importance: Importance.high,
-            priority: Priority.high,
+        debugPrint("🔔 DailyReminder: Showing notification for $period");
+
+        await plugin.show(
+          _getNotificationId(period),
+          title,
+          'How are you feeling right now? Tap to rate.',
+          const NotificationDetails(
+            android: AndroidNotificationDetails(
+              'ema_channel_v2', // Use new channel for high priority
+              'Daily Check-ins',
+              channelDescription: 'Persistent research reminders',
+              importance: Importance.max,
+              priority: Priority.high,
+              showWhen: true,
+              enableVibration: true,
+              fullScreenIntent: false,
+            ),
           ),
-        ),
-        payload: 'ema_rating_$period',
-      );
+          payload: 'ema_rating_$period',
+        );
 
-      await prefs.setString('ema_notified_$period', today);
+        await prefs.setInt('ema_reminder_ts_$period', currentTimestamp);
+        await prefs.setString('ema_notified_$today', period); // Legacy support
+      }
     }
   }
 
@@ -91,28 +104,42 @@ class DailyReminder {
     DateTime now,
     String today,
   ) async {
-    // Persistent logic: Notify daily between 9 AM and 9 PM until done for the week
+    // Only trigger on Mondays (or any day if we want to catch missed ones)
+    // Research requirement usually says remind until done.
+    
+    // Check if assessment is due for this week
+    bool isDue = await isGad7DueThisWeek();
+    if (!isDue) return;
+
+    // Only between 9 AM and 9 PM to avoid disturbing sleep
     if (now.hour < 9 || now.hour > 21) return;
 
-    String lastNotified = prefs.getString('gad7_notified_today') ?? "";
-    if (lastNotified == today) return;
+    // Remind once every 4 hours for the weekly survey
+    int lastReminder = prefs.getInt('gad7_reminder_ts') ?? 0;
+    int nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    if (await isGad7DueThisWeek()) {
+    if (nowMs - lastReminder > (4 * 60 * 60 * 1000)) {
+      debugPrint("🔔 DailyReminder: Showing Weekly GAD-7 notification");
+      
       await plugin.show(
         777,
         '📊 Weekly Health Check',
         'It\'s time for your weekly GAD-7 anxiety assessment. Tap to begin.',
         const NotificationDetails(
           android: AndroidNotificationDetails(
-            'gad7_channel',
+            'gad7_channel_v2',
             'Weekly Assessments',
-            importance: Importance.high,
+            channelDescription: 'Weekly research assessments',
+            importance: Importance.max,
             priority: Priority.high,
+            showWhen: true,
+            enableVibration: true,
           ),
         ),
         payload: 'gad7_weekly',
       );
-      await prefs.setString('gad7_notified_today', today);
+
+      await prefs.setInt('gad7_reminder_ts', nowMs);
     }
   }
 
