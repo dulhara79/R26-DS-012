@@ -281,8 +281,9 @@ def assign_anxiety_confidence(text):
 
     # Family history — this is not the patient's own condition
     if re.search(
-        r"\b(family history of anxiety|mother.*anxiety|father.*anxiety|"
-        r"sibling.*anxiety|fh.*anxiety|fh: anxiety)\b",
+        r"\b(family history of anxiety|fh:\s*anxiety|fh anxiety|"
+        r"mother has anxiety|father has anxiety|"
+        r"family hx of anxiety|family h/o anxiety)\b",
         text,
     ):
         return 0.4, "family_history"
