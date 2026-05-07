@@ -48,9 +48,15 @@ void main() async {
     ),
   );
 
-  // 4. Initialize Background Service
+  // 4. Initialize Background Service (Only if User ID exists)
   try {
-    await bg.initializeService();
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getString('user_id');
+    if (userId != null && userId.isNotEmpty) {
+      await bg.initializeService();
+    } else {
+      debugPrint('Background Service: No User ID, skipping initialization.');
+    }
   } catch (e) {
     debugPrint('Background Service Init Error: $e');
   }

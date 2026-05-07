@@ -103,7 +103,7 @@ class _DashboardPageState extends State<DashboardPage>
 
   Future<void> showRatingDialog() async {
     final prefs = await SharedPreferences.getInstance();
-    String uid = prefs.getString('user_id') ?? "Unknown";
+    String uid = prefs.getString('user_id') ?? "No_User_ID";
 
     int? selected = await showDialog<int>(
       context: context,
