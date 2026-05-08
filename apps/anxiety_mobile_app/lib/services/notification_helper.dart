@@ -38,6 +38,7 @@ class NotificationHelper {
           'Daily Rating',
           importance: Importance.high,
           priority: Priority.high,
+          showWhen: false,
         );
 
     const NotificationDetails details = NotificationDetails(
