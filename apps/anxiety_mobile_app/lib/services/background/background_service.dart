@@ -92,7 +92,7 @@ void onStart(ServiceInstance service) async {
   // 1. Setup Connectivity & Offline Sync
   try {
     await BackgroundServiceHelper.retryOfflineQueue();
-    Connectivity().onConnectivityChanged.listen((result) async {
+    Connectivity().onConnectivityChanged.listen((ConnectivityResult result) async {
       if (result != ConnectivityResult.none) {
         debugPrint("🌐 Connectivity Restored: Retrying sync...");
         await BackgroundServiceHelper.retryOfflineQueue();
@@ -153,10 +153,11 @@ void onStart(ServiceInstance service) async {
     try {
       if (service is AndroidServiceInstance) {
         if (await service.isForegroundService()) {
+          // FIX: Use static notification text — do NOT display sync times to the user
           flutterLocalNotificationsPlugin.show(
             ServiceConfig.notificationId,
             'Research Active',
-            'Syncing data... ${DateTime.now().hour}:${DateTime.now().minute}',
+            'Collecting anonymous usage data...',
             const NotificationDetails(
               android: AndroidNotificationDetails(
                 ServiceConfig.channelId,

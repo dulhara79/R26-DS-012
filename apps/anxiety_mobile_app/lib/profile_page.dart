@@ -4,8 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'background_service_helper.dart';
 import 'theme/app_theme.dart';
 import 'pages/dashboard_page.dart';
-import 'pages/informed_consent_page.dart';
-import 'main.dart'; 
+import 'pages/data_rights_page.dart';
+import 'services/background/service_config.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -554,22 +554,31 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           const SizedBox(height: 12),
           Text(
-            "Your data is collected anonymously. All identifiers are kept separate from health data as per PDPA guidelines.",
+            "Your data is collected anonymously using a Participant ID. "
+            "All identifiers are kept separate from health data as per PDPA guidelines.",
             style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 16),
-          const Text(
-            "To withdraw from this study and request deletion of your data, please email the research team at: research-team@example.com",
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: AppTheme.kPrimaryDeep,
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const DataRightsPage()),
+              ),
+              icon: const Icon(Icons.shield_outlined, size: 18),
+              label: const Text('Manage Data Rights & Privacy'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.kPrimaryDeep,
+                side: const BorderSide(color: AppTheme.kPrimaryDeep),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
             ),
           ),
-          const SizedBox(height: 4),
-          const Text(
-            "Include your Participant ID in the email to facilitate the request.",
-            style: TextStyle(fontSize: 11, color: Colors.grey),
+          const SizedBox(height: 8),
+          Text(
+            "Contact: ${ServiceConfig.researchTeamEmail}",
+            style: const TextStyle(fontSize: 11, color: Colors.grey),
           ),
         ],
       ),

@@ -13,6 +13,10 @@ var DATATYPE_TO_FAMILY = {
   "GAD7_Weekly":          "GAD7",
   "PSS10_Weekly":         "PSS10",
   "Demographics":         "Demographics",
+  "Consent_Record":       "Consent_Log",
+  "Consent_Withdrawal":   "Consent_Log",
+  "Data_Deletion_Request": "Consent_Log",
+  "Data_Export_Request":  "Consent_Log",
 };
 
 var HEADERS = {
@@ -27,6 +31,8 @@ var HEADERS = {
                    "Marital Status","Employment","Financial Status","Education",
                    "Living Situation","Anxiety Diagnosis","On Medication",
                    "Sleep Quality","Raw JSON"],
+  "Consent_Log": ["Timestamp","Date","Participant ID","Event Type",
+                  "Consent Version","Details","Raw JSON"],
   "Errors": ["Timestamp","Participant ID","Data Type","Raw Value","Error"],
   "Summary": []
 };
@@ -285,6 +291,18 @@ function buildRows(entries, family, userId, tz, ss) {
                d.age||"",d.gender||"",d.marital_status||"",d.employment_status||"",
                d.financial_status||"",d.education_level||"",d.living_situation||"",
                d.anxiety_diagnosis||"",d.on_medication||"",d.sleep_quality_rating||"",valStr];
+      } else if (family === "Consent_Log") {
+        var cl = safeJSON(valStr);
+        var eventType = item.dataType || "Unknown";
+        var details = "";
+        if (eventType === "Consent_Record") {
+          details = "Version: " + (cl.consent_version||"") + " | All checkboxes: " + (cl.consent_to_participate ? "Yes" : "No");
+        } else if (eventType === "Consent_Withdrawal") {
+          details = "Reason: " + (cl.reason||"") + " | Original consent: " + (cl.original_consent_timestamp||"");
+        } else if (eventType === "Data_Deletion_Request" || eventType === "Data_Export_Request") {
+          details = "Request type: " + (cl.request_type||"");
+        }
+        row = [ts, date, userId, eventType, cl.consent_version||"", details, valStr];
       }
       if (row) rows.push(row);
     } catch (err) {
@@ -395,7 +413,7 @@ function getOrCreateSpreadsheet(userId, props) {
   defaultTab.setName("Summary");
   initSummary(defaultTab, userId);
 
-  ["GAD7", "PSS10", "Demographics", "Errors"].forEach(function(name) {
+  ["GAD7", "PSS10", "Demographics", "Consent_Log", "Errors"].forEach(function(name) {
     applyHeaders(ss.insertSheet(name), name);
   });
 

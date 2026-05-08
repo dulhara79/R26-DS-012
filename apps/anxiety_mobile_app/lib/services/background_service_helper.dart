@@ -14,8 +14,9 @@ class BackgroundServiceHelper {
   static Future<void> sendToSheet(
     String userId,
     String type,
-    String value,
-  ) async {
+    String value, {
+    bool immediate = false,
+  }) async {
     final dataMap = {
       "userId": userId,
       "dataType": type,
@@ -27,10 +28,14 @@ class BackgroundServiceHelper {
     // Immediate persistence: Save to offline queue right away.
     await _saveToOfflineQueue([dataMap]);
 
-    _timer ??= Timer(
-      const Duration(seconds: _batchIntervalSeconds),
-      retryOfflineQueue,
-    );
+    if (immediate) {
+      retryOfflineQueue();
+    } else {
+      _timer ??= Timer(
+        const Duration(seconds: _batchIntervalSeconds),
+        retryOfflineQueue,
+      );
+    }
   }
 
   /// Check if the response body indicates success.
