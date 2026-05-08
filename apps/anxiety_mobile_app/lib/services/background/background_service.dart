@@ -13,26 +13,29 @@ import 'data_collector.dart';
 import 'sensor_listener.dart';
 import 'daily_reminder.dart';
 
+/// Called once from main.dart / login_page.dart to register Android notification
+/// channels and configure the background service.  Must run in the UI isolate.
 Future<void> initializeService() async {
   final service = FlutterBackgroundService();
 
-  const AndroidNotificationChannel channel = AndroidNotificationChannel(
-    ServiceConfig.channelId,
-    ServiceConfig.channelName,
-    description: 'Running background research tasks',
-    importance: Importance.low,
-  );
-
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-      FlutterLocalNotificationsPlugin();
-
-  final androidPlugin = flutterLocalNotificationsPlugin
-      .resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin
-      >();
+  // ── Create ALL notification channels before configuring the service ──────
+  // Channels must exist before any notification is shown on them.
+  final FlutterLocalNotificationsPlugin flnp = FlutterLocalNotificationsPlugin();
+  final AndroidFlutterLocalNotificationsPlugin? androidPlugin =
+      flnp.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
 
   if (androidPlugin != null) {
-    await androidPlugin.createNotificationChannel(channel);
+    // Foreground-service persistent notification (low importance = no sound).
+    await androidPlugin.createNotificationChannel(
+      const AndroidNotificationChannel(
+        ServiceConfig.channelId,
+        ServiceConfig.channelName,
+        description: 'Running background research tasks',
+        importance: Importance.low,
+      ),
+    );
+    // EMA check-in alerts (high importance = heads-up).
     await androidPlugin.createNotificationChannel(
       const AndroidNotificationChannel(
         'ema_channel',
@@ -41,6 +44,7 @@ Future<void> initializeService() async {
         importance: Importance.high,
       ),
     );
+    // GAD-7 weekly alert.
     await androidPlugin.createNotificationChannel(
       const AndroidNotificationChannel(
         'gad7_channel',
@@ -49,11 +53,12 @@ Future<void> initializeService() async {
         importance: Importance.high,
       ),
     );
+    // PSS-10 weekly alert.
     await androidPlugin.createNotificationChannel(
       const AndroidNotificationChannel(
         'pss_channel',
         'Monthly Assessments',
-        description: 'Monthly Perceived Stress Scale (PSS-10) assessments',
+        description: 'Monthly PSS-10 stress scale assessments',
         importance: Importance.high,
       ),
     );
@@ -66,7 +71,7 @@ Future<void> initializeService() async {
       isForegroundMode: true,
       notificationChannelId: ServiceConfig.channelId,
       initialNotificationTitle: 'Research Active',
-      initialNotificationContent: 'Collecting anonymous usage data...',
+      initialNotificationContent: 'Monitoring in background…',
       foregroundServiceNotificationId: ServiceConfig.notificationId,
       autoStartOnBoot: true,
     ),
@@ -74,114 +79,131 @@ Future<void> initializeService() async {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BACKGROUND ISOLATE ENTRY POINT
+// ─────────────────────────────────────────────────────────────────────────────
+
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
-  
-  debugPrint("🔋 Background Service: onStart beginning...");
-  
+
+  // ── Mark as background isolate FIRST — before any sendToSheet call ────────
+  // This routes queue writes to 'offline_queue_bg' instead of 'offline_queue_main'.
+  BackgroundServiceHelper.isMainIsolate = false;
+
+  debugPrint("🔋 Background Service: onStart — initialising…");
+
   final prefs = await SharedPreferences.getInstance();
-  String? userId = prefs.getString('user_id');
-  
+  // Force reload so we see the user_id written by the UI isolate.
+  await prefs.reload();
+
+  final String? userId = prefs.getString('user_id');
   if (userId == null || userId.isEmpty) {
-    debugPrint("Background Service: No User ID found. Service will not start.");
+    debugPrint("Background Service: no user_id — stopping.");
     service.stopSelf();
     return;
   }
 
-  // 1. Setup Connectivity & Offline Sync
+  // ── 1. Connectivity — retry queued data when network returns ──────────────
   try {
     await BackgroundServiceHelper.retryOfflineQueue();
-    Connectivity().onConnectivityChanged.listen((ConnectivityResult result) async {
-      if (result != ConnectivityResult.none) {
-        debugPrint("🌐 Connectivity Restored: Retrying sync...");
+    Connectivity().onConnectivityChanged.listen((event) async {
+      final bool connected = event is List
+          ? (event as List).any((r) => r != ConnectivityResult.none)
+          : event != ConnectivityResult.none;
+      if (connected) {
+        debugPrint("🌐 Network restored — retrying queue…");
         await BackgroundServiceHelper.retryOfflineQueue();
       }
     });
   } catch (e) {
-    debugPrint('Connectivity Setup Error: $e');
+    debugPrint("Connectivity setup error: $e");
   }
 
-  // 2. Setup Background Notifications
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-      FlutterLocalNotificationsPlugin();
-  
-  await flutterLocalNotificationsPlugin.initialize(
-    const InitializationSettings(
-      android: AndroidInitializationSettings('ic_launcher'),
-    ),
-  );
-
+  // ── 2. Service control messages ────────────────────────────────────────────
   if (service is AndroidServiceInstance) {
-    service.on('setAsForeground').listen((event) => service.setAsForegroundService());
-    service.on('setAsBackground').listen((event) => service.setAsBackgroundService());
+    service.on('setAsForeground').listen((_) => service.setAsForegroundService());
+    service.on('setAsBackground').listen((_) => service.setAsBackgroundService());
   }
-  service.on('stopService').listen((event) => service.stopSelf());
+  service.on('stopService').listen((_) => service.stopSelf());
 
-  // ── REAL-TIME: BATTERY MONITOR ──────────────────────────
+  // ── 3. Battery monitor ─────────────────────────────────────────────────────
   try {
     final battery = Battery();
     battery.onBatteryStateChanged.listen((BatteryState state) async {
       try {
-        final level = await battery.batteryLevel;
+        final int level = await battery.batteryLevel;
         await prefs.setInt('last_battery_level', level);
         if (level <= 15 && state == BatteryState.discharging) {
-          await BackgroundServiceHelper.sendToSheet(userId, "Critical_Battery_Warning", "Level: $level%");
+          await BackgroundServiceHelper.sendToSheet(
+            userId, "Critical_Battery_Warning", "Level: $level%",
+            immediate: true,
+          );
         }
-      } catch(e) {
-        debugPrint("Battery Event Error: $e");
+      } catch (e) {
+        debugPrint("Battery event error: $e");
       }
     });
   } catch (e) {
-    debugPrint("Battery Monitor Setup Error: $e");
+    debugPrint("Battery monitor setup error: $e");
   }
 
-  // 3. Start Real-Time Sensors (Screen, Motion)
+  // ── 4. Real-time sensors ──────────────────────────────────────────────────
   try {
-    final sensorListener = SensorListener();
-    sensorListener.startListening(userId);
+    SensorListener().startListening(userId);
   } catch (e) {
-    debugPrint("SensorListener Setup Error: $e");
+    debugPrint("SensorListener setup error: $e");
   }
 
-  // 4. Start Periodic Data Collection (Every 15 Minutes)
-  // Heartbeat immediately on start
-  DataCollector.collectAndSync(userId);
-  
-  Timer.periodic(const Duration(minutes: 15), (timer) async {
-    debugPrint("⏰ Periodic Task: Triggering 15m collection...");
+  // ── 5. Periodic 15-minute data collection ─────────────────────────────────
+  unawaited(
+    DataCollector.collectAndSync(userId)
+        .catchError((e) => debugPrint("Initial DataCollector error: $e")),
+  );
+  Timer.periodic(const Duration(minutes: 15), (_) async {
     try {
-      if (service is AndroidServiceInstance) {
-        if (await service.isForegroundService()) {
-          // FIX: Use static notification text — do NOT display sync times to the user
-          flutterLocalNotificationsPlugin.show(
-            ServiceConfig.notificationId,
-            'Research Active',
-            'Collecting anonymous usage data...',
-            const NotificationDetails(
-              android: AndroidNotificationDetails(
-                ServiceConfig.channelId,
-                ServiceConfig.channelName,
-                icon: 'ic_bg_service_small',
-                ongoing: true,
-                importance: Importance.low,
-              ),
-            ),
-          );
-        }
-      }
       await DataCollector.collectAndSync(userId);
     } catch (e) {
-      debugPrint("Periodic Timer Error: $e");
+      debugPrint("Periodic data collection error: $e");
     }
   });
 
-  // 5. Start Daily Rating Checker (Every 1 Minute)
-  Timer.periodic(const Duration(minutes: 1), (timer) async {
+  // ── 6. Background notification plugin ─────────────────────────────────────
+  //
+  // CRITICAL: The background isolate is a separate Dart VM entry point.
+  // It cannot share the FlutterLocalNotificationsPlugin instance created in
+  // initializeService() (which runs in the UI isolate).  We must create and
+  // initialise a fresh instance here.
+  //
+  // Channels were already registered by initializeService() — Android persists
+  // them per-app, so we only need to call initialize() here, NOT create channels.
+  final FlutterLocalNotificationsPlugin bgPlugin =
+      FlutterLocalNotificationsPlugin();
+
+  final bool? pluginReady = await bgPlugin.initialize(
+    const InitializationSettings(
+      android: AndroidInitializationSettings('ic_launcher'),
+    ),
+  );
+  debugPrint(
+    "Background Service: notification plugin init result = $pluginReady",
+  );
+
+  // ── 7. 1-minute reminder timer ────────────────────────────────────────────
+  //
+  // DailyReminder.checkAndShow() manages all throttling internally.
+  // It reads prefs.reload() on every tick so time-changes from Settings
+  // are picked up immediately.
+  Timer.periodic(const Duration(minutes: 1), (_) async {
     try {
-      await DailyReminder.checkAndShow(flutterLocalNotificationsPlugin);
-    } catch(e) {
-      debugPrint("Reminder Timer Error: $e");
+      await DailyReminder.checkAndShow(bgPlugin);
+    } catch (e) {
+      debugPrint("Reminder timer error: $e");
     }
   });
+
+  debugPrint("✅ Background Service: fully started for user '$userId'.");
 }
+
+// Silences the unawaited-future lint for intentional fire-and-forget.
+void unawaited(Future<void> future) {}
