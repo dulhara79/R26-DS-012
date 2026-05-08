@@ -79,10 +79,10 @@ class DailyReminder {
           'How are you feeling right now? Tap to rate.',
           const NotificationDetails(
             android: AndroidNotificationDetails(
-              'ema_channel_v2', // Use new channel for high priority
+              'ema_channel',
               'Daily Check-ins',
               channelDescription: 'Persistent research reminders',
-              importance: Importance.max,
+              importance: Importance.high,
               priority: Priority.high,
               showWhen: true,
               enableVibration: true,
@@ -127,10 +127,10 @@ class DailyReminder {
         'It\'s time for your weekly GAD-7 anxiety assessment. Tap to begin.',
         const NotificationDetails(
           android: AndroidNotificationDetails(
-            'gad7_channel_v2',
+            'gad7_channel',
             'Weekly Assessments',
             channelDescription: 'Weekly research assessments',
-            importance: Importance.max,
+            importance: Importance.high,
             priority: Priority.high,
             showWhen: true,
             enableVibration: true,

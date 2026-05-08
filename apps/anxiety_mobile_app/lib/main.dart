@@ -32,7 +32,7 @@ void main() async {
 
   // 2. Connectivity Listener (Auto-Upload when internet returns)
   try {
-    Connectivity().onConnectivityChanged.listen((result) async {
+    Connectivity().onConnectivityChanged.listen((ConnectivityResult result) async {
       if (result != ConnectivityResult.none) {
         await BackgroundServiceHelper.retryOfflineQueue();
       }
