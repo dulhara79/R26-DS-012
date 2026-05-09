@@ -52,9 +52,9 @@ class TemporalEncoder(nn.Module):
         x: [K, D] — K support notes, chronologically sorted
         returns: [K, D] — trajectory-aware embeddings
         """
-        x = x.unsqueeze(0)       # [1, K, D]
+        x = x.unsqueeze(0)  # [1, K, D]
         out, _ = self.gru(x)
-        out = out.squeeze(0)      # [K, D]
+        out = out.squeeze(0)  # [K, D]
         out = self.norm(out)
         out = self.fc(out)
         return out
@@ -73,11 +73,13 @@ class TemporalWeightingModule(nn.Module):
     def forward(self, temporal_metadata, device):
         ages = torch.tensor(
             [m.get("note_age_days", 0.0) for m in temporal_metadata],
-            dtype=torch.float32, device=device,
+            dtype=torch.float32,
+            device=device,
         )
         visits = torch.tensor(
             [m.get("total_visits", 1.0) for m in temporal_metadata],
-            dtype=torch.float32, device=device,
+            dtype=torch.float32,
+            device=device,
         )
         recency_weight = torch.exp(-self.lambda_decay * ages / 365.0)
         visit_weight = torch.sigmoid(self.alpha * visits)
@@ -115,9 +117,9 @@ class ConfidenceWeightingModule(nn.Module):
         prototype = (embeddings * w.unsqueeze(1)).sum(0)  # [D]
 
         # Cosine similarity of each note to prototype
-        emb_norm   = F.normalize(embeddings, dim=1)       # [K, D]
+        emb_norm = F.normalize(embeddings, dim=1)  # [K, D]
         proto_norm = F.normalize(prototype.unsqueeze(0), dim=1)  # [1, D]
-        cos_sim    = (emb_norm * proto_norm).sum(dim=1)   # [K], in [-1, 1]
+        cos_sim = (emb_norm * proto_norm).sum(dim=1)  # [K], in [-1, 1]
 
         # Convert to weight: higher similarity → higher weight
         # Clamp to [0, 1] so negative similarity notes get near-zero weight
@@ -137,7 +139,7 @@ class TCWPN(nn.Module):
         freeze_bert=False,
         lambda_decay=0.5,
         beta=2.0,
-        aux_weight=0.3,        # v3: increased from 0.1 → 0.3
+        aux_weight=0.3,  # v3: increased from 0.1 → 0.3
         refinement_passes=1,
     ):
         super().__init__()
@@ -165,7 +167,7 @@ class TCWPN(nn.Module):
         # -------------------------------------------------------
         # WEIGHTING MODULES
         # -------------------------------------------------------
-        self.temporal_w   = TemporalWeightingModule(lambda_decay=lambda_decay)
+        self.temporal_w = TemporalWeightingModule(lambda_decay=lambda_decay)
         self.confidence_w = ConfidenceWeightingModule(beta=beta)
 
         # -------------------------------------------------------
@@ -186,7 +188,7 @@ class TCWPN(nn.Module):
             nn.Linear(projection_dim // 2, 2),
         )
 
-        self.aux_weight       = aux_weight
+        self.aux_weight = aux_weight
         self.refinement_passes = refinement_passes
 
     # ===========================================================================
@@ -206,29 +208,37 @@ class TCWPN(nn.Module):
             all_embeddings: dict {label: [K, D] embedding tensor}
             all_weights: dict {label: [K] normalized weight tensor}
         """
-        device    = next(self.parameters()).device
-        classes   = list(support.keys())
-        prototypes     = {}
+        device = next(self.parameters()).device
+        classes = list(support.keys())
+        prototypes = {}
         all_embeddings = {}
-        all_weights    = {}
+        all_weights = {}
 
         for label in classes:
             ids_list = support[label]["input_ids"]
             mask_list = support[label]["attention_mask"]
-            temporal  = support[label]["temporal"]
+            temporal = support[label]["temporal"]
 
             dataset_weights = torch.tensor(
                 support[label].get("weights", [1.0] * len(ids_list)),
-                dtype=torch.float32, device=device,
+                dtype=torch.float32,
+                device=device,
             )
 
             # --- Chronological sort (ascending note_age_days = oldest first) ---
             sorted_pack = sorted(
-                zip(ids_list, mask_list, temporal, dataset_weights),
+                zip(ids_list, mask_list, temporal, dataset_weights.tolist()),
                 key=lambda x: x[2].get("note_age_days", 0),
                 reverse=False,
             )
-            ids_list, mask_list, temporal, dataset_weights = zip(*sorted_pack)
+            ids_list, mask_list, temporal, dw_list = zip(*sorted_pack)
+
+            # Reconstruct dataset_weights as a proper [K] float tensor
+            dataset_weights = torch.tensor(
+                list(dw_list),
+                dtype=torch.float32,
+                device=device,
+            )
 
             # --- Embed ---
             embeddings = self._embed_note_list(ids_list, mask_list)  # [K, D]
@@ -240,7 +250,7 @@ class TCWPN(nn.Module):
             temporal_weights = self.temporal_w(temporal, device)  # [K]
 
             # --- Combined base weights (temporal × dataset quality) ---
-            base_weights = temporal_weights * dataset_weights       # [K]
+            base_weights = temporal_weights * dataset_weights  # [K]
 
             # --- Confidence refinement (cosine-based, works from episode 1) ---
             for _ in range(max(1, self.refinement_passes)):
@@ -254,9 +264,9 @@ class TCWPN(nn.Module):
             prototype = (embeddings * norm_weights.unsqueeze(1)).sum(0)  # [D]
             prototype = F.normalize(prototype, dim=-1)
 
-            prototypes[label]     = prototype
+            prototypes[label] = prototype
             all_embeddings[label] = embeddings
-            all_weights[label]    = norm_weights
+            all_weights[label] = norm_weights
 
         return prototypes, all_embeddings, all_weights
 
@@ -276,23 +286,23 @@ class TCWPN(nn.Module):
         """
         temperature = torch.exp(self.log_temperature)  # always > 0
 
-        query_norm = F.normalize(query_emb, dim=-1)    # [Nq, D]
+        query_norm = F.normalize(query_emb, dim=-1)  # [Nq, D]
 
         logits = []
         for c in classes:
-            proto = prototypes[c]                       # [D], already normalized
+            proto = prototypes[c]  # [D], already normalized
             # Negative squared Euclidean distance (equivalent to 2 * cosine - 2)
             dist = ((query_norm - proto.unsqueeze(0)) ** 2).sum(-1)  # [Nq]
             logits.append(-dist * temperature)
 
-        return torch.stack(logits, dim=1)               # [Nq, N_classes]
+        return torch.stack(logits, dim=1)  # [Nq, N_classes]
 
     # ===========================================================================
     # FORWARD
     # ===========================================================================
     def forward(self, collated_episode):
         support = collated_episode["support"]
-        query   = collated_episode["query"]
+        query = collated_episode["query"]
         classes = collated_episode["classes"]
 
         # --- Build prototypes ---
@@ -300,7 +310,7 @@ class TCWPN(nn.Module):
 
         # --- Embed queries ---
         query_embeddings_all = []
-        query_targets_all    = []
+        query_targets_all = []
 
         for idx, label in enumerate(classes):
             if label not in query:
@@ -310,16 +320,15 @@ class TCWPN(nn.Module):
                 query[label]["input_ids"],
                 query[label]["attention_mask"],
             )
-            q_emb = self.query_proj(q_emb)             # [Nq, D]
+            q_emb = self.query_proj(q_emb)  # [Nq, D]
 
             query_embeddings_all.append(q_emb)
             query_targets_all.append(
-                torch.full((q_emb.size(0),), idx,
-                           device=q_emb.device, dtype=torch.long)
+                torch.full((q_emb.size(0),), idx, device=q_emb.device, dtype=torch.long)
             )
 
         query_embeddings = torch.cat(query_embeddings_all, dim=0)  # [total_q, D]
-        query_targets    = torch.cat(query_targets_all,    dim=0)  # [total_q]
+        query_targets = torch.cat(query_targets_all, dim=0)  # [total_q]
 
         # --- Prototype-distance logits ---
         logits = self._classify_queries(query_embeddings, prototypes, classes)
@@ -327,7 +336,7 @@ class TCWPN(nn.Module):
         # --- Losses ---
         proto_loss = F.cross_entropy(logits, query_targets)
         aux_logits = self.classifier(query_embeddings)
-        aux_loss   = F.cross_entropy(aux_logits, query_targets)
+        aux_loss = F.cross_entropy(aux_logits, query_targets)
         total_loss = proto_loss + self.aux_weight * aux_loss
 
         # --- Outputs ---
@@ -335,15 +344,15 @@ class TCWPN(nn.Module):
         preds = logits.argmax(dim=-1)
 
         return {
-            "loss":               total_loss,
-            "proto_loss":         proto_loss.detach(),
-            "aux_loss":           aux_loss.detach(),
-            "logits":             logits,
-            "probs":              probs,
-            "preds":              preds,
-            "targets":            query_targets,
+            "loss": total_loss,
+            "proto_loss": proto_loss.detach(),
+            "aux_loss": aux_loss.detach(),
+            "logits": logits,
+            "probs": probs,
+            "preds": preds,
+            "targets": query_targets,
             "support_embeddings": all_embeddings,
-            "support_weights":    all_weights,
-            "prototypes":         prototypes,
-            "temperature":        torch.exp(self.log_temperature).item(),
+            "support_weights": all_weights,
+            "prototypes": prototypes,
+            "temperature": torch.exp(self.log_temperature).item(),
         }
