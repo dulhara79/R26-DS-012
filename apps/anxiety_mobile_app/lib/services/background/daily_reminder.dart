@@ -20,6 +20,8 @@ import '../../ema_and_gad7.dart';
 ///
 /// Called from Timer.periodic(Duration(minutes: 1)) in background_service.dart.
 class DailyReminder {
+  static bool _didLogNotificationCapability = false;
+
   // ─────────────────────────────────────────────────────────────────────────
   // PUBLIC ENTRY POINT
   // ─────────────────────────────────────────────────────────────────────────
@@ -35,11 +37,14 @@ class DailyReminder {
     final bool enabled = prefs.getBool('rating_enabled') ?? true;
     if (!enabled) {
       debugPrint("DailyReminder: disabled by user — skip.");
+      debugPrint("EMA_DEBUG: action=skip reason=rating_disabled");
       return;
     }
 
-    final DateTime now   = DateTime.now();
-    final String   today = DateFormat('yyyy-MM-dd').format(now);
+    await _logNotificationCapability(plugin);
+
+    final DateTime now = DateTime.now();
+    final String today = DateFormat('yyyy-MM-dd').format(now);
 
     debugPrint(
       "DailyReminder: tick "
@@ -54,6 +59,30 @@ class DailyReminder {
     await _checkWeeklyPss10(prefs, plugin, now, today);
   }
 
+  static Future<void> _logNotificationCapability(
+    FlutterLocalNotificationsPlugin plugin,
+  ) async {
+    if (_didLogNotificationCapability) return;
+
+    try {
+      final android = plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+
+      if (android == null) {
+        debugPrint("EMA_DEBUG: notifications_capability platform=non_android");
+      } else {
+        final bool? enabled = await android.areNotificationsEnabled();
+        debugPrint("EMA_DEBUG: notifications_enabled=$enabled");
+      }
+    } catch (e) {
+      debugPrint("EMA_DEBUG: notifications_enabled_check_failed error=$e");
+    } finally {
+      _didLogNotificationCapability = true;
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // CALLED BY RatingSettingsPage AFTER USER SAVES NEW TIMES
   // ─────────────────────────────────────────────────────────────────────────
@@ -65,7 +94,9 @@ class DailyReminder {
     await prefs.remove('ema_reminder_ts_morning');
     await prefs.remove('ema_reminder_ts_afternoon');
     await prefs.remove('ema_reminder_ts_evening');
-    debugPrint("DailyReminder: throttle timestamps cleared after settings change.");
+    debugPrint(
+      "DailyReminder: throttle timestamps cleared after settings change.",
+    );
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -83,23 +114,36 @@ class DailyReminder {
     final String submitted = prefs.getString('ema_submitted_$period') ?? '';
     if (submitted == today) {
       debugPrint("DailyReminder: EMA [$period] already submitted today.");
+      debugPrint(
+        "EMA_DEBUG: period=$period action=skip reason=already_submitted date=$today",
+      );
       return;
     }
 
     // Read configured time (written by RatingSettingsPage).
-    final int targetHour = prefs.getInt('ema_${period}_hour') ??
-        (period == 'morning' ? 9 : period == 'afternoon' ? 14 : 20);
+    final int targetHour =
+        prefs.getInt('ema_${period}_hour') ??
+        (period == 'morning'
+            ? 9
+            : period == 'afternoon'
+            ? 14
+            : 20);
     final int targetMinute = prefs.getInt('ema_${period}_minute') ?? 0;
 
-    final int nowMinutes    = now.hour * 60 + now.minute;
+    final int nowMinutes = now.hour * 60 + now.minute;
     final int targetMinutes = targetHour * 60 + targetMinute;
 
     // Active window: target time → target time + 4 hours.
     const int windowMinutes = 240;
+    final int endMinutes = targetMinutes + windowMinutes;
 
-    final bool inWindow =
-        nowMinutes >= targetMinutes &&
-        nowMinutes < targetMinutes + windowMinutes;
+    bool inWindow = false;
+    if (endMinutes < 1440) {
+      inWindow = nowMinutes >= targetMinutes && nowMinutes < endMinutes;
+    } else {
+      // Handles windows that cross midnight (e.g. 11 PM to 3 AM)
+      inWindow = nowMinutes >= targetMinutes || nowMinutes < (endMinutes - 1440);
+    }
 
     debugPrint(
       "DailyReminder: EMA [$period] "
@@ -110,11 +154,16 @@ class DailyReminder {
       "inWindow=$inWindow",
     );
 
-    if (!inWindow) return;
+    if (!inWindow) {
+      debugPrint(
+        "EMA_DEBUG: period=$period action=skip reason=outside_window now=${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} target=${targetHour.toString().padLeft(2, '0')}:${targetMinute.toString().padLeft(2, '0')}",
+      );
+      return;
+    }
 
     // Throttle: fire at most once per 55 minutes inside the window.
     final int lastTs = prefs.getInt('ema_reminder_ts_$period') ?? 0;
-    final int nowMs  = DateTime.now().millisecondsSinceEpoch;
+    final int nowMs = DateTime.now().millisecondsSinceEpoch;
     final int elapsedMin = ((nowMs - lastTs) / 60000).round();
 
     debugPrint(
@@ -123,22 +172,28 @@ class DailyReminder {
     );
 
     if ((nowMs - lastTs) < 55 * 60 * 1000) {
-      debugPrint("DailyReminder: EMA [$period] throttled — ${55 - elapsedMin} min remaining.");
+      debugPrint(
+        "DailyReminder: EMA [$period] throttled — ${55 - elapsedMin} min remaining.",
+      );
+      debugPrint(
+        "EMA_DEBUG: period=$period action=skip reason=throttled elapsed_min=$elapsedMin",
+      );
       return;
     }
 
     final titles = {
-      'morning'  : '☀️ Morning Check-in',
+      'morning': '☀️ Morning Check-in',
       'afternoon': '🌤️ Afternoon Check-in',
-      'evening'  : '🌙 Evening Check-in',
+      'evening': '🌙 Evening Check-in',
     };
     final bodies = {
-      'morning'  : 'Good morning! Take a moment to rate how you feel today.',
+      'morning': 'Good morning! Take a moment to rate how you feel today.',
       'afternoon': 'Midday check-in — how are you feeling right now?',
-      'evening'  : 'Evening check-in — wrap up your day with a quick rating.',
+      'evening': 'Evening check-in — wrap up your day with a quick rating.',
     };
 
     debugPrint("DailyReminder: ▶ FIRING EMA [$period] notification");
+    debugPrint("EMA_DEBUG: period=$period action=attempt_send");
 
     try {
       await plugin.show(
@@ -161,8 +216,14 @@ class DailyReminder {
       // Persist throttle timestamp ONLY after a successful show().
       await prefs.setInt('ema_reminder_ts_$period', nowMs);
       debugPrint("DailyReminder: ✅ EMA [$period] notification sent.");
+      debugPrint(
+        "EMA_DEBUG: period=$period action=sent notification_id=${_idForPeriod(period)}",
+      );
     } catch (e, st) {
-      debugPrint("DailyReminder: ❌ EMA [$period] plugin.show() failed: $e\n$st");
+      debugPrint(
+        "DailyReminder: ❌ EMA [$period] plugin.show() failed: $e\n$st",
+      );
+      debugPrint("EMA_DEBUG: period=$period action=send_failed error=$e");
     }
   }
 
@@ -183,7 +244,7 @@ class DailyReminder {
     if (!due) return;
 
     final int lastTs = prefs.getInt('gad7_reminder_ts') ?? 0;
-    final int nowMs  = DateTime.now().millisecondsSinceEpoch;
+    final int nowMs = DateTime.now().millisecondsSinceEpoch;
     if ((nowMs - lastTs) < 4 * 60 * 60 * 1000) return;
 
     debugPrint("DailyReminder: ▶ FIRING GAD-7 weekly notification");
@@ -258,7 +319,7 @@ class DailyReminder {
   // ─────────────────────────────────────────────────────────────────────────
 
   static int _idForPeriod(String period) {
-    if (period == 'morning')   return 901;
+    if (period == 'morning') return 901;
     if (period == 'afternoon') return 902;
     return 903; // evening
   }
