@@ -20,10 +20,12 @@ Future<void> initializeService() async {
 
   // ── Create ALL notification channels before configuring the service ──────
   // Channels must exist before any notification is shown on them.
-  final FlutterLocalNotificationsPlugin flnp = FlutterLocalNotificationsPlugin();
-  final AndroidFlutterLocalNotificationsPlugin? androidPlugin =
-      flnp.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
+  final FlutterLocalNotificationsPlugin flnp =
+      FlutterLocalNotificationsPlugin();
+  final AndroidFlutterLocalNotificationsPlugin? androidPlugin = flnp
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >();
 
   if (androidPlugin != null) {
     // Foreground-service persistent notification (low importance = no sound).
@@ -122,8 +124,12 @@ void onStart(ServiceInstance service) async {
 
   // ── 2. Service control messages ────────────────────────────────────────────
   if (service is AndroidServiceInstance) {
-    service.on('setAsForeground').listen((_) => service.setAsForegroundService());
-    service.on('setAsBackground').listen((_) => service.setAsBackgroundService());
+    service
+        .on('setAsForeground')
+        .listen((_) => service.setAsForegroundService());
+    service
+        .on('setAsBackground')
+        .listen((_) => service.setAsBackgroundService());
   }
   service.on('stopService').listen((_) => service.stopSelf());
 
@@ -136,7 +142,9 @@ void onStart(ServiceInstance service) async {
         await prefs.setInt('last_battery_level', level);
         if (level <= 15 && state == BatteryState.discharging) {
           await BackgroundServiceHelper.sendToSheet(
-            userId, "Critical_Battery_Warning", "Level: $level%",
+            userId,
+            "Critical_Battery_Warning",
+            "Level: $level%",
             immediate: true,
           );
         }
@@ -157,8 +165,9 @@ void onStart(ServiceInstance service) async {
 
   // ── 5. Periodic 15-minute data collection ─────────────────────────────────
   unawaited(
-    DataCollector.collectAndSync(userId)
-        .catchError((e) => debugPrint("Initial DataCollector error: $e")),
+    DataCollector.collectAndSync(
+      userId,
+    ).catchError((e) => debugPrint("Initial DataCollector error: $e")),
   );
   Timer.periodic(const Duration(minutes: 15), (_) async {
     try {
@@ -182,12 +191,13 @@ void onStart(ServiceInstance service) async {
 
   final bool? pluginReady = await bgPlugin.initialize(
     const InitializationSettings(
-      android: AndroidInitializationSettings('ic_launcher'),
+      android: AndroidInitializationSettings('@mipmap/launcher_icon'),
     ),
   );
   debugPrint(
     "Background Service: notification plugin init result = $pluginReady",
   );
+  debugPrint("EMA_DEBUG: bg_plugin_initialized=$pluginReady");
 
   // ── 7. 1-minute reminder timer ────────────────────────────────────────────
   //
@@ -195,10 +205,12 @@ void onStart(ServiceInstance service) async {
   // It reads prefs.reload() on every tick so time-changes from Settings
   // are picked up immediately.
   Timer.periodic(const Duration(minutes: 1), (_) async {
+    debugPrint("EMA_DEBUG: reminder_timer_tick");
     try {
       await DailyReminder.checkAndShow(bgPlugin);
     } catch (e) {
       debugPrint("Reminder timer error: $e");
+      debugPrint("EMA_DEBUG: reminder_timer_error error=$e");
     }
   });
 
