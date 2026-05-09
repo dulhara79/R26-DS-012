@@ -26,7 +26,7 @@ from config.settings import (
     MIMIC_PROCESSED_BASE_DIR,
 )
 
-from tc_wpn.data.extraction import (
+from src.tc_wpn.data.extraction import (
     load_csv_safe,
     identify_anxiety_patients,
     identify_control_patients,
