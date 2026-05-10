@@ -9,7 +9,6 @@ import 'package:usage_stats/usage_stats.dart';
 import '../theme/app_theme.dart';
 import '../background_service.dart';
 import '../profile_page.dart';
-import 'dashboard_page.dart';
 import 'informed_consent_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -63,8 +62,8 @@ class _LoginPageState extends State<LoginPage> {
       Navigator.pushReplacement(
         context,
         PageRouteBuilder(
-          pageBuilder: (_, __, ___) => ProfilePage(),
-          transitionsBuilder: (_, a, __, c) =>
+          pageBuilder: (_, _, _) => ProfilePage(),
+          transitionsBuilder: (_, a, _, c) =>
               FadeTransition(opacity: a, child: c),
           transitionDuration: const Duration(milliseconds: 800),
         ),
@@ -161,7 +160,7 @@ class _LoginPageState extends State<LoginPage> {
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: AppTheme.kPrimaryDeep.withOpacity(0.1),
+            color: AppTheme.kPrimaryDeep.withValues(alpha: 0.1),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -185,7 +184,7 @@ class _LoginPageState extends State<LoginPage> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 15,
               offset: const Offset(0, 5),
             ),
@@ -228,8 +227,8 @@ class _LoginPageState extends State<LoginPage> {
           boxShadow: [
             BoxShadow(
               color: isPrimary
-                  ? AppTheme.kPrimaryDeep.withOpacity(0.3)
-                  : Colors.black.withOpacity(0.05),
+                  ? AppTheme.kPrimaryDeep.withValues(alpha: 0.3)
+                  : Colors.black.withValues(alpha: 0.05),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
