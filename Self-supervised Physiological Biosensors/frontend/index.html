@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Physiological Risk Assessment Dashboard - Self-supervised anomaly detection and stress onset forecasting using LSTM Autoencoder on wearable biosensor data.">
+    <title>AthletiSense | Physiological Risk Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Ambient Background Effects -->
+    <div class="ambient-bg">
+        <div class="gradient-orb orb-1"></div>
+        <div class="gradient-orb orb-2"></div>
+        <div class="gradient-orb orb-3"></div>
+    </div>
+
+    <!-- Top Navigation Bar -->
+    <nav class="top-nav" id="top-nav">
+        <div class="nav-left">
+            <div class="logo-container">
+                <div class="logo-icon">
+                    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                        <path d="M14 2L2 8v12l12 6 12-6V8L14 2z" stroke="url(#logoGrad)" stroke-width="1.5" fill="none"/>
+                        <path d="M14 8a6 6 0 100 12 6 6 0 000-12z" stroke="url(#logoGrad)" stroke-width="1.5" fill="none"/>
+                        <circle cx="14" cy="14" r="2" fill="url(#logoGrad)"/>
+                        <defs>
+                            <linearGradient id="logoGrad" x1="2" y1="2" x2="26" y2="26">
+                                <stop stop-color="#6366f1"/>
+                                <stop offset="1" stop-color="#06b6d4"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <span class="logo-text">AthletiSense</span>
+                <span class="logo-badge">R26-DS-012</span>
+            </div>
+        </div>
+        <div class="nav-center">
+            <div class="connection-status" id="connection-status">
+                <span class="status-dot"></span>
+                <span class="status-text">Chest Strap Disconnected</span>
+            </div>
+        </div>
+        <div class="nav-right">
+            <button class="nav-btn" id="btn-settings" title="Settings">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="dashboard">
+
+        <!-- Hero Section: Risk Score -->
+        <section class="hero-section" id="hero-section">
+            <div class="risk-gauge-container">
+                <div class="risk-gauge" id="risk-gauge">
+                    <svg class="gauge-svg" viewBox="0 0 280 180">
+                        <defs>
+                            <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#10b981"/>
+                                <stop offset="35%" stop-color="#f59e0b"/>
+                                <stop offset="65%" stop-color="#f97316"/>
+                                <stop offset="100%" stop-color="#ef4444"/>
+                            </linearGradient>
+                            <filter id="glow">
+                                <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                                <feMerge>
+                                    <feMergeNode in="coloredBlur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+                        <!-- Background arc -->
+                        <path d="M 30 160 A 110 110 0 0 1 250 160" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="16" stroke-linecap="round"/>
+                        <!-- Filled arc -->
+                        <path id="gauge-fill" d="M 30 160 A 110 110 0 0 1 250 160" fill="none" stroke="url(#gaugeGrad)" stroke-width="16" stroke-linecap="round" stroke-dasharray="345.58" stroke-dashoffset="345.58" filter="url(#glow)"/>
+                        <!-- Tick marks -->
+                        <g id="gauge-ticks" opacity="0.3"></g>
+                    </svg>
+                    <div class="gauge-value-container">
+                        <span class="gauge-value" id="gauge-value">--</span>
+                        <span class="gauge-unit">/ 100</span>
+                    </div>
+                    <div class="gauge-label" id="gauge-label">Awaiting Data</div>
+                </div>
+                <div class="risk-meta">
+                    <div class="meta-item">
+                        <span class="meta-label">Anomaly Score</span>
+                        <span class="meta-value" id="anomaly-score-value">--</span>
+                    </div>
+                    <div class="meta-divider"></div>
+                    <div class="meta-item">
+                        <span class="meta-label">Forecast P(stress)</span>
+                        <span class="meta-value" id="forecast-prob-value">--</span>
+                    </div>
+                    <div class="meta-divider"></div>
+                    <div class="meta-item">
+                        <span class="meta-label">Threshold</span>
+                        <span class="meta-value" id="threshold-value">95th %ile</span>
+                    </div>
+                </div>
+            </div>
+            <div class="early-warning-panel" id="early-warning-panel">
+                <div class="ew-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                </div>
+                <div class="ew-content">
+                    <span class="ew-title" id="ew-title">Early Warning System</span>
+                    <span class="ew-detail" id="ew-detail">Average EWT: 11.83 min before onset</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- KPI Cards Row -->
+        <section class="kpi-row" id="kpi-row">
+            <div class="kpi-card" id="kpi-hr">
+                <div class="kpi-icon hr">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+                </div>
+                <div class="kpi-content">
+                    <span class="kpi-label">Heart Rate</span>
+                    <span class="kpi-value" id="kpi-hr-val">--</span>
+                    <span class="kpi-unit">bpm</span>
+                </div>
+                <div class="kpi-spark" id="spark-hr"></div>
+            </div>
+            <div class="kpi-card" id="kpi-rr">
+                <div class="kpi-icon rr">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                </div>
+                <div class="kpi-content">
+                    <span class="kpi-label">RR Interval</span>
+                    <span class="kpi-value" id="kpi-rr-val">--</span>
+                    <span class="kpi-unit">ms</span>
+                </div>
+                <div class="kpi-spark" id="spark-rr"></div>
+            </div>
+            <div class="kpi-card" id="kpi-hrv">
+                <div class="kpi-icon hrv">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                </div>
+                <div class="kpi-content">
+                    <span class="kpi-label">HRV (SDNN)</span>
+                    <span class="kpi-value" id="kpi-hrv-val">--</span>
+                    <span class="kpi-unit">ms</span>
+                </div>
+                <div class="kpi-spark" id="spark-hrv"></div>
+            </div>
+            <div class="kpi-card" id="kpi-br">
+                <div class="kpi-icon br">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c-4-3-8-7-8-12a8 8 0 0116 0c0 5-4 9-8 12z"/><circle cx="12" cy="10" r="3"/></svg>
+                </div>
+                <div class="kpi-content">
+                    <span class="kpi-label">Breathing Rate</span>
+                    <span class="kpi-value" id="kpi-br-val">--</span>
+                    <span class="kpi-unit">rpm</span>
+                </div>
+                <div class="kpi-spark" id="spark-br"></div>
+            </div>
+            <div class="kpi-card" id="kpi-temp">
+                <div class="kpi-icon temp">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 00-5 0v11.26a4.5 4.5 0 105 0z"/></svg>
+                </div>
+                <div class="kpi-content">
+                    <span class="kpi-label">Skin Temp</span>
+                    <span class="kpi-value" id="kpi-temp-val">--</span>
+                    <span class="kpi-unit">°C</span>
+                </div>
+                <div class="kpi-spark" id="spark-temp"></div>
+            </div>
+        </section>
+
+        <!-- Charts Row -->
+        <section class="charts-row">
+            <div class="chart-card wide" id="chart-timeline">
+                <div class="chart-header">
+                    <h3>Anomaly Score Timeline</h3>
+                    <div class="chart-legend">
+                        <span class="legend-item"><span class="legend-dot baseline"></span>Baseline</span>
+                        <span class="legend-item"><span class="legend-dot anomaly"></span>Anomalous</span>
+                        <span class="legend-item"><span class="legend-line threshold"></span>95th %ile Threshold</span>
+                    </div>
+                </div>
+                <div class="chart-body">
+                    <canvas id="canvas-timeline" width="900" height="220"></canvas>
+                </div>
+            </div>
+            <div class="chart-card narrow" id="chart-features">
+                <div class="chart-header">
+                    <h3>Feature Deviation Radar</h3>
+                </div>
+                <div class="chart-body">
+                    <canvas id="canvas-radar" width="320" height="280"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Bottom Row: Forecast + Feature Table -->
+        <section class="bottom-row">
+            <div class="chart-card" id="chart-forecast">
+                <div class="chart-header">
+                    <h3>Stress Onset Forecast</h3>
+                    <span class="chart-subtitle">Probability of stress within next 5 min</span>
+                </div>
+                <div class="chart-body">
+                    <canvas id="canvas-forecast" width="500" height="180"></canvas>
+                </div>
+            </div>
+            <div class="info-card" id="feature-table-card">
+                <div class="chart-header">
+                    <h3>Live Feature Vector</h3>
+                    <span class="chart-subtitle">10 features / 60s window / 30s step</span>
+                </div>
+                <div class="feature-table-container">
+                    <table class="feature-table" id="feature-table">
+                        <thead>
+                            <tr>
+                                <th>Feature</th>
+                                <th>Raw Value</th>
+                                <th>Z-Score</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="feature-tbody">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Model Info Footer -->
+        <section class="model-info-bar" id="model-info">
+            <div class="model-stat">
+                <span class="stat-label">Architecture</span>
+                <span class="stat-value">LSTM-AE (64h, 1L)</span>
+            </div>
+            <div class="model-stat">
+                <span class="stat-label">AUROC</span>
+                <span class="stat-value">0.97</span>
+            </div>
+            <div class="model-stat">
+                <span class="stat-label">False Alarm Rate</span>
+                <span class="stat-value">0%</span>
+            </div>
+            <div class="model-stat">
+                <span class="stat-label">Forecasting AUROC</span>
+                <span class="stat-value">0.88</span>
+            </div>
+            <div class="model-stat">
+                <span class="stat-label">EWT</span>
+                <span class="stat-value">11.83 min</span>
+            </div>
+            <div class="model-stat">
+                <span class="stat-label">Subjects Validated</span>
+                <span class="stat-value">39 LOSO</span>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Simulation Controls (Floating) -->
+    <div class="sim-controls" id="sim-controls">
+        <div class="sim-header">
+            <span class="sim-title">Simulation Controls</span>
+            <button class="sim-toggle" id="sim-toggle" title="Toggle controls">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+        </div>
+        <div class="sim-body" id="sim-body">
+            <div class="sim-group">
+                <label>Physiological State</label>
+                <div class="sim-btn-group">
+                    <button class="sim-btn active" id="btn-resting" data-state="resting">Resting</button>
+                    <button class="sim-btn" id="btn-mild" data-state="mild">Mild Stress</button>
+                    <button class="sim-btn" id="btn-high" data-state="high">High Stress</button>
+                    <button class="sim-btn" id="btn-recovery" data-state="recovery">Recovery</button>
+                </div>
+            </div>
+            <div class="sim-group">
+                <label>Noise Level</label>
+                <input type="range" id="noise-slider" min="0" max="100" value="15" class="sim-slider">
+                <span class="sim-slider-val" id="noise-val">15%</span>
+            </div>
+            <div class="sim-group">
+                <label>Simulation Speed</label>
+                <input type="range" id="speed-slider" min="500" max="5000" value="2000" step="500" class="sim-slider">
+                <span class="sim-slider-val" id="speed-val">2.0s</span>
+            </div>
+            <div class="sim-actions">
+                <button class="sim-action-btn start" id="btn-start">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    Start Streaming
+                </button>
+                <button class="sim-action-btn stop hidden" id="btn-stop">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                    Stop
+                </button>
+                <button class="sim-action-btn reset" id="btn-reset">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+                    Reset
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="engine.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
