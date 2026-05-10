@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'background/service_config.dart';
-
+import 'package:flutter_background_service/flutter_background_service.dart';
 class BackgroundServiceHelper {
   // _isSyncing is per-isolate — each isolate has its own copy, which is correct.
   static bool _isSyncing = false;
@@ -112,7 +112,7 @@ class BackgroundServiceHelper {
 
       if (queue.isEmpty) return;
 
-      debugPrint("🔄 Syncing queue [${_queueKey}]: ${queue.length} items");
+      debugPrint("🔄 Syncing queue [$_queueKey]: ${queue.length} items");
 
       const chunkSize = 50;
       int failedFrom = -1; // index of the first chunk that failed
@@ -140,15 +140,15 @@ class BackgroundServiceHelper {
               _isSuccessBody(response.body);
 
           if (ok) {
-            debugPrint("✅ Chunk [${i}–${end - 1}] sent (${batch.length} items)");
+            debugPrint("✅ Chunk [$i–${end - 1}] sent (${batch.length} items)");
           } else {
             debugPrint(
-                "⚠️ Server error on chunk [${i}–${end - 1}]: ${response.statusCode}");
+                "⚠️ Server error on chunk [$i–${end - 1}]: ${response.statusCode}");
             failedFrom = i;
             break;
           }
         } catch (e) {
-          debugPrint("❌ Chunk [${i}–${end - 1}] failed: $e");
+          debugPrint("❌ Chunk [$i–${end - 1}] failed: $e");
           failedFrom = i;
           break;
         }
@@ -175,9 +175,9 @@ class BackgroundServiceHelper {
       await prefs.setStringList(_queueKey, remaining);
 
       if (remaining.isEmpty) {
-        debugPrint("✅ Queue [${_queueKey}] fully cleared.");
+        debugPrint("✅ Queue [$_queueKey] fully cleared.");
       } else {
-        debugPrint("⚠️ ${remaining.length} items still pending in [${_queueKey}].");
+        debugPrint("⚠️ ${remaining.length} items still pending in [$_queueKey].");
       }
     } finally {
       _isSyncing = false;
@@ -200,5 +200,9 @@ class BackgroundServiceHelper {
   static Future<String> getCachedId() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('user_id') ?? "No_User_ID";
+  }
+
+  static Future<bool> isServiceRunning() async {
+    return await FlutterBackgroundService().isRunning();
   }
 }
