@@ -31,6 +31,13 @@ class _DashboardPageState extends State<DashboardPage>
   bool _isServiceRunning = false;
   bool _isOptimized = false;
 
+  // Vitals State
+  int _heartRate = 72;
+  double _breathingRate = 16.0;
+  double _bodyTemp = 36.6;
+  double _motion = 0.02;
+  Timer? _vitalsTimer;
+
   late AnimationController _breatheController;
   late Animation<double> _breatheAnimation;
 
@@ -71,6 +78,21 @@ class _DashboardPageState extends State<DashboardPage>
     };
 
     _startStatusCheck();
+    _startVitalsSimulation();
+  }
+
+  void _startVitalsSimulation() {
+    _vitalsTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (!mounted) return;
+      setState(() {
+        // Simple random walk simulation
+        final random = Random();
+        _heartRate = (70 + random.nextInt(15));
+        _breathingRate = (14 + random.nextDouble() * 4);
+        _bodyTemp = (36.4 + random.nextDouble() * 0.5);
+        _motion = random.nextDouble() * 0.1;
+      });
+    });
   }
 
   void _startStatusCheck() {
@@ -99,6 +121,7 @@ class _DashboardPageState extends State<DashboardPage>
   @override
   void dispose() {
     _breatheController.dispose();
+    _vitalsTimer?.cancel();
     super.dispose();
   }
 
@@ -321,6 +344,62 @@ class _DashboardPageState extends State<DashboardPage>
                   color: Colors.white.withOpacity(0.9),
                 ),
               ),
+              const SizedBox(height: 20),
+              // Vitals Monitor Grid
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildVitalCard(
+                            "Heart Rate",
+                            "$_heartRate",
+                            "BPM",
+                            Icons.favorite_rounded,
+                            Colors.pinkAccent,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildVitalCard(
+                            "Breathing",
+                            _breathingRate.toStringAsFixed(1),
+                            "RPM",
+                            Icons.air_rounded,
+                            Colors.tealAccent,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildVitalCard(
+                            "Body Temp",
+                            _bodyTemp.toStringAsFixed(1),
+                            "°C",
+                            Icons.thermostat_rounded,
+                            Colors.orangeAccent,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildVitalCard(
+                            "Motion",
+                            _motion.toStringAsFixed(2),
+                            "G",
+                            Icons.directions_run_rounded,
+                            Colors.cyanAccent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
               const Spacer(flex: 3),
               Listener(
                 onPointerDown: (e) => _handleTouch(e, true),
@@ -404,6 +483,75 @@ class _DashboardPageState extends State<DashboardPage>
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildVitalCard(String label, String value, String unit, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    color: Colors.white.withOpacity(0.7),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      value,
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      unit,
+                      style: GoogleFonts.poppins(
+                        fontSize: 9,
+                        color: Colors.white.withOpacity(0.5),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
