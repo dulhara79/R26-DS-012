@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
+import '../models/models.dart';
 import '../services/patient_provider.dart';
 import '../widgets/patient_card.dart';
 import 'patient_detail_screen.dart';
+import 'add_patient_screen.dart';
 
 class PatientListScreen extends StatefulWidget {
   const PatientListScreen({super.key});
@@ -15,6 +17,8 @@ class PatientListScreen extends StatefulWidget {
 class _PatientListScreenState extends State<PatientListScreen> {
   final _searchCtrl = TextEditingController();
   String _query = '';
+  RiskLevel? _riskFilter;
+  String _wardFilter = 'All';
 
   @override
   void dispose() {
@@ -25,19 +29,16 @@ class _PatientListScreenState extends State<PatientListScreen> {
   @override
   Widget build(BuildContext context) {
     final provider  = context.watch<PatientProvider>();
-    final filtered  = provider.searchPatients(_query);
+    final filtered  = provider.searchPatients(
+      _query, 
+      riskFilter: _riskFilter,
+      wardFilter: _wardFilter,
+    );
 
     return Scaffold(
       backgroundColor: AppColors.surfaceSecond,
       appBar: AppBar(
         title: const Text('Patients'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list_rounded),
-            onPressed: () {},
-          ),
-          const SizedBox(width: 4),
-        ],
       ),
       body: Column(
         children: [
@@ -66,17 +67,43 @@ class _PatientListScreenState extends State<PatientListScreen> {
           
           // Filters
           Container(
-            height: 40,
+            height: 48,
             color: AppColors.surface,
             child: ListView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               children: [
-                _FilterChip(label: 'All', isSelected: true, onTap: () {}),
-                _FilterChip(label: 'High Risk', isSelected: false, onTap: () {}, color: AppColors.riskHigh),
-                _FilterChip(label: 'Moderate', isSelected: false, onTap: () {}, color: AppColors.riskModerate),
-                _FilterChip(label: 'Low Risk', isSelected: false, onTap: () {}, color: AppColors.riskLow),
-                _FilterChip(label: 'Ward 04', isSelected: false, onTap: () {}),
+                _FilterChip(
+                  label: 'All', 
+                  isSelected: _riskFilter == null && _wardFilter == 'All', 
+                  onTap: () => setState(() {
+                    _riskFilter = null;
+                    _wardFilter = 'All';
+                  }),
+                ),
+                _FilterChip(
+                  label: 'High Risk', 
+                  isSelected: _riskFilter == RiskLevel.high, 
+                  onTap: () => setState(() => _riskFilter = RiskLevel.high), 
+                  color: AppColors.riskHigh,
+                ),
+                _FilterChip(
+                  label: 'Moderate', 
+                  isSelected: _riskFilter == RiskLevel.moderate, 
+                  onTap: () => setState(() => _riskFilter = RiskLevel.moderate), 
+                  color: AppColors.riskModerate,
+                ),
+                _FilterChip(
+                  label: 'Low Risk', 
+                  isSelected: _riskFilter == RiskLevel.low, 
+                  onTap: () => setState(() => _riskFilter = RiskLevel.low), 
+                  color: AppColors.riskLow,
+                ),
+                _FilterChip(
+                  label: 'Psychiatry OPD', 
+                  isSelected: _wardFilter == 'Psychiatry OPD', 
+                  onTap: () => setState(() => _wardFilter = 'Psychiatry OPD'),
+                ),
               ],
             ),
           ),
@@ -91,6 +118,21 @@ class _PatientListScreenState extends State<PatientListScreen> {
                   '${filtered.length} patient${filtered.length != 1 ? 's' : ''}',
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
+                if (_riskFilter != null || _wardFilter != 'All' || _query.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => setState(() {
+                      _riskFilter = null;
+                      _wardFilter = 'All';
+                      _query = '';
+                      _searchCtrl.clear();
+                    }),
+                    child: const Text(
+                      'Clear all',
+                      style: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -131,6 +173,14 @@ class _PatientListScreenState extends State<PatientListScreen> {
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const AddPatientScreen()),
+        ),
+        backgroundColor: AppColors.primary,
+        child: const Icon(Icons.person_add_rounded, color: Colors.white),
+      ),
     );
   }
 }
@@ -152,23 +202,25 @@ class _FilterChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
-      child: ActionChip(
-        label: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected ? Colors.white : (color ?? AppColors.textSecondary),
+      child: Center(
+        child: ActionChip(
+          label: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+              color: isSelected ? Colors.white : (color ?? AppColors.textSecondary),
+            ),
           ),
+          backgroundColor: isSelected ? (color ?? AppColors.primary) : Colors.transparent,
+          side: BorderSide(
+            color: isSelected ? Colors.transparent : AppColors.border,
+            width: 1,
+          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          onPressed: onTap,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
         ),
-        backgroundColor: isSelected ? (color ?? AppColors.primary) : Colors.transparent,
-        side: BorderSide(
-          color: isSelected ? Colors.transparent : AppColors.border,
-          width: 1,
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        onPressed: onTap,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
       ),
     );
   }
