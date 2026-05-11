@@ -31,6 +31,12 @@
     const canvasForecast = $('canvas-forecast');
     const featureTbody = $('feature-tbody');
 
+    const monHR = $('mon-hr-val');
+    const monBR = $('mon-br-val');
+    const monTemp = $('mon-temp-val');
+    const monMotion = $('mon-motion-val');
+    const vitalsTime = $('vitals-time');
+
     const btnStart = $('btn-start');
     const btnStop = $('btn-stop');
     const btnReset = $('btn-reset');
@@ -350,6 +356,15 @@
 
         // Early warning
         updateEarlyWarning(result.riskScore, result.forecastProb, result.category);
+
+        // Patient Vitals Monitor
+        monHR.textContent = result.rawFeatures.mean_HR.toFixed(0);
+        monBR.textContent = result.rawFeatures.mean_BR.toFixed(1);
+        monTemp.textContent = result.rawFeatures.mean_temp.toFixed(1);
+        monMotion.textContent = result.rawFeatures.mean_acc_mag.toFixed(2);
+        
+        const now = new Date();
+        vitalsTime.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
 
     // ── Controls ─────────────────────────────────────────────────
@@ -384,6 +399,8 @@
         thresholdVal.textContent = '95th %ile';
         kpiHR.textContent = '--'; kpiRR.textContent = '--';
         kpiHRV.textContent = '--'; kpiBR.textContent = '--'; kpiTemp.textContent = '--';
+        monHR.textContent = '--'; monBR.textContent = '--'; monTemp.textContent = '--'; monMotion.textContent = '--';
+        vitalsTime.textContent = 'Awaiting Data...';
         document.querySelectorAll('.kpi-spark canvas').forEach(c => { const ctx = c.getContext('2d'); ctx.clearRect(0, 0, c.width, c.height); });
         drawTimeline([], 0.3); drawRadar(null); drawForecast([]);
         initFeatureTable();
