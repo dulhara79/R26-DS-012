@@ -33,7 +33,7 @@ class _AssessmentInputScreenState extends State<AssessmentInputScreen> {
     'Physician note',
   ];
 
-  Future<void> _submit() async {
+  Future<void> _submit({bool skipAnalysis = false}) async {
     final text = _noteCtrl.text.trim();
     if (text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -45,24 +45,34 @@ class _AssessmentInputScreenState extends State<AssessmentInputScreen> {
     setState(() => _submitting = true);
 
     try {
-      final result = await context.read<PatientProvider>().runAssessment(
+      final result = await context.read<PatientProvider>().saveAssessment(
         patientId: widget.patient.id,
         noteText:  text,
         noteType:  _noteType,
+        skipAnalysis: skipAnalysis,
       );
 
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => AssessmentResultScreen(
-            patient: widget.patient,
-            noteText: text,
-            noteType: _noteType,
-            result: result,
+
+      if (result != null) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AssessmentResultScreen(
+              patient: widget.patient,
+              noteText: text,
+              noteType: _noteType,
+              result: result,
+            ),
           ),
-        ),
-      );
+        );
+      } else {
+        // Offline save success
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Assessment saved locally (Draft)')),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _submitting = false);
@@ -78,9 +88,9 @@ class _AssessmentInputScreenState extends State<AssessmentInputScreen> {
           backgroundColor: AppColors.riskHigh,
           duration: const Duration(seconds: 10),
           action: SnackBarAction(
-            label: 'Dismiss',
+            label: 'Save Offline',
             textColor: Colors.white,
-            onPressed: () {},
+            onPressed: () => _submit(skipAnalysis: true),
           ),
         ),
       );
@@ -89,6 +99,8 @@ class _AssessmentInputScreenState extends State<AssessmentInputScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isOffline = context.watch<PatientProvider>().isOffline;
+
     return Scaffold(
       backgroundColor: AppColors.surfaceSecond,
       appBar: AppBar(
@@ -100,6 +112,24 @@ class _AssessmentInputScreenState extends State<AssessmentInputScreen> {
       ),
       body: Column(
         children: [
+          // Offline Banner
+          if (isOffline)
+            Container(
+              color: AppColors.riskHigh,
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+              child: const Row(
+                children: [
+                  Icon(Icons.wifi_off_rounded, color: Colors.white, size: 14),
+                  SizedBox(width: 8),
+                  Text(
+                    'Offline Mode: AI analysis unavailable. Saving as local draft.',
+                    style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+
           // Patient header strip
           Container(
             color: AppColors.primarySurface,
@@ -163,6 +193,7 @@ class _AssessmentInputScreenState extends State<AssessmentInputScreen> {
                   TextField(
                     controller: _noteCtrl,
                     maxLines: 12,
+                    onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(
                       labelText: 'Clinical note',
                       alignLabelWithHint: true,
@@ -224,9 +255,9 @@ class _AssessmentInputScreenState extends State<AssessmentInputScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'This analysis is for clinical decision support only. '
-                            'Remove all patient identifiers before submitting. '
-                            'The clinician retains full responsibility for diagnosis.',
+                            isOffline 
+                              ? 'Offline mode: You can save this note locally. It will not be analyzed by the AI until a connection is restored.'
+                              : 'This analysis is for clinical decision support only. Remove all patient identifiers before submitting.',
                             style: TextStyle(
                               fontSize: 12, color: AppColors.warning, height: 1.4,
                             ),
@@ -239,7 +270,7 @@ class _AssessmentInputScreenState extends State<AssessmentInputScreen> {
 
                   // Submit
                   ElevatedButton.icon(
-                    onPressed: _submitting ? null : _submit,
+                    onPressed: _submitting ? null : () => _submit(skipAnalysis: isOffline),
                     icon: _submitting
                         ? const SizedBox(
                             width: 18, height: 18,
@@ -247,10 +278,13 @@ class _AssessmentInputScreenState extends State<AssessmentInputScreen> {
                               strokeWidth: 2, color: Colors.white,
                             ),
                           )
-                        : const Icon(Icons.analytics_rounded, size: 20),
-                    label: Text(_submitting ? 'Analysing...' : 'Analyse note'),
+                        : Icon(isOffline ? Icons.save_rounded : Icons.analytics_rounded, size: 20),
+                    label: Text(_submitting 
+                      ? (isOffline ? 'Saving...' : 'Analysing...') 
+                      : (isOffline ? 'Save Offline Draft' : 'Analyse note')),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: isOffline ? AppColors.info : AppColors.primary,
                     ),
                   ),
                 ],

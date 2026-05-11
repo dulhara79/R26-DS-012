@@ -8,18 +8,121 @@ import '../services/patient_provider.dart';
 import '../widgets/risk_badge.dart';
 import 'assessment_input_screen.dart';
 import 'assessment_detail_screen.dart';
+import '../services/pdf_service.dart';
+import '../services/share_service.dart';
 
 class PatientDetailScreen extends StatelessWidget {
   final Patient patient;
 
   const PatientDetailScreen({super.key, required this.patient});
 
+  void _showDeleteDialog(BuildContext context, Patient p) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove Patient?'),
+        content: Text('Are you sure you want to remove ${p.name}? All assessment history will be permanently deleted.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              context.read<PatientProvider>().removePatient(p.id);
+              Navigator.pop(ctx); // Close dialog
+              Navigator.pop(context); // Go back to list
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('${p.name} removed')),
+              );
+            },
+            child: const Text('Remove', style: TextStyle(color: AppColors.riskHigh)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditDialog(BuildContext context, Patient p) {
+    final nameCtrl = TextEditingController(text: p.name);
+    final ageCtrl = TextEditingController(text: p.age.toString());
+    final wardCtrl = TextEditingController(text: p.ward);
+    String gender = p.gender;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Edit Patient Details'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Name'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: ageCtrl,
+                  decoration: const InputDecoration(labelText: 'Age'),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: gender,
+                  decoration: const InputDecoration(labelText: 'Gender'),
+                  items: ['Female', 'Male', 'Other', 'Prefer not to say']
+                      .map((g) => DropdownMenuItem(value: g, child: Text(g)))
+                      .toList(),
+                  onChanged: (v) => setState(() => gender = v!),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: wardCtrl,
+                  decoration: const InputDecoration(labelText: 'Ward'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final updated = Patient(
+                  id: p.id,
+                  name: nameCtrl.text.trim(),
+                  age: int.tryParse(ageCtrl.text) ?? p.age,
+                  gender: gender,
+                  ward: wardCtrl.text.trim(),
+                  referralDate: p.referralDate,
+                  assessments: p.assessments,
+                  latestRisk: p.latestRisk,
+                  totalVisits: p.totalVisits,
+                  hasAlert: p.hasAlert,
+                );
+                context.read<PatientProvider>().updatePatient(updated);
+                Navigator.pop(ctx);
+              },
+              child: const Text('Save Changes'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final updated = context
-        .watch<PatientProvider>()
-        .patients
-        .firstWhere((p) => p.id == patient.id, orElse: () => patient);
+    final provider = context.watch<PatientProvider>();
+    // Try to find the patient in the updated list to handle edits/removals
+    final updated = provider.patients.firstWhere(
+      (p) => p.id == patient.id, 
+      orElse: () => patient
+    );
 
     return Scaffold(
       backgroundColor: AppColors.surfaceSecond,
@@ -34,7 +137,7 @@ class PatientDetailScreen extends StatelessWidget {
               onPressed: () => Navigator.pop(context),
             ),
             flexibleSpace: FlexibleSpaceBar(
-              titlePadding: const EdgeInsets.fromLTRB(56, 0, 20, 16),
+              titlePadding: const EdgeInsets.fromLTRB(56, 0, 80, 16),
               title: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -49,7 +152,7 @@ class PatientDetailScreen extends StatelessWidget {
                   Text(
                     '${updated.age}y · ${updated.gender} · ${updated.ward}',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       color: Colors.white.withOpacity(0.75),
                     ),
                   ),
@@ -58,16 +161,69 @@ class PatientDetailScreen extends StatelessWidget {
             ),
             actions: [
               IconButton(
-                icon: const Icon(Icons.picture_as_pdf_rounded, color: Colors.white),
+                icon: const Icon(Icons.share_rounded, color: Colors.white),
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Generating clinical report...')),
-                  );
+                  final latest = updated.latestAssessment;
+                  if (latest != null) {
+                    ShareService.shareAssessment(updated, latest);
+                    context.read<PatientProvider>().addNotification(
+                      title: 'Assessment Shared',
+                      body: 'Clinical summary for ${updated.name} was shared.',
+                      type: NotificationType.info,
+                      patientId: updated.id,
+                      patientName: updated.name,
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('No assessments to share.')),
+                    );
+                  }
                 },
               ),
-              Container(
-                margin: const EdgeInsets.only(right: 16, top: 8, bottom: 8),
-                child: RiskBadge(risk: updated.latestRisk, large: true),
+              IconButton(
+                icon: const Icon(Icons.picture_as_pdf_rounded, color: Colors.white),
+                onPressed: () async {
+                  final latest = updated.latestAssessment;
+                  if (latest != null) {
+                    try {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Preparing clinical report...')),
+                      );
+                      await PdfService.generateAndSavePdf(updated, latest);
+                      if (context.mounted) {
+                        context.read<PatientProvider>().addNotification(
+                          title: 'PDF Report Generated',
+                          body: 'A medical-standard PDF was generated for ${updated.name}.',
+                          type: NotificationType.info,
+                          patientId: updated.id,
+                          patientName: updated.name,
+                        );
+                      }
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error generating PDF: $e')),
+                      );
+                    }
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('No assessments found.')),
+                    );
+                  }
+                },
+              ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
+                onSelected: (val) {
+                  if (val == 'edit') {
+                    _showEditDialog(context, updated);
+                  } else if (val == 'delete') {
+                    _showDeleteDialog(context, updated);
+                  }
+                },
+                itemBuilder: (ctx) => [
+                  const PopupMenuItem(value: 'edit', child: Text('Edit Patient')),
+                  const PopupMenuItem(value: 'delete', child: Text('Remove Patient', style: TextStyle(color: AppColors.riskHigh))),
+                ],
               ),
             ],
           ),
