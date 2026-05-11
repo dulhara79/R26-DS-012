@@ -1,15 +1,18 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../services/notification_service.dart';
 
 class PatientProvider extends ChangeNotifier {
   List<Patient> _patients = [];
   List<SupportNote> _supportNotes = [];
+  List<AppNotification> _notifications = [];
   bool _isLoading = false;
   String? _error;
 
   List<Patient> get patients     => List.unmodifiable(_patients);
   List<SupportNote> get supportNotes => List.unmodifiable(_supportNotes);
+  List<AppNotification> get notifications => List.unmodifiable(_notifications);
   bool get isLoading             => _isLoading;
   String? get error              => _error;
 
@@ -21,6 +24,7 @@ class PatientProvider extends ChangeNotifier {
   // ─── Initialise with mock patients for demo ──────────────────────────────
   PatientProvider() {
     _loadMockPatients();
+    NotificationService().init();
   }
 
   void _loadMockPatients() {
@@ -197,6 +201,28 @@ class PatientProvider extends ChangeNotifier {
         _patients[idx] = updated;
       }
 
+      // Trigger notification
+      final notification = AppNotification(
+        id: 'N${DateTime.now().millisecondsSinceEpoch}',
+        title: result.riskLevel == RiskLevel.high || result.riskLevel == RiskLevel.veryHigh 
+            ? '⚠️ High Risk Detected' 
+            : 'New Assessment',
+        body: 'Patient ${_patients[idx].name} has a ${result.riskLevel.label}.',
+        timestamp: DateTime.now(),
+        type: result.riskLevel == RiskLevel.high || result.riskLevel == RiskLevel.veryHigh 
+            ? NotificationType.riskAlert 
+            : NotificationType.info,
+        riskLevel: result.riskLevel,
+        patientId: patientId,
+        patientName: _patients[idx].name,
+      );
+      _notifications.add(notification);
+      
+      NotificationService().showRiskNotification(
+        patientName: _patients[idx].name,
+        riskLevel: result.riskLevel,
+      );
+
       _isLoading = false;
       notifyListeners();
       return result;
@@ -206,6 +232,20 @@ class PatientProvider extends ChangeNotifier {
       notifyListeners();
       rethrow;
     }
+  }
+
+  // ─── Notification management ──────────────────────────────────────────────
+  void markNotificationAsRead(String id) {
+    final idx = _notifications.indexWhere((n) => n.id == id);
+    if (idx >= 0) {
+      _notifications[idx].isRead = true;
+      notifyListeners();
+    }
+  }
+
+  void clearNotifications() {
+    _notifications.clear();
+    notifyListeners();
   }
 
   // ─── Support set management ───────────────────────────────────────────────

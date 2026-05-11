@@ -211,7 +211,7 @@ class _AssessmentInputScreenState extends State<AssessmentInputScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppColors.warningBg,
+                      color: AppColors.warning.withOpacity(0.05),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                           color: AppColors.warning.withOpacity(0.3)),
