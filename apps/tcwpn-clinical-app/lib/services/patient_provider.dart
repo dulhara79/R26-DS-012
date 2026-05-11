@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
@@ -9,22 +12,91 @@ class PatientProvider extends ChangeNotifier {
   List<AppNotification> _notifications = [];
   bool _isLoading = false;
   String? _error;
+  bool _isOffline = false;
 
   List<Patient> get patients     => List.unmodifiable(_patients);
   List<SupportNote> get supportNotes => List.unmodifiable(_supportNotes);
   List<AppNotification> get notifications => List.unmodifiable(_notifications);
   bool get isLoading             => _isLoading;
   String? get error              => _error;
-
+  bool get isOffline             => _isOffline;
+  
   List<SupportNote> get anxietySupport =>
       _supportNotes.where((n) => n.label == 'anxiety').toList();
   List<SupportNote> get controlSupport =>
       _supportNotes.where((n) => n.label == 'control').toList();
 
-  // ─── Initialise with mock patients for demo ──────────────────────────────
+  static const String _keyPatients = 'patients_v1';
+  static const String _keySupportNotes = 'support_notes_v1';
+  static const String _keyNotifications = 'notifications_v1';
+
   PatientProvider() {
-    _loadMockPatients();
-    NotificationService().init();
+    _init();
+    _checkConnectivity();
+    Connectivity().onConnectivityChanged.listen((results) {
+      // Check if any of the results indicate a connection
+      final hasConnection = results.any((result) => result != ConnectivityResult.none);
+      _isOffline = !hasConnection;
+      notifyListeners();
+    });
+  }
+
+  Future<void> _checkConnectivity() async {
+    final results = await Connectivity().checkConnectivity();
+    final hasConnection = results.any((result) => result != ConnectivityResult.none);
+    _isOffline = !hasConnection;
+    notifyListeners();
+  }
+
+  Future<void> _init() async {
+    _isLoading = true;
+    notifyListeners();
+    
+    await _loadFromDisk();
+    
+    if (_patients.isEmpty) {
+      _loadMockPatients();
+    }
+    
+    await NotificationService().init();
+    
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  // ─── Persistence ──────────────────────────────────────────────────────────
+  
+  Future<void> _saveToDisk() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyPatients, jsonEncode(_patients.map((p) => p.toJson()).toList()));
+    await prefs.setString(_keySupportNotes, jsonEncode(_supportNotes.map((n) => n.toJson()).toList()));
+    await prefs.setString(_keyNotifications, jsonEncode(_notifications.map((n) => n.toJson()).toList()));
+  }
+
+  Future<void> _loadFromDisk() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      final pStr = prefs.getString(_keyPatients);
+      if (pStr != null) {
+        final List decoded = jsonDecode(pStr);
+        _patients = decoded.map((p) => Patient.fromJson(p)).toList();
+      }
+
+      final snStr = prefs.getString(_keySupportNotes);
+      if (snStr != null) {
+        final List decoded = jsonDecode(snStr);
+        _supportNotes = decoded.map((n) => SupportNote.fromJson(n)).toList();
+      }
+
+      final nStr = prefs.getString(_keyNotifications);
+      if (nStr != null) {
+        final List decoded = jsonDecode(nStr);
+        _notifications = decoded.map((n) => AppNotification.fromJson(n)).toList();
+      }
+    } catch (e) {
+      debugPrint('Error loading from disk: $e');
+    }
   }
 
   void _loadMockPatients() {
@@ -54,197 +126,190 @@ class PatientProvider extends ChangeNotifier {
               temporalContext: 'Visit 1 of 3',
             ),
           ),
-          Assessment(
-            id: 'A002', patientId: 'P001',
-            timestamp: DateTime.now().subtract(const Duration(days: 7)),
-            noteText: 'Worsening symptoms noted...',
-            noteType: 'Psychiatry note',
-            clinicianId: 'DR001',
-            result: const PredictionResult(
-              prediction: 'ANXIETY', riskLevel: RiskLevel.high,
-              riskScore: 0.84, confidence: 0.84,
-              keyPhrases: ['worsening anxiety', 'GAD-7 score 16', 'panic attacks'],
-              supportK: 5, threshold: 0.4036, latencyMs: 38,
-              temporalContext: 'Visit 2 of 3',
-            ),
-          ),
-        ],
-      ),
-      Patient(
-        id: 'P002',
-        name: 'Kasun Silva',
-        age: 31,
-        gender: 'Male',
-        ward: 'Psychiatry OPD',
-        referralDate: '2025-03-15',
-        totalVisits: 5,
-        latestRisk: RiskLevel.low,
-        assessments: [
-          Assessment(
-            id: 'A003', patientId: 'P002',
-            timestamp: DateTime.now().subtract(const Duration(days: 3)),
-            noteText: 'Patient reports significant improvement...',
-            noteType: 'Psychiatry note',
-            clinicianId: 'DR001',
-            result: const PredictionResult(
-              prediction: 'NO ANXIETY', riskLevel: RiskLevel.low,
-              riskScore: 0.18, confidence: 0.82,
-              keyPhrases: ['improvement', 'medication compliance'],
-              supportK: 5, threshold: 0.4036, latencyMs: 35,
-              temporalContext: 'Visit 5 of 5 · most recent',
-            ),
-          ),
-        ],
-      ),
-      Patient(
-        id: 'P003',
-        name: 'Nimasha Fernando',
-        age: 22,
-        gender: 'Female',
-        ward: 'Psychiatry OPD',
-        referralDate: '2025-04-20',
-        totalVisits: 1,
-        latestRisk: RiskLevel.veryHigh,
-        hasAlert: true,
-        assessments: [
-          Assessment(
-            id: 'A004', patientId: 'P003',
-            timestamp: DateTime.now().subtract(const Duration(hours: 6)),
-            noteText: 'Severe panic attacks, unable to attend university...',
-            noteType: 'Psychiatry note',
-            clinicianId: 'DR001',
-            result: const PredictionResult(
-              prediction: 'ANXIETY', riskLevel: RiskLevel.veryHigh,
-              riskScore: 0.94, confidence: 0.94,
-              keyPhrases: ['severe panic attacks', 'agoraphobia', 'GAD-7 score 19', 'unable to function'],
-              supportK: 5, threshold: 0.4036, latencyMs: 41,
-              temporalContext: 'Visit 1 of 1 · first assessment',
-            ),
-          ),
-        ],
-      ),
-      Patient(
-        id: 'P004',
-        name: 'Tharindu Rajapakse',
-        age: 27,
-        gender: 'Male',
-        ward: 'Psychiatry OPD',
-        referralDate: '2025-02-10',
-        totalVisits: 8,
-        latestRisk: RiskLevel.moderate,
-        assessments: [
-          Assessment(
-            id: 'A005', patientId: 'P004',
-            timestamp: DateTime.now().subtract(const Duration(days: 10)),
-            noteText: 'Stable on sertraline, some residual anxiety...',
-            noteType: 'Discharge summary',
-            clinicianId: 'DR001',
-            result: const PredictionResult(
-              prediction: 'ANXIETY', riskLevel: RiskLevel.moderate,
-              riskScore: 0.62, confidence: 0.62,
-              keyPhrases: ['residual anxiety', 'sertraline 100mg', 'GAD-7 score 8'],
-              supportK: 5, threshold: 0.4036, latencyMs: 44,
-              temporalContext: 'Visit 8 of 8 · most recent',
-            ),
-          ),
         ],
       ),
     ];
+    _saveToDisk();
+  }
+
+  // ─── Patient Management ───────────────────────────────────────────────────
+  
+  Future<void> addPatient({
+    required String id,
+    required String name,
+    required int age,
+    required String gender,
+    required String ward,
+  }) async {
+    final patient = Patient(
+      id: id,
+      name: name,
+      age: age,
+      gender: gender,
+      ward: ward,
+      referralDate: DateTime.now().toIso8601String().split('T')[0],
+      assessments: [],
+      latestRisk: RiskLevel.low,
+      totalVisits: 0,
+    );
+    
+    _patients.add(patient);
+    addNotification(
+      title: 'New Patient Added',
+      body: 'Patient $name ($id) has been registered successfully.',
+      type: NotificationType.info,
+      patientId: id,
+      patientName: name,
+    );
+    await _saveToDisk();
     notifyListeners();
   }
 
-  // ─── Run new assessment ───────────────────────────────────────────────────
-  Future<PredictionResult> runAssessment({
+  Future<void> updatePatient(Patient updatedPatient) async {
+    final idx = _patients.indexWhere((p) => p.id == updatedPatient.id);
+    if (idx >= 0) {
+      _patients[idx] = updatedPatient;
+      addNotification(
+        title: 'Patient Updated',
+        body: 'Details for ${updatedPatient.name} have been updated.',
+        type: NotificationType.info,
+        patientId: updatedPatient.id,
+        patientName: updatedPatient.name,
+      );
+      await _saveToDisk();
+      notifyListeners();
+    }
+  }
+
+  Future<void> removePatient(String id) async {
+    final idx = _patients.indexWhere((p) => p.id == id);
+    if (idx >= 0) {
+      final name = _patients[idx].name;
+      _patients.removeAt(idx);
+      addNotification(
+        title: 'Patient Removed',
+        body: 'Patient $name ($id) has been removed from the system.',
+        type: NotificationType.system,
+      );
+      await _saveToDisk();
+      notifyListeners();
+    }
+  }
+
+  // ─── Assessment Management ────────────────────────────────────────────────
+  
+  Future<PredictionResult?> saveAssessment({
     required String patientId,
     required String noteText,
     required String noteType,
+    bool skipAnalysis = false,
     String clinicianId = 'DR001',
   }) async {
     _isLoading = true;
     _error     = null;
     notifyListeners();
 
-    try {
-      final result = await ApiService.predict(
-        noteText:       noteText,
-        noteType:       noteType,
-        anxietySupport: anxietySupport.map((n) => n.text).toList(),
-        controlSupport: controlSupport.map((n) => n.text).toList(),
-      );
-
-      final assessment = Assessment(
-        id:          'A${DateTime.now().millisecondsSinceEpoch}',
-        patientId:   patientId,
-        timestamp:   DateTime.now(),
-        noteText:    noteText,
-        noteType:    noteType,
-        clinicianId: clinicianId,
-        result:      result,
-      );
-
-      final idx = _patients.indexWhere((p) => p.id == patientId);
-      if (idx >= 0) {
-        final p = _patients[idx];
-        final updated = Patient(
-          id:            p.id,
-          name:          p.name,
-          age:           p.age,
-          gender:        p.gender,
-          ward:          p.ward,
-          referralDate:  p.referralDate,
-          assessments:   [...p.assessments, assessment],
-          latestRisk:    result.riskLevel,
-          totalVisits:   p.totalVisits + 1,
-          hasAlert:      result.riskLevel == RiskLevel.high ||
-                         result.riskLevel == RiskLevel.veryHigh,
+    PredictionResult? result;
+    
+    if (!skipAnalysis && !_isOffline) {
+      try {
+        result = await ApiService.predict(
+          noteText:       noteText,
+          noteType:       noteType,
+          anxietySupport: _supportNotes.where((n) => n.label == 'anxiety').map((n) => n.text).toList(),
+          controlSupport: _supportNotes.where((n) => n.label == 'control').map((n) => n.text).toList(),
         );
-        _patients[idx] = updated;
+      } catch (e) {
+        _error = e.toString();
+        // If analysis fails but it's not a connectivity error, we might want to stop.
+        // But if it IS connectivity, we can still save as draft.
+        if (e is! ApiException || e.statusCode != 0) {
+          _isLoading = false;
+          notifyListeners();
+          rethrow;
+        }
       }
-
-      // Trigger notification
-      final notification = AppNotification(
-        id: 'N${DateTime.now().millisecondsSinceEpoch}',
-        title: result.riskLevel == RiskLevel.high || result.riskLevel == RiskLevel.veryHigh 
-            ? '⚠️ High Risk Detected' 
-            : 'New Assessment',
-        body: 'Patient ${_patients[idx].name} has a ${result.riskLevel.label}.',
-        timestamp: DateTime.now(),
-        type: result.riskLevel == RiskLevel.high || result.riskLevel == RiskLevel.veryHigh 
-            ? NotificationType.riskAlert 
-            : NotificationType.info,
-        riskLevel: result.riskLevel,
-        patientId: patientId,
-        patientName: _patients[idx].name,
-      );
-      _notifications.add(notification);
-      
-      NotificationService().showRiskNotification(
-        patientName: _patients[idx].name,
-        riskLevel: result.riskLevel,
-      );
-
-      _isLoading = false;
-      notifyListeners();
-      return result;
-    } catch (e) {
-      _isLoading = false;
-      _error     = e.toString();
-      notifyListeners();
-      rethrow;
     }
+
+    final assessment = Assessment(
+      id:          'A${DateTime.now().millisecondsSinceEpoch}',
+      patientId:   patientId,
+      timestamp:   DateTime.now(),
+      noteText:    noteText,
+      noteType:    noteType,
+      clinicianId: clinicianId,
+      result:      result,
+    );
+
+    final idx = _patients.indexWhere((p) => p.id == patientId);
+    if (idx >= 0) {
+      final p = _patients[idx];
+      final updated = Patient(
+        id:            p.id,
+        name:          p.name,
+        age:           p.age,
+        gender:        p.gender,
+        ward:          p.ward,
+        referralDate:  p.referralDate,
+        assessments:   [...p.assessments, assessment],
+        latestRisk:    result?.riskLevel ?? p.latestRisk,
+        totalVisits:   p.totalVisits + 1,
+        hasAlert:      result != null && (result.riskLevel == RiskLevel.high || result.riskLevel == RiskLevel.veryHigh),
+      );
+      _patients[idx] = updated;
+
+      addNotification(
+        title: result == null ? 'Assessment Saved (Offline)' : (result.riskLevel == RiskLevel.high || result.riskLevel == RiskLevel.veryHigh ? '⚠️ High Risk Detected' : 'New Assessment'),
+        body: result == null ? 'Note for ${p.name} saved without analysis.' : 'Patient ${p.name} has a ${result.riskLevel.label}.',
+        type: result != null && (result.riskLevel == RiskLevel.high || result.riskLevel == RiskLevel.veryHigh) ? NotificationType.riskAlert : NotificationType.info,
+        riskLevel: result?.riskLevel,
+        patientId: patientId,
+        patientName: p.name,
+      );
+    }
+
+    await _saveToDisk();
+    _isLoading = false;
+    notifyListeners();
+    return result;
   }
 
   // ─── Notification management ──────────────────────────────────────────────
+  void addNotification({
+    required String title,
+    required String body,
+    NotificationType type = NotificationType.info,
+    RiskLevel? riskLevel,
+    String? patientId,
+    String? patientName,
+  }) {
+    final notification = AppNotification(
+      id: 'N${DateTime.now().millisecondsSinceEpoch}',
+      title: title,
+      body: body,
+      timestamp: DateTime.now(),
+      type: type,
+      riskLevel: riskLevel,
+      patientId: patientId,
+      patientName: patientName,
+    );
+    _notifications.insert(0, notification);
+    _saveToDisk();
+    notifyListeners();
+  }
+
   void markNotificationAsRead(String id) {
     final idx = _notifications.indexWhere((n) => n.id == id);
     if (idx >= 0) {
       _notifications[idx].isRead = true;
+      _saveToDisk();
       notifyListeners();
     }
   }
 
   void clearNotifications() {
     _notifications.clear();
+    _saveToDisk();
     notifyListeners();
   }
 
@@ -258,16 +323,19 @@ class PatientProvider extends ChangeNotifier {
       weight:        1.0,
       recencyWeight: 1.0,
     ));
+    _saveToDisk();
     notifyListeners();
   }
 
   void removeSupportNote(String id) {
     _supportNotes.removeWhere((n) => n.id == id);
+    _saveToDisk();
     notifyListeners();
   }
 
   void clearSupportNotes() {
     _supportNotes.clear();
+    _saveToDisk();
     notifyListeners();
   }
 
@@ -275,13 +343,14 @@ class PatientProvider extends ChangeNotifier {
   List<Patient> get alertPatients =>
       _patients.where((p) => p.hasAlert).toList();
 
-  List<Patient> searchPatients(String query) {
-    if (query.isEmpty) return _patients;
-    final q = query.toLowerCase();
-    return _patients
-        .where((p) =>
-            p.name.toLowerCase().contains(q) ||
-            p.id.toLowerCase().contains(q))
-        .toList();
+  List<Patient> searchPatients(String query, {RiskLevel? riskFilter, String? wardFilter}) {
+    List<Patient> results = _patients;
+    if (query.isNotEmpty) {
+      final q = query.toLowerCase();
+      results = results.where((p) => p.name.toLowerCase().contains(q) || p.id.toLowerCase().contains(q)).toList();
+    }
+    if (riskFilter != null) results = results.where((p) => p.latestRisk == riskFilter).toList();
+    if (wardFilter != null && wardFilter != 'All') results = results.where((p) => p.ward == wardFilter).toList();
+    return results;
   }
 }

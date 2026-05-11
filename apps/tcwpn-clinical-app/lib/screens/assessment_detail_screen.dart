@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
+import '../services/patient_provider.dart';
 import '../widgets/risk_badge.dart';
+import '../services/share_service.dart';
+import '../services/pdf_service.dart';
 
 class AssessmentDetailScreen extends StatelessWidget {
   final Assessment assessment;
@@ -25,14 +29,39 @@ class AssessmentDetailScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.share_rounded),
-            onPressed: () {},
+            onPressed: () {
+              ShareService.shareAssessment(patient, assessment);
+              context.read<PatientProvider>().addNotification(
+                title: 'Assessment Shared',
+                body: 'Clinical summary for ${patient.name} was shared.',
+                type: NotificationType.info,
+                patientId: patient.id,
+                patientName: patient.name,
+              );
+            },
           ),
           IconButton(
             icon: const Icon(Icons.picture_as_pdf_rounded),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Generating PDF report...')),
-              );
+            onPressed: () async {
+              try {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Preparing PDF report...')),
+                );
+                await PdfService.generateAndSavePdf(patient, assessment);
+                if (context.mounted) {
+                  context.read<PatientProvider>().addNotification(
+                    title: 'PDF Report Generated',
+                    body: 'A medical-standard PDF was generated for ${patient.name}.',
+                    type: NotificationType.info,
+                    patientId: patient.id,
+                    patientName: patient.name,
+                  );
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error generating PDF: $e')),
+                );
+              }
             },
           ),
         ],

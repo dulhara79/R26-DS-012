@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
+import '../services/patient_provider.dart';
 import '../widgets/risk_badge.dart';
+import '../services/share_service.dart';
+import '../services/pdf_service.dart';
 
 class AssessmentResultScreen extends StatelessWidget {
   final Patient patient;
@@ -37,12 +41,22 @@ class AssessmentResultScreen extends StatelessWidget {
 
   IconData get _riskIcon {
     switch (result.riskLevel) {
-      case RiskLevel.veryHigh: return Icons.warning_rounded;
+      case RiskLevel.veryHigh: return Icons.report_problem_rounded;
       case RiskLevel.high:     return Icons.warning_amber_rounded;
-      case RiskLevel.moderate: return Icons.info_rounded;
-      case RiskLevel.low:      return Icons.check_circle_rounded;
+      case RiskLevel.moderate: return Icons.info_outline_rounded;
+      case RiskLevel.low:      return Icons.check_circle_outline_rounded;
     }
   }
+
+  Assessment get _tempAssessment => Assessment(
+    id: 'TEMP_${DateTime.now().millisecondsSinceEpoch}',
+    patientId: patient.id,
+    timestamp: DateTime.now(),
+    noteText: noteText,
+    noteType: noteType,
+    clinicianId: 'DR001',
+    result: result,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -61,9 +75,43 @@ class AssessmentResultScreen extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.share_outlined),
-            onPressed: () {},
+            icon: const Icon(Icons.share_rounded),
+            onPressed: () {
+              ShareService.shareAssessment(patient, _tempAssessment);
+              context.read<PatientProvider>().addNotification(
+                title: 'Assessment Shared',
+                body: 'Clinical summary for ${patient.name} was shared.',
+                type: NotificationType.info,
+                patientId: patient.id,
+                patientName: patient.name,
+              );
+            },
             tooltip: 'Share',
+          ),
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf_rounded),
+            onPressed: () async {
+              try {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Preparing PDF report...')),
+                );
+                await PdfService.generateAndSavePdf(patient, _tempAssessment);
+                if (context.mounted) {
+                  context.read<PatientProvider>().addNotification(
+                    title: 'PDF Report Generated',
+                    body: 'A medical-standard PDF was generated for ${patient.name}.',
+                    type: NotificationType.info,
+                    patientId: patient.id,
+                    patientName: patient.name,
+                  );
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error generating PDF: $e')),
+                );
+              }
+            },
+            tooltip: 'Download PDF',
           ),
           const SizedBox(width: 4),
         ],
