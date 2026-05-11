@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Physiological Risk Assessment Dashboard - Self-supervised anomaly detection and stress onset forecasting using LSTM Autoencoder on wearable biosensor data.">
-    <title>AthletiSense | Physiological Risk Dashboard</title>
+    <title>Aura — Bio Monitor | Physiological Risk Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -35,8 +35,8 @@
                         </defs>
                     </svg>
                 </div>
-                <span class="logo-text">AthletiSense</span>
-                <span class="logo-badge">R26-DS-012</span>
+                <span class="logo-text">Aura</span>
+                <span class="logo-badge">Bio Monitor</span>
             </div>
         </div>
         <div class="nav-center">
@@ -175,6 +175,71 @@
             </div>
         </section>
 
+        <!-- Patient Live Vitals Monitor Section -->
+        <section class="vitals-monitor" id="vitals-monitor">
+            <div class="vitals-header">
+                <div class="vitals-title-group">
+                    <div class="live-indicator">
+                        <span class="pulse-ring"></span>
+                        <span class="pulse-dot"></span>
+                        LIVE
+                    </div>
+                    <h3>Patient Vitals Monitor</h3>
+                </div>
+                <div class="vitals-timestamp" id="vitals-time">Awaiting Data...</div>
+            </div>
+            <div class="vitals-grid">
+                <div class="vital-monitor-card" id="mon-hr">
+                    <div class="vital-info">
+                        <span class="vital-label">Heart Rate</span>
+                        <div class="vital-value-group">
+                            <span class="vital-value" id="mon-hr-val">--</span>
+                            <span class="vital-unit">BPM</span>
+                        </div>
+                    </div>
+                    <div class="vital-icon-box hr">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+                    </div>
+                </div>
+                <div class="vital-monitor-card" id="mon-br">
+                    <div class="vital-info">
+                        <span class="vital-label">Breathing Rate</span>
+                        <div class="vital-value-group">
+                            <span class="vital-value" id="mon-br-val">--</span>
+                            <span class="vital-unit">RPM</span>
+                        </div>
+                    </div>
+                    <div class="vital-icon-box br">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22c-4-3-8-7-8-12a8 8 0 0116 0c0 5-4 9-8 12z"/><circle cx="12" cy="10" r="3"/></svg>
+                    </div>
+                </div>
+                <div class="vital-monitor-card" id="mon-temp">
+                    <div class="vital-info">
+                        <span class="vital-label">Body Temperature</span>
+                        <div class="vital-value-group">
+                            <span class="vital-value" id="mon-temp-val">--</span>
+                            <span class="vital-unit">°C</span>
+                        </div>
+                    </div>
+                    <div class="vital-icon-box temp">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 14.76V3.5a2.5 2.5 0 00-5 0v11.26a4.5 4.5 0 105 0z"/></svg>
+                    </div>
+                </div>
+                <div class="vital-monitor-card" id="mon-motion">
+                    <div class="vital-info">
+                        <span class="vital-label">Patient Motion</span>
+                        <div class="vital-value-group">
+                            <span class="vital-value" id="mon-motion-val">--</span>
+                            <span class="vital-unit">G-Force</span>
+                        </div>
+                    </div>
+                    <div class="vital-icon-box motion">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- Charts Row -->
         <section class="charts-row">
             <div class="chart-card wide" id="chart-timeline">
@@ -234,33 +299,7 @@
             </div>
         </section>
 
-        <!-- Model Info Footer -->
-        <section class="model-info-bar" id="model-info">
-            <div class="model-stat">
-                <span class="stat-label">Architecture</span>
-                <span class="stat-value">LSTM-AE (64h, 1L)</span>
-            </div>
-            <div class="model-stat">
-                <span class="stat-label">AUROC</span>
-                <span class="stat-value">0.97</span>
-            </div>
-            <div class="model-stat">
-                <span class="stat-label">False Alarm Rate</span>
-                <span class="stat-value">0%</span>
-            </div>
-            <div class="model-stat">
-                <span class="stat-label">Forecasting AUROC</span>
-                <span class="stat-value">0.88</span>
-            </div>
-            <div class="model-stat">
-                <span class="stat-label">EWT</span>
-                <span class="stat-value">11.83 min</span>
-            </div>
-            <div class="model-stat">
-                <span class="stat-label">Subjects Validated</span>
-                <span class="stat-value">39 LOSO</span>
-            </div>
-        </section>
+
 
     </main>
 
