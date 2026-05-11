@@ -7,6 +7,8 @@ import '../widgets/risk_badge.dart';
 import 'patient_detail_screen.dart';
 import 'patient_list_screen.dart';
 import 'support_set_screen.dart';
+import 'notification_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -31,6 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: IndexedStack(index: _tab, children: _screens),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
+          color: AppColors.surface,
           border: Border(top: BorderSide(color: AppColors.border, width: 0.8)),
         ),
         child: BottomNavigationBar(
@@ -111,7 +114,7 @@ class _DashboardTab extends StatelessWidget {
                   children: [
                     const Icon(Icons.notifications_outlined,
                         color: Colors.white, size: 24),
-                    if (alerts.isNotEmpty)
+                    if (provider.notifications.any((n) => !n.isRead))
                       Positioned(
                         right: 0, top: 0,
                         child: Container(
@@ -124,7 +127,10 @@ class _DashboardTab extends StatelessWidget {
                       ),
                   ],
                 ),
-                onPressed: () {},
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NotificationScreen()),
+                ),
               ),
               const SizedBox(width: 4),
             ],
@@ -155,24 +161,12 @@ class _DashboardTab extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    _MetricCard(
-                      label: 'Support notes',
-                      value: '${provider.supportNotes.length}',
-                      icon: Icons.dataset_rounded,
-                      color: AppColors.info,
-                    ),
-                    const SizedBox(width: 10),
-                    _MetricCard(
-                      label: 'Model AUROC',
-                      value: '0.963',
-                      icon: Icons.analytics_rounded,
-                      color: AppColors.primaryLight,
-                    ),
-                  ],
-                ),
+                const SizedBox(height: 20),
+
+                // Clinician Insights
+                _SectionHeader('Clinician Insights'),
+                const SizedBox(height: 12),
+                _buildInsightsCard(),
                 const SizedBox(height: 20),
 
                 // Alerts section
@@ -227,22 +221,7 @@ class _DashboardTab extends StatelessWidget {
                 ],
 
                 // All patients
-                Row(
-                  children: [
-                    Container(
-                      width: 4, height: 18,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      'All patients',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                  ],
-                ),
+                _SectionHeader('All patients'),
                 const SizedBox(height: 12),
                 ...provider.patients.map((p) => Padding(
                   padding: const EdgeInsets.only(bottom: 10),
@@ -291,6 +270,97 @@ class _DashboardTab extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildInsightsCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Average Risk Score', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  SizedBox(height: 4),
+                  Text('0.342', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.trending_down_rounded, color: Colors.white, size: 16),
+                    SizedBox(width: 4),
+                    Text('12%', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          const Divider(color: Colors.white24),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildInsightMetric('Model Confidence', '94%'),
+              _buildInsightMetric('Data Points', '4.6k'),
+              _buildInsightMetric('Active Ward', 'Psych 04'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInsightMetric(String label, String value) {
+    return Column(
+      children: [
+        Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+        const SizedBox(height: 4),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+      ],
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  const _SectionHeader(this.title);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 4, height: 18,
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(title, style: Theme.of(context).textTheme.titleLarge),
+      ],
     );
   }
 }

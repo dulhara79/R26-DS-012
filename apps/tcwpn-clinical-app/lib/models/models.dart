@@ -152,3 +152,30 @@ class SupportNote {
     required this.recencyWeight,
   });
 }
+
+// ─── App Notification ────────────────────────────────────────────────────────
+enum NotificationType { riskAlert, info, system }
+
+class AppNotification {
+  final String id;
+  final String title;
+  final String body;
+  final DateTime timestamp;
+  final NotificationType type;
+  final RiskLevel? riskLevel;
+  final String? patientId;
+  final String? patientName;
+  bool isRead;
+
+  AppNotification({
+    required this.id,
+    required this.title,
+    required this.body,
+    required this.timestamp,
+    this.type = NotificationType.info,
+    this.riskLevel,
+    this.patientId,
+    this.patientName,
+    this.isRead = false,
+  });
+}

@@ -63,6 +63,23 @@ class _PatientListScreenState extends State<PatientListScreen> {
               ),
             ),
           ),
+          
+          // Filters
+          Container(
+            height: 40,
+            color: AppColors.surface,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                _FilterChip(label: 'All', isSelected: true, onTap: () {}),
+                _FilterChip(label: 'High Risk', isSelected: false, onTap: () {}, color: AppColors.riskHigh),
+                _FilterChip(label: 'Moderate', isSelected: false, onTap: () {}, color: AppColors.riskModerate),
+                _FilterChip(label: 'Low Risk', isSelected: false, onTap: () {}, color: AppColors.riskLow),
+                _FilterChip(label: 'Ward 04', isSelected: false, onTap: () {}),
+              ],
+            ),
+          ),
           const Divider(height: 0),
 
           // Results count
@@ -113,6 +130,45 @@ class _PatientListScreenState extends State<PatientListScreen> {
                   ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final Color? color;
+
+  const _FilterChip({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ActionChip(
+        label: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected ? Colors.white : (color ?? AppColors.textSecondary),
+          ),
+        ),
+        backgroundColor: isSelected ? (color ?? AppColors.primary) : Colors.transparent,
+        side: BorderSide(
+          color: isSelected ? Colors.transparent : AppColors.border,
+          width: 1,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        onPressed: onTap,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
       ),
     );
   }

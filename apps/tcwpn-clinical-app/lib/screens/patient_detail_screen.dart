@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/models.dart';
@@ -6,6 +7,7 @@ import '../theme/app_theme.dart';
 import '../services/patient_provider.dart';
 import '../widgets/risk_badge.dart';
 import 'assessment_input_screen.dart';
+import 'assessment_detail_screen.dart';
 
 class PatientDetailScreen extends StatelessWidget {
   final Patient patient;
@@ -55,6 +57,14 @@ class PatientDetailScreen extends StatelessWidget {
               ),
             ),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.picture_as_pdf_rounded, color: Colors.white),
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Generating clinical report...')),
+                  );
+                },
+              ),
               Container(
                 margin: const EdgeInsets.only(right: 16, top: 8, bottom: 8),
                 child: RiskBadge(risk: updated.latestRisk, large: true),
@@ -101,8 +111,11 @@ class PatientDetailScreen extends StatelessWidget {
                 _SectionHeader(
                     'Assessment history (${updated.assessments.length})'),
                 const SizedBox(height: 10),
-                ...updated.assessments.reversed.map((a) =>
-                    _AssessmentHistoryItem(assessment: a)),
+                ...updated.assessments.reversed.toList().asMap().entries.map((e) =>
+                    _AssessmentHistoryItem(assessment: e.value)
+                    .animate()
+                    .fadeIn(delay: (e.key * 100).ms)
+                    .slideY(begin: 0.1)),
                 const SizedBox(height: 80),
               ]),
             ),
@@ -368,49 +381,61 @@ class _AssessmentHistoryItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = assessment.result;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border, width: 0.8),
+    return InkWell(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AssessmentDetailScreen(
+            assessment: assessment,
+            patient: context.read<PatientProvider>().patients.firstWhere((p) => p.id == assessment.patientId),
+          ),
+        ),
       ),
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        children: [
-          Container(
-            width: 40, height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.primarySurface,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              r != null ? r.riskScore.toStringAsFixed(2) : '—',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primary,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border, width: 0.8),
+        ),
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.primarySurface,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                r != null ? r.riskScore.toStringAsFixed(2) : '—',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(assessment.noteType,
-                    style: Theme.of(context).textTheme.titleSmall),
-                const SizedBox(height: 2),
-                Text(
-                  _formatDateTime(assessment.timestamp),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(assessment.noteType,
+                      style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 2),
+                  Text(
+                    _formatDateTime(assessment.timestamp),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
             ),
-          ),
-          if (r != null) RiskBadge(risk: r.riskLevel),
-        ],
+            if (r != null) RiskBadge(risk: r.riskLevel),
+          ],
+        ),
       ),
     );
   }
