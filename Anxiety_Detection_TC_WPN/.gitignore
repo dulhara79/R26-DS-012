@@ -74,3 +74,4 @@ logs/
 *.pkl
 
 what_next.txt
+/mimic_models
