@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'background_service_helper.dart';
 import 'theme/app_theme.dart';
-import 'main.dart'; 
 
 // ─────────────────────────────────────────────────────────
 // EMA Rating Bottom Sheet (called 3x daily)
@@ -31,7 +30,7 @@ class _EmaRatingSheetState extends State<EmaRatingSheet> {
   ];
 
   static const _emojis = ['😌', '😐', '😟', '😰', '😱'];
-  static const _labels = ['Very Low', 'Low', 'Moderate', 'High', 'Very High'];
+
   
   static const _contexts = [
     'Studying / Working',

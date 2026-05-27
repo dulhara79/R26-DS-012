@@ -140,12 +140,12 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.97),
+                    color: Colors.white.withValues(alpha: 0.97),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: Colors.white, width: 1.5),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
+                        color: Colors.black.withValues(alpha: 0.06),
                         blurRadius: 18,
                         offset: const Offset(0, 6),
                       ),
@@ -342,7 +342,7 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppTheme.kPrimaryDeep.withOpacity(0.1),
+              color: AppTheme.kPrimaryDeep.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(11),
             ),
             child: const Icon(Icons.gavel_rounded,
@@ -364,7 +364,7 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.1),
+              color: Colors.green.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.green.shade300),
             ),
@@ -500,15 +500,15 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
           // Ticked + locked → green tint. Ticked + interactive → purple tint.
           color: value
               ? (locked
-                  ? Colors.green.withOpacity(0.06)
-                  : AppTheme.kPrimaryDeep.withOpacity(0.06))
+                  ? Colors.green.withValues(alpha: 0.06)
+                  : AppTheme.kPrimaryDeep.withValues(alpha: 0.06))
               : Colors.grey.shade50,
           borderRadius: BorderRadius.circular(11),
           border: Border.all(
             color: value
                 ? (locked
                     ? Colors.green.shade400
-                    : AppTheme.kPrimaryDeep.withOpacity(0.45))
+                    : AppTheme.kPrimaryDeep.withValues(alpha: 0.45))
                 : Colors.grey.shade300,
             width: value ? 1.5 : 1.0,
           ),
@@ -713,10 +713,10 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
     return Container(
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
-        color: AppTheme.kPrimaryDeep.withOpacity(0.05),
+        color: AppTheme.kPrimaryDeep.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
         border:
-            Border.all(color: AppTheme.kPrimaryDeep.withOpacity(0.18)),
+            Border.all(color: AppTheme.kPrimaryDeep.withValues(alpha: 0.18)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -779,7 +779,7 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
         children: [
           Container(
             decoration: BoxDecoration(
-              color: AppTheme.kPrimaryDeep.withOpacity(0.08),
+              color: AppTheme.kPrimaryDeep.withValues(alpha: 0.08),
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(10)),
             ),
@@ -837,7 +837,7 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
           Container(
             padding: const EdgeInsets.all(5),
             decoration: BoxDecoration(
-              color: AppTheme.kAccentBlue.withOpacity(0.15),
+              color: AppTheme.kAccentBlue.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(7),
             ),
             child: Icon(icon, size: 15, color: AppTheme.kPrimaryDeep),

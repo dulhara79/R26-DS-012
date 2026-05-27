@@ -31,7 +31,7 @@ class SensorListener {
     try {
       debugPrint("🔍 SensorListener: Starting Screen State Listener...");
       final Screen screen = Screen();
-      _screenSubscription = screen.screenStateStream?.listen(
+      _screenSubscription = screen.screenStateStream.listen(
         (ScreenStateEvent event) {
           String status;
           switch (event) {
@@ -44,8 +44,7 @@ class SensorListener {
             case ScreenStateEvent.SCREEN_UNLOCKED:
               status = "Screen_Unlocked";
               break;
-            default:
-              status = "Screen_Unknown";
+
           }
 
           debugPrint("📱 Screen Event: $status");
@@ -73,7 +72,7 @@ class SensorListener {
 
       // Throttle: only upload one high-motion event per 3 seconds to avoid
       // flooding the queue during sustained shaking.
-      DateTime? _lastMotionUpload;
+      DateTime? lastMotionUpload;
 
       _accelSubscription = accelerometerEventStream().listen(
         (AccelerometerEvent event) {
@@ -82,10 +81,10 @@ class SensorListener {
 
           if (magnitude > 15.0) {
             final now = DateTime.now();
-            if (_lastMotionUpload == null ||
-                now.difference(_lastMotionUpload!) >
+            if (lastMotionUpload == null ||
+                now.difference(lastMotionUpload!) >
                     const Duration(seconds: 3)) {
-              _lastMotionUpload = now;
+              lastMotionUpload = now;
               // BUG FIX: immediate=true — same reason as screen events.
               _sendData(
                 userId,
