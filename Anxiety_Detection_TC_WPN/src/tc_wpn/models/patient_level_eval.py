@@ -64,7 +64,7 @@ def evaluate_patient_level(
     patient-level probability vector.
 
     Patient identification uses subject_ids from ep["query"][label]["subject_ids"]
-    which are provided by episode_dataset_v3.py. If subject_ids are missing
+    which are provided by episode_dataset.py. If subject_ids are missing
     (e.g., old dataset code), falls back to episode-indexed keys — this still
     avoids double-counting within one episode but cannot pool across episodes.
 
@@ -111,7 +111,7 @@ def evaluate_patient_level(
             prob = probs[i, anx_idx].item()
 
             # Retrieve subject_id from episode query metadata
-            # ep["query"][true_label]["subject_ids"] is set by episode_dataset_v3
+            # ep["query"][true_label]["subject_ids"] is set by episode_dataset
             q_data = ep.get("query", {}).get(true_label, {})
             sids = q_data.get("subject_ids", None)
             local_idx = class_query_counts[true_label]
