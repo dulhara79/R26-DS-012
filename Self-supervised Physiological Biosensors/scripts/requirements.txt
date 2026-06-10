@@ -1,0 +1,4 @@
+torch==2.2.2
+numpy==1.26.4
+influxdb-client==1.43.0
+huggingface-hub==0.23.2
