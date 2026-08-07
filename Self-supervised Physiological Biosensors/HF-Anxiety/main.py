@@ -117,15 +117,21 @@ forecaster.eval()
 # STEP 3: PYDANTIC MODELS
 # -------------------------------------------------------------
 
-class RawSensorPayload(BaseModel):
+class ChestStrapFeaturesPayload(BaseModel):
     user_id: str
-    sampling_rate: int        # e.g. 700 for WESAD matching
-    ecg:   list[float]        # Raw ECG voltage sequence (60 seconds)
-    resp:  list[float]        # Raw Respiration values
-    temp:  list[float]        # Raw Temperature readings
-    acc_x: list[float]        # Raw Accelerometer X-axis
-    acc_y: list[float]        # Raw Accelerometer Y-axis
-    acc_z: list[float]        # Raw Accelerometer Z-axis
+    timestamp: str
+    is_worn: bool
+    mean_hr: float
+    mean_rr: float
+    sdnn: float
+    rmssd: float
+    mean_br: float
+    std_br: float
+    mean_temp: float
+    std_temp: float
+    mean_acc_mag: float
+    std_acc_mag: float
+
 
 
 class NormParamsPayload(BaseModel):
@@ -178,151 +184,45 @@ def store_norm_params(user_id: str, payload: NormParamsPayload):
 
 
 @app.post("/ingest")
-def process_and_ingest_raw_data(payload: RawSensorPayload):
-    fs = payload.sampling_rate
-
-    # --- Empty sequence guard ---
-    if len(payload.ecg) == 0 or len(payload.resp) == 0 or len(payload.temp) == 0:
+def process_and_ingest_raw_data(payload: ChestStrapFeaturesPayload):
+    # --- NEW GUARD: Reject if not being worn ---
+    if not payload.is_worn:
         raise HTTPException(
             status_code=400,
-            detail="Data window rejected: Received empty sensor signal sequences."
+            detail="Data window rejected: Chest strap is currently not worn."
         )
 
-    ecg_arr   = np.array(payload.ecg)
-    resp_arr  = np.array(payload.resp)
-    temp_arr  = np.array(payload.temp)
-    acc_x_arr = np.array(payload.acc_x)
-    acc_y_arr = np.array(payload.acc_y)
-    acc_z_arr = np.array(payload.acc_z)
+    # --- E. BUILD AND VALIDATE FEATURE VECTOR ---
+    # Feature order matches the notebook exactly:
+    # [mean_HR, mean_RR, SDNN, RMSSD, mean_BR, std_BR, mean_temp, std_temp, mean_acc_mag, std_acc_mag]
+    features = [
+        payload.mean_hr, payload.mean_rr, payload.sdnn, payload.rmssd, 
+        payload.mean_br, payload.std_br, payload.mean_temp, payload.std_temp, 
+        payload.mean_acc_mag, payload.std_acc_mag
+    ]
 
-    # --- Reject 1: NaN / Inf  (notebook: extract_all_windows Reject 1) ---
-    if (np.any(np.isnan(ecg_arr))   or np.any(np.isinf(ecg_arr))   or
-        np.any(np.isnan(resp_arr))  or np.any(np.isinf(resp_arr))  or
-        np.any(np.isnan(temp_arr))  or np.any(np.isinf(temp_arr))  or
-        np.any(np.isnan(acc_x_arr)) or np.any(np.isinf(acc_x_arr)) or
-        np.any(np.isnan(acc_y_arr)) or np.any(np.isinf(acc_y_arr)) or
-        np.any(np.isnan(acc_z_arr)) or np.any(np.isinf(acc_z_arr))):
+    import numpy as np
+    # FIX 4 — Final feature vector NaN check
+    if any(np.isnan(features)) or any(np.isinf(features)):
         raise HTTPException(
             status_code=400,
             detail="Data window rejected: Payload contains invalid NaN or Infinite numerical values."
         )
 
-    # --- Reject 2: Flat signal  (notebook: extract_all_windows Reject 2) ---
-    if np.std(ecg_arr) < 1e-6 or np.std(resp_arr) < 1e-6 or np.std(temp_arr) < 1e-6:
-        raise HTTPException(
-            status_code=400,
-            detail="Data window rejected: Flat signal detected with variance below safety limits."
-        )
-
-    # --- Reject 3: Impossible temperature  (notebook: extract_all_windows Reject 3) ---
-    if np.min(temp_arr) < 10.0:
-        raise HTTPException(
-            status_code=422,
-            detail="Data window rejected: Impossible physiological temperature artifact detected."
-        )
-
     try:
-        # --- A. ACCELEROMETER PROCESSING ---
-        # 4th-order Butterworth high-pass at 0.5 Hz, zero-phase (filtfilt),
-        # exact match to notebook Cells 9, 13, and the per-subject processing loop.
-        nyq    = 0.5 * fs
-        cutoff = 0.5
-        order  = 4
-        b, a   = signal.butter(order, cutoff / nyq, btype='high')
-
-        acc_x_filt = signal.filtfilt(b, a, acc_x_arr)
-        acc_y_filt = signal.filtfilt(b, a, acc_y_arr)
-        acc_z_filt = signal.filtfilt(b, a, acc_z_arr)
-
-        acc_mag = np.sqrt(acc_x_filt**2 + acc_y_filt**2 + acc_z_filt**2)
-
-        # FIX 1 — Reject 4: Motion artifact guard
-        # (notebook: extract_all_windows Reject 4 — if np.max(acc_w) > 1.5)
-        if np.max(acc_mag) > 1.5:
-            raise HTTPException(
-                status_code=400,
-                detail="Data window rejected: Motion artifact detected — peak ACC magnitude exceeds 1.5g threshold."
-            )
-
-        mean_acc_mag = float(np.mean(acc_mag))
-        std_acc_mag  = float(np.std(acc_mag, ddof=1))
-
-        # FIX 3c — NaN guard for ACC features
-        # (notebook: extract_features_from_window — if np.isnan(mean_acc_mag) or np.isnan(std_acc_mag))
-        if np.isnan(mean_acc_mag) or np.isnan(std_acc_mag):
-            raise ValueError("NaN detected in accelerometer features")
-
-        # --- B. ECG PROCESSING & HRV EXTRACTION ---
-        # Exact match to notebook Cell 20 (extract_features_from_window, ECG block).
-        # No method kwarg — matches the production function, not the exploratory Cell 17.
-        ecg_cleaned = nk.ecg_clean(ecg_arr, sampling_rate=fs)
-        peaks, _    = nk.ecg_peaks(ecg_cleaned, sampling_rate=fs)
-        peak_idx    = np.where(peaks['ECG_R_Peaks'] == 1)[0]
-
-        if len(peak_idx) < 31:
-            raise ValueError("Insufficient R-peaks detected in window (< 31)")
-
-        rr_ms = np.diff(peak_idx) / fs * 1000          # convert samples to ms
-        rr_ms = rr_ms[(rr_ms >= 300) & (rr_ms <= 2000)] # physiological filter: 30–220 bpm
-        if len(rr_ms) < 30:
-            raise ValueError("Insufficient valid RR intervals after physiological filtering (< 30)")
-
-        mean_rr = float(np.mean(rr_ms))
-        mean_hr = 60000.0 / mean_rr
-        sdnn    = float(np.std(rr_ms, ddof=1))
-        rmssd   = float(np.sqrt(np.mean(np.diff(rr_ms) ** 2)))
-
-        if any(np.isnan([mean_hr, mean_rr, sdnn, rmssd])):
-            raise ValueError("NaN values generated during HRV extraction")
-
-        # FIX 2 — Post-filter mean_rr range check
-        # (notebook: extract_features_from_window — if mean_rr < 300 or mean_rr > 2000)
-        if mean_rr < 300 or mean_rr > 2000:
-            raise ValueError("mean_rr outside physiological range (300–2000 ms) after HRV extraction")
-
-        # --- C. RESPIRATION EXTRACTION ---
-        # Exact match to notebook Cell 20 (extract_features_from_window, Resp block).
-        resp_cleaned = nk.rsp_clean(resp_arr, sampling_rate=fs)
-        rsp_rate_arr = nk.rsp_rate(resp_cleaned, sampling_rate=fs)
-
-        valid_br = rsp_rate_arr[(rsp_rate_arr >= 6) & (rsp_rate_arr <= 40)]
-        if len(valid_br) < 0.8 * len(rsp_rate_arr):
-            raise ValueError("Respiration rate failed data quality density threshold")
-
-        mean_br = float(np.mean(valid_br))
-        std_br  = float(np.std(valid_br, ddof=1)) if len(valid_br) > 1 else 0.0
-
-        # FIX 3a — NaN guard for respiration features
-        # (notebook: extract_features_from_window — if np.isnan(mean_br) or np.isnan(std_br))
-        if np.isnan(mean_br) or np.isnan(std_br):
-            raise ValueError("NaN detected in respiration features")
-
-        # --- D. TEMPERATURE EXTRACTION ---
-        # Exact match to notebook Cell 20 (extract_features_from_window, Temp block).
-        valid_temp = temp_arr[(temp_arr >= 25) & (temp_arr <= 40)]
-        if len(valid_temp) < 0.8 * len(temp_arr):
-            raise ValueError("Temperature values failed baseline limits (25°C – 40°C)")
-
-        mean_temp = float(np.mean(valid_temp))
-        std_temp  = float(np.std(valid_temp, ddof=1)) if len(valid_temp) > 1 else 0.0
-
-        # FIX 3b — NaN guard for temperature features
-        # (notebook: extract_features_from_window — if np.isnan(mean_temp) or np.isnan(std_temp))
-        if np.isnan(mean_temp) or np.isnan(std_temp):
-            raise ValueError("NaN detected in temperature features")
-
-        # --- E. BUILD AND VALIDATE FEATURE VECTOR ---
-        # Feature order matches the notebook exactly:
-        # [mean_HR, mean_RR, SDNN, RMSSD, mean_BR, std_BR, mean_temp, std_temp, mean_acc_mag, std_acc_mag]
-        features = [mean_hr, mean_rr, sdnn, rmssd, mean_br, std_br, mean_temp, std_temp, mean_acc_mag, std_acc_mag]
-
-        # FIX 4 — Final feature vector NaN check
-        # (notebook: extract_all_windows — if any(np.isnan(feats)))
-        if any(np.isnan(features)):
-            raise ValueError("NaN detected in final feature vector")
-
         # --- F. WRITE RAW FEATURES TO INFLUXDB ---
-        point = Point("physiological_metrics").tag("user_id", payload.user_id)
+        point = Point("physiological_metrics")\
+            .tag("user_id", payload.user_id)\
+            .time(payload.timestamp)
+        for idx, value in enumerate(features):
+            point.field(f"f_{idx}", float(value))
+
+        write_api.write(bucket=INFLUX_BUCKET, org=INFLUX_ORG, record=point)
+        return {"status": "success", "message": "Pre-calculated feature window successfully saved to InfluxDB"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database write failure: {str(e)}")
+
         for idx, value in enumerate(features):
             point.field(f"f_{idx}", float(value))
 
