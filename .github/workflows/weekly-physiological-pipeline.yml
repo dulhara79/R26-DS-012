@@ -1,0 +1,62 @@
+name: Weekly physiological archive and personalization
+
+on:
+  schedule:
+    # Sunday 02:15 UTC = Sunday 07:45 in Sri Lanka.
+    - cron: "15 2 * * 0"
+  workflow_dispatch:
+
+concurrency:
+  group: weekly-physiological-pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  archive-and-personalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: Self-supervised Physiological Biosensors
+    env:
+      INFLUX_URL: https://us-east-1-1.aws.cloud2.influxdata.com
+      INFLUX_ORG: Dewdu
+      INFLUX_BUCKET: sensor_data
+      INFLUX_TOKEN: ${{ secrets.INFLUX_TOKEN }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: Self-supervised Physiological Biosensors/scripts/requirements.txt
+
+      - name: Install pipeline dependencies
+        run: pip install --requirement scripts/requirements.txt
+
+      - name: Check required secrets
+        shell: bash
+        run: |
+          if [[ -z "$INFLUX_TOKEN" ]]; then
+            echo "Missing GitHub Actions secret: INFLUX_TOKEN"
+            exit 1
+          fi
+          if [[ -z "$HF_TOKEN" ]]; then
+            echo "Missing GitHub Actions secret: HF_TOKEN"
+            exit 1
+          fi
+
+      - name: Archive the last seven days of sensor data
+        run: python scripts/archive_sensor_data.py
+
+      - name: Update personalized weights for all eligible users
+        run: python scripts/personalize.py
