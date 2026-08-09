@@ -23,7 +23,18 @@ HF_DATASET_REPO = os.getenv(
     "HF_SENSOR_ARCHIVE_REPO",
     "Dewdu/physiological-sensor-archive",
 )
-FEATURE_COLUMNS = [f"f_{index}" for index in range(10)]
+FEATURE_COLUMNS = [
+    "mean_hr",
+    "mean_rr",
+    "sdnn",
+    "rmssd",
+    "mean_br",
+    "std_br",
+    "mean_temp",
+    "std_temp",
+    "mean_acc_mag",
+    "std_acc_mag",
+]
 
 
 def fetch_recent_rows(query_api: object) -> pd.DataFrame:
@@ -45,8 +56,12 @@ def fetch_recent_rows(query_api: object) -> pd.DataFrame:
             }
             row.update(
                 {
-                    feature: record.values.get(feature)
-                    for feature in FEATURE_COLUMNS
+                    feature: (
+                        record.values.get(feature)
+                        if record.values.get(feature) is not None
+                        else record.values.get(f"f_{index}")
+                    )
+                    for index, feature in enumerate(FEATURE_COLUMNS)
                 }
             )
             rows.append(row)

@@ -24,6 +24,7 @@ Required Environment Variables (set in GitHub Actions secrets):
 
 import os
 import io
+from datetime import timedelta
 import torch
 import torch.nn as nn
 import numpy as np
@@ -46,6 +47,13 @@ HF_SPACE_REPO = "Dewdu/physiological-anxiety-escalation"
 
 # The private HF Dataset where personalized per-user weights are stored
 HF_WEIGHTS_REPO = "Dewdu/physiological-anxiety-weights"
+
+FEATURE_NAMES = [
+    "mean_hr", "mean_rr", "sdnn", "rmssd", "mean_br", "std_br",
+    "mean_temp", "std_temp", "mean_acc_mag", "std_acc_mag",
+]
+NORM_MEAN_FIELDS = [f"{name}_baseline_mean" for name in FEATURE_NAMES]
+NORM_STD_FIELDS = [f"{name}_baseline_std" for name in FEATURE_NAMES]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -109,7 +117,10 @@ def get_all_user_ids(query_api: object) -> list[str]:
     return list(user_ids)
 
 
-def get_user_features(query_api: object, user_id: str) -> np.ndarray:
+def get_user_feature_rows(
+    query_api: object,
+    user_id: str,
+) -> tuple[np.ndarray, list]:
     """
     Pulls all 10-feature rows stored by /ingest for this user over the last 7 days.
     Returns a NumPy array of shape (N, 10).
@@ -124,16 +135,72 @@ def get_user_features(query_api: object, user_id: str) -> np.ndarray:
     '''
     tables  = query_api.query(query)
     records = []
+    timestamps = []
     for table in tables:
         for record in table.records:
-            row = [record.values.get(f"f_{i}") for i in range(10)]
+            row = [
+                record.values.get(feature)
+                if record.values.get(feature) is not None
+                else record.values.get(f"f_{index}")
+                for index, feature in enumerate(FEATURE_NAMES)
+            ]
             if None not in row:
                 records.append(row)
+                timestamps.append(record.get_time())
 
     if not records:
-        return np.empty((0, 10), dtype=np.float32)
+        return np.empty((0, 10), dtype=np.float32), []
 
-    return np.array(records, dtype=np.float32)
+    return np.array(records, dtype=np.float32), timestamps
+
+
+def get_user_features(query_api: object, user_id: str) -> np.ndarray:
+    """Backward-compatible array-only helper used by existing notebooks."""
+    records, _ = get_user_feature_rows(query_api, user_id)
+    return records
+
+
+def exclude_confirmed_anxiety_rows(
+    query_api: object,
+    user_id: str,
+    data: np.ndarray,
+    timestamps: list,
+) -> tuple[np.ndarray, int]:
+    """Do not teach confirmed anxiety episodes to the AE as normal baseline.
+
+    False-positive (`confirmed_anxious=false`) rows remain in training. Fine-
+    tuning on them lowers reconstruction error for that user's legitimate
+    non-anxiety physiology. Confirmed episodes are excluded from 10 minutes
+    before through 10 minutes after the alert.
+    """
+    query = f'''
+    from(bucket: "{INFLUX_BUCKET}")
+      |> range(start: -7d)
+      |> filter(fn: (r) => r["_measurement"] == "anxiety_feedback")
+      |> filter(fn: (r) => r["user_id"] == "{user_id}")
+      |> filter(fn: (r) => r["_field"] == "confirmed_anxious")
+      |> filter(fn: (r) => r["_value"] == true)
+    '''
+    confirmed_times = [
+        record.get_time()
+        for table in query_api.query(query)
+        for record in table.records
+    ]
+    if not confirmed_times:
+        return data, 0
+
+    keep = []
+    excluded = 0
+    margin = timedelta(minutes=10)
+    for timestamp in timestamps:
+        is_confirmed_episode = any(
+            event_time - margin <= timestamp <= event_time + margin
+            for event_time in confirmed_times
+        )
+        keep.append(not is_confirmed_episode)
+        excluded += int(is_confirmed_episode)
+
+    return data[np.asarray(keep, dtype=bool)], excluded
 
 
 def get_norm_params(query_api: object, user_id: str) -> tuple:
@@ -157,9 +224,17 @@ def get_norm_params(query_api: object, user_id: str) -> tuple:
     if not records:
         return None, None
 
-    b_mean = np.array([records[0].get(f"mean_{i}", 0.0) for i in range(10)], dtype=np.float32)
-    b_std  = np.array([records[0].get(f"std_{i}",  1.0) for i in range(10)], dtype=np.float32)
-    b_std[b_std == 0] = 1e-8  # exact guard from main.py
+    b_mean = np.array([
+        records[0].get(NORM_MEAN_FIELDS[i], records[0].get(f"mean_{i}"))
+        for i in range(10)
+    ], dtype=np.float32)
+    b_std = np.array([
+        records[0].get(NORM_STD_FIELDS[i], records[0].get(f"std_{i}"))
+        for i in range(10)
+    ], dtype=np.float32)
+    if not np.isfinite(b_mean).all() or not np.isfinite(b_std).all():
+        return None, None
+    b_std[b_std <= 0] = 1e-8  # defensive guard matching main.py
     return b_mean, b_std
 
 
@@ -316,19 +391,32 @@ def main() -> None:
         print(f"─── Processing user: {user_id} ───")
 
         # 1. Get raw feature data from InfluxDB
-        raw_data = get_user_features(query_api, user_id)
+        raw_data, timestamps = get_user_feature_rows(query_api, user_id)
         if len(raw_data) == 0:
             print(f"    No feature rows found. Skipping.\n")
             continue
         print(f"    Retrieved {len(raw_data)} feature rows from InfluxDB")
 
-        # 2. Get norm params; fall back to computing from data if user never calibrated
+        # 2. Get the calm calibration. Live weekly data must not silently
+        # become the baseline because it may include stress episodes.
         b_mean, b_std = get_norm_params(query_api, user_id)
         if b_mean is None:
-            print("    No calibration params found — computing from this week's data")
-            b_mean = np.mean(raw_data, axis=0)
-            b_std  = np.std(raw_data,  axis=0)
-            b_std[b_std == 0] = 1e-8
+            print("    No valid calm calibration params found. Skipping.\n")
+            continue
+
+        # Confirmed anxiety windows are labels for abnormal physiology, not
+        # examples the reconstruction model should learn as normal.
+        raw_data, excluded = exclude_confirmed_anxiety_rows(
+            query_api,
+            user_id,
+            raw_data,
+            timestamps,
+        )
+        if excluded:
+            print(f"    Excluded {excluded} row(s) around confirmed anxiety alerts")
+        if len(raw_data) < 5:
+            print("    Not enough non-anxiety data after feedback filtering. Skipping.\n")
+            continue
 
         # 3. Normalize
         normalized = (raw_data - b_mean) / b_std
