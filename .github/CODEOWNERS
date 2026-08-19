@@ -1,0 +1,30 @@
+# ---------------------------------------------------------------------------
+# R26-DS-012 code ownership.
+#
+# Last matching rule wins. Combined with "Require review from Code Owners" in
+# branch protection, this guarantees a component's folder cannot be changed
+# without its owner seeing it — including by an automated mirror.
+#
+# TODO: replace the placeholder handles with the real GitHub usernames.
+# ---------------------------------------------------------------------------
+
+# Default owner for anything not claimed below.
+*                                                   @dulhara79
+
+# --- Component 1 — Wearable Biosensor Forecasting (IT22107596) -------------
+/Self-supervised\ Physiological\ Biosensors/         @GITHUB-HANDLE-SENDANAYAKE
+
+# --- Component 2 — Temporal Behavioral Graph Framework (IT22171542) --------
+/graph-behavioral-phenotyping/                       @GITHUB-HANDLE-LAYATHMA
+
+# --- Component 3 — Personalized Intervention Framework (IT22093950) --------
+/C3_Personalised_Anxiety_Intervention_Framework/     @GITHUB-HANDLE-SENEVIRATNE
+
+# --- Component 4 — Clinical NLP / TC-WPN (IT22130648) ----------------------
+/Anxiety_Detection_TC_WPN/                           @dulhara79
+
+# --- Shared surfaces: require broader awareness ----------------------------
+/apps/                                               @dulhara79 @GITHUB-HANDLE-SENEVIRATNE
+/.github/                                            @dulhara79
+/README.md                                           @dulhara79
+/LICENSE                                             @dulhara79
