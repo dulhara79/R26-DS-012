@@ -1,0 +1,27 @@
+name: aux_only
+description: >
+  ProtoNet + learnable temperature + auxiliary per-note CE head, with NO
+  temporal weight and NO prototype-consistency weight. Added to isolate the
+  auxiliary loss, which is the only component tcwpn_full has that no other
+  Stage C ablation had. Inference still scores by prototype distance; the
+  auxiliary head only shapes the encoder during training.
+model:
+  preset: aux_only
+  encoder_name: emilyalsentzer/Bio_ClinicalBERT
+  projection_dim: 256
+  freeze_bert: false
+  init_temperature: 10.0
+  init_lambda: 0.5
+  init_beta: 2.0
+  consistency_passes: 1
+optim:
+  encoder_lr: 2.0e-5
+  head_lr: 1.0e-3
+  weight_decay: 0.01
+  warmup_frac: 0.1
+  grad_accum: 1
+  grad_clip: 1.0
+  amp: true
+  eval_every: 250
+  val_episodes: 60
+threshold_objective: f1
