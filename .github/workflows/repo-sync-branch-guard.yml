@@ -1,0 +1,63 @@
+# ---------------------------------------------------------------------------
+# The sync/** branches are force-rebuilt from scratch on every mirror run.
+# Any human commit pushed there WILL be destroyed on the next sync.
+#
+# This workflow detects that situation and fails the PR loudly, so the work is
+# recovered from the reflog and re-applied in the component repo instead of
+# quietly vanishing.
+# ---------------------------------------------------------------------------
+name: repo-sync-branch-guard
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  guard:
+    name: No manual commits on sync branches
+    if: startsWith(github.head_ref, 'sync/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The default PR ref is a synthetic merge commit authored by GitHub.
+          # Checking that out would flag every PR as having a "foreign" commit.
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Inspect authorship
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          git fetch origin "${{ github.base_ref }}" --depth=50
+
+          FOREIGN=$(git log --format='%H %ae %s' \
+                      "origin/${{ github.base_ref }}..HEAD" \
+                    | grep -v 'tcwpn-sync@users.noreply.github.com' || true)
+
+          if [ -n "$FOREIGN" ]; then
+            echo "$FOREIGN"
+            gh pr comment "$PR" --body "$(cat <<'MSG'
+          **Manual commits detected on a bot-owned `sync/**` branch.**
+
+          This branch is force-rebuilt from `main` on every mirror run, so these
+          commits will be overwritten and lost.
+
+          Move the change into `dulhara79/tcwpn_test`, merge it there, and let the
+          mirror re-run. Recover the work with `git reflog` if you have already
+          lost your local copy.
+          MSG
+          )"
+            echo "::error::Manual commits on a sync branch will be destroyed by the next mirror run."
+            exit 1
+          fi
+
+          echo "OK — branch contains only mirror commits."
