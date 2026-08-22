@@ -15,12 +15,14 @@ import '../../ema_and_gad7.dart';
 ///     – Throttle timestamp is cleared whenever the user saves new times
 ///       (call [clearThrottleTimestamps] from RatingSettingsPage._save).
 ///
-///   • GAD-7 weekly  — between 09:00–21:00, re-fires every 4 h until done.
-///   • PSS-10 weekly — between 09:00–21:00, once per day until done.
+///   • GAD-7 and PSS-10 each fire once per week at the configured day and time.
 ///
 /// Called from Timer.periodic(Duration(minutes: 1)) in background_service.dart.
 class DailyReminder {
   static bool _didLogNotificationCapability = false;
+  static const String _lastScheduledReminderKey =
+      'scheduled_reminder_last_shown_ts';
+  static const Duration _scheduledReminderSpacing = Duration(minutes: 30);
 
   // ─────────────────────────────────────────────────────────────────────────
   // PUBLIC ENTRY POINT
@@ -34,10 +36,10 @@ class DailyReminder {
     // by the UI isolate (settings changes, submission flags).
     await prefs.reload();
 
-    final bool enabled = prefs.getBool('rating_enabled') ?? true;
-    if (!enabled) {
-      debugPrint("DailyReminder: disabled by user — skip.");
-      debugPrint("EMA_DEBUG: action=skip reason=rating_disabled");
+    final bool dailyEnabled = prefs.getBool('rating_enabled') ?? true;
+    final bool weeklyEnabled = prefs.getBool('weekly_checkins_enabled') ?? true;
+    if (!dailyEnabled && !weeklyEnabled) {
+      debugPrint("DailyReminder: all scheduled check-ins disabled by user.");
       return;
     }
 
@@ -45,6 +47,15 @@ class DailyReminder {
 
     final DateTime now = DateTime.now();
     final String today = DateFormat('yyyy-MM-dd').format(now);
+    final int nowMs = now.millisecondsSinceEpoch;
+    final int lastScheduledReminder =
+        prefs.getInt(_lastScheduledReminderKey) ?? 0;
+
+    if (nowMs - lastScheduledReminder <
+        _scheduledReminderSpacing.inMilliseconds) {
+      debugPrint('DailyReminder: scheduled reminders are being spaced apart.');
+      return;
+    }
 
     debugPrint(
       "DailyReminder: tick "
@@ -52,11 +63,23 @@ class DailyReminder {
       "${now.minute.toString().padLeft(2, '0')} — $today",
     );
 
-    await _checkPeriod(prefs, plugin, now, today, 'morning');
-    await _checkPeriod(prefs, plugin, now, today, 'afternoon');
-    await _checkPeriod(prefs, plugin, now, today, 'evening');
-    await _checkWeeklyGad7(prefs, plugin, now, today);
-    await _checkWeeklyPss10(prefs, plugin, now, today);
+    if (dailyEnabled) {
+      for (final period in ['morning', 'afternoon', 'evening']) {
+        if (await _checkPeriod(prefs, plugin, now, today, period)) {
+          await prefs.setInt(_lastScheduledReminderKey, nowMs);
+          return;
+        }
+      }
+    }
+    if (!weeklyEnabled) return;
+
+    if (await _checkWeeklyGad7(prefs, plugin, now)) {
+      await prefs.setInt(_lastScheduledReminderKey, nowMs);
+      return;
+    }
+    if (await _checkWeeklyPss10(prefs, plugin, now)) {
+      await prefs.setInt(_lastScheduledReminderKey, nowMs);
+    }
   }
 
   static Future<void> _logNotificationCapability(
@@ -94,8 +117,10 @@ class DailyReminder {
     await prefs.remove('ema_reminder_ts_morning');
     await prefs.remove('ema_reminder_ts_afternoon');
     await prefs.remove('ema_reminder_ts_evening');
+    await prefs.remove('ema_random_times_date');
+    await prefs.remove(_lastScheduledReminderKey);
     debugPrint(
-      "DailyReminder: throttle timestamps cleared after settings change.",
+      "DailyReminder: throttle timestamps and random times cleared after settings change.",
     );
   }
 
@@ -103,7 +128,7 @@ class DailyReminder {
   // EMA PERIOD
   // ─────────────────────────────────────────────────────────────────────────
 
-  static Future<void> _checkPeriod(
+  static Future<bool> _checkPeriod(
     SharedPreferences prefs,
     FlutterLocalNotificationsPlugin plugin,
     DateTime now,
@@ -117,23 +142,21 @@ class DailyReminder {
       debugPrint(
         "EMA_DEBUG: period=$period action=skip reason=already_submitted date=$today",
       );
-      return;
+      return false;
     }
 
-    // Read configured time (written by RatingSettingsPage).
-    final int targetHour =
-        prefs.getInt('ema_${period}_hour') ??
-        (period == 'morning'
-            ? 9
-            : period == 'afternoon'
-            ? 14
-            : 20);
+    final int defaultHour = period == 'morning'
+        ? 9
+        : period == 'afternoon'
+        ? 14
+        : 20;
+    final int targetHour = prefs.getInt('ema_${period}_hour') ?? defaultHour;
     final int targetMinute = prefs.getInt('ema_${period}_minute') ?? 0;
-
-    final int nowMinutes = now.hour * 60 + now.minute;
     final int targetMinutes = targetHour * 60 + targetMinute;
 
-    // Active window: target time → target time + 4 hours.
+    final int nowMinutes = now.hour * 60 + now.minute;
+
+    // Active window: target time → target time + 4 hours (240 minutes).
     const int windowMinutes = 240;
     final int endMinutes = targetMinutes + windowMinutes;
 
@@ -142,7 +165,8 @@ class DailyReminder {
       inWindow = nowMinutes >= targetMinutes && nowMinutes < endMinutes;
     } else {
       // Handles windows that cross midnight (e.g. 11 PM to 3 AM)
-      inWindow = nowMinutes >= targetMinutes || nowMinutes < (endMinutes - 1440);
+      inWindow =
+          nowMinutes >= targetMinutes || nowMinutes < (endMinutes - 1440);
     }
 
     debugPrint(
@@ -158,7 +182,7 @@ class DailyReminder {
       debugPrint(
         "EMA_DEBUG: period=$period action=skip reason=outside_window now=${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} target=${targetHour.toString().padLeft(2, '0')}:${targetMinute.toString().padLeft(2, '0')}",
       );
-      return;
+      return false;
     }
 
     // Throttle: fire at most once per 55 minutes inside the window.
@@ -178,7 +202,7 @@ class DailyReminder {
       debugPrint(
         "EMA_DEBUG: period=$period action=skip reason=throttled elapsed_min=$elapsedMin",
       );
-      return;
+      return false;
     }
 
     final titles = {
@@ -204,7 +228,7 @@ class DailyReminder {
           android: AndroidNotificationDetails(
             'ema_channel',
             'Daily Check-ins',
-            channelDescription: 'Scheduled mood and anxiety ratings',
+            channelDescription: 'Reminders to check how you feel',
             importance: Importance.high,
             priority: Priority.high,
             color: const Color(0xFF5E60CE),
@@ -219,11 +243,13 @@ class DailyReminder {
       debugPrint(
         "EMA_DEBUG: period=$period action=sent notification_id=${_idForPeriod(period)}",
       );
+      return true;
     } catch (e, st) {
       debugPrint(
         "DailyReminder: ❌ EMA [$period] plugin.show() failed: $e\n$st",
       );
       debugPrint("EMA_DEBUG: period=$period action=send_failed error=$e");
+      return false;
     }
   }
 
@@ -231,44 +257,52 @@ class DailyReminder {
   // WEEKLY GAD-7
   // ─────────────────────────────────────────────────────────────────────────
 
-  static Future<void> _checkWeeklyGad7(
+  static Future<bool> _checkWeeklyGad7(
     SharedPreferences prefs,
     FlutterLocalNotificationsPlugin plugin,
     DateTime now,
-    String today,
   ) async {
-    if (now.hour < 9 || now.hour > 21) return;
+    if (!_weeklyScheduleReached(
+      prefs,
+      now,
+      hourKey: 'gad7_hour',
+      minuteKey: 'gad7_minute',
+      defaultHour: 20,
+    )) {
+      return false;
+    }
+
+    final weekKey = weeklyCheckInWeekKey(now);
+    if (prefs.getString('gad7_notified_week') == weekKey) return false;
 
     final bool due = await isGad7DueThisWeek();
     debugPrint("DailyReminder: GAD-7 due=$due");
-    if (!due) return;
-
-    final int lastTs = prefs.getInt('gad7_reminder_ts') ?? 0;
-    final int nowMs = DateTime.now().millisecondsSinceEpoch;
-    if ((nowMs - lastTs) < 4 * 60 * 60 * 1000) return;
+    if (!due) return false;
 
     debugPrint("DailyReminder: ▶ FIRING GAD-7 weekly notification");
 
     try {
       await plugin.show(
         700,
-        '📋 Weekly Anxiety Check (GAD-7)',
-        'Your 7-question weekly anxiety questionnaire is ready — about 2 minutes.',
+        '📋 Weekly Anxiety Check',
+        'Your 7-question anxiety check is ready. It takes about 2 minutes.',
         const NotificationDetails(
           android: AndroidNotificationDetails(
             'gad7_channel',
-            'Weekly Assessments',
-            channelDescription: 'Weekly GAD-7 clinical questionnaires',
+            'Weekly Check-ins',
+            channelDescription: 'Reminder for your weekly anxiety check-in',
             importance: Importance.high,
             priority: Priority.high,
           ),
         ),
         payload: 'gad7_weekly',
       );
-      await prefs.setInt('gad7_reminder_ts', nowMs);
+      await prefs.setString('gad7_notified_week', weekKey);
       debugPrint("DailyReminder: ✅ GAD-7 notification sent.");
+      return true;
     } catch (e) {
       debugPrint("DailyReminder: ❌ GAD-7 plugin.show() failed: $e");
+      return false;
     }
   }
 
@@ -276,47 +310,74 @@ class DailyReminder {
   // WEEKLY PSS-10
   // ─────────────────────────────────────────────────────────────────────────
 
-  static Future<void> _checkWeeklyPss10(
+  static Future<bool> _checkWeeklyPss10(
     SharedPreferences prefs,
     FlutterLocalNotificationsPlugin plugin,
     DateTime now,
-    String today,
   ) async {
-    if (now.hour < 9 || now.hour > 21) return;
-    if (prefs.getString('pss10_notified_today') == today) return;
+    if (!_weeklyScheduleReached(
+      prefs,
+      now,
+      hourKey: 'pss10_hour',
+      minuteKey: 'pss10_minute',
+      defaultHour: 21,
+    )) {
+      return false;
+    }
+
+    final weekKey = weeklyCheckInWeekKey(now);
+    if (prefs.getString('pss10_notified_week') == weekKey) return false;
 
     final bool due = await isPss10DueThisWeek();
     debugPrint("DailyReminder: PSS-10 due=$due");
-    if (!due) return;
+    if (!due) return false;
 
     debugPrint("DailyReminder: ▶ FIRING PSS-10 weekly notification");
 
     try {
       await plugin.show(
         800,
-        '📊 Weekly Stress Check (PSS-10)',
-        'Your 10-question perceived stress scale is ready — about 3 minutes.',
+        '📊 Weekly Stress Check',
+        'Your 10-question stress check is ready. It takes about 3 minutes.',
         const NotificationDetails(
           android: AndroidNotificationDetails(
             'pss_channel',
-            'Monthly Assessments',
-            channelDescription: 'Monthly PSS-10 stress scale assessments',
+            'Weekly Check-ins',
+            channelDescription: 'Reminder for your weekly stress check-in',
             importance: Importance.high,
             priority: Priority.high,
           ),
         ),
-        payload: 'pss10_monthly',
+        payload: 'pss10_weekly',
       );
-      await prefs.setString('pss10_notified_today', today);
+      await prefs.setString('pss10_notified_week', weekKey);
       debugPrint("DailyReminder: ✅ PSS-10 notification sent.");
+      return true;
     } catch (e) {
       debugPrint("DailyReminder: ❌ PSS-10 plugin.show() failed: $e");
+      return false;
     }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   // HELPERS
   // ─────────────────────────────────────────────────────────────────────────
+
+  static bool _weeklyScheduleReached(
+    SharedPreferences prefs,
+    DateTime now, {
+    required String hourKey,
+    required String minuteKey,
+    required int defaultHour,
+  }) {
+    final weekday = prefs.getInt('weekly_checkin_weekday') ?? DateTime.sunday;
+    if (now.weekday != weekday) return false;
+
+    final targetMinutes =
+        (prefs.getInt(hourKey) ?? defaultHour) * 60 +
+        (prefs.getInt(minuteKey) ?? 0);
+    return now.hour * 60 + now.minute >= targetMinutes;
+  }
 
   static int _idForPeriod(String period) {
     if (period == 'morning') return 901;

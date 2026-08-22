@@ -15,39 +15,45 @@ class ServiceConfig {
   static const String channelName = 'Data Collection Service';
   static const int notificationId = 888;
 
-  // ── NHSL / PDPA Compliance Metadata ────────────────────────
-  // TODO: Replace placeholder values before ERC submission
+  // ── Research ethics and PDPA metadata ──────────────────────
+  // TODO: Replace unconfirmed values before participant recruitment.
 
   /// Consent document version — increment when consent text changes
-  static const String consentVersion = '1.0';
+  static const String consentVersion = '2.0';
 
   /// Date the consent was last updated (YYYY-MM-DD)
-  static const String consentDate = '2026-05-08';
+  static const String consentDate = '2026-08-17';
 
   /// Study title as approved by ERC
   static const String studyTitle =
-      'Digital Biomarkers of Anxiety: A Mobile Sensing Study';
+      'Multimodal Digital Biomarker Framework for Personalized Vulnerability Mapping and Acute Escalation Forecasting in Young Adults with Anxiety Disorders';
 
   /// Principal Investigator
-  static const String piName = '[Prof. Samantha Thelijjagoda]';
-  static const String piAffiliation = 'Sri Lanka Institute of Information Technology (SLIIT)';
-  static const String piEmail = '[samantha.t@sliit.lk]';
+  static const String piName = 'Prof. Samantha Thelijjagoda';
+  static const String piAffiliation =
+      'Sri Lanka Institute of Information Technology (SLIIT)';
+  static const String piEmail = 'samantha.t@sliit.lk';
 
   /// Research Supervisor
-  static const String supervisorName = '[Prof. Samantha Thelijjagoda]';
-  static const String supervisorEmail = '[samantha.t@sliit.lk]';
+  static const String supervisorName = 'Prof. Samantha Thelijjagoda';
+  static const String supervisorEmail = 'samantha.t@sliit.lk';
 
   /// Ethics Review Committee
-  static const String ercName = 'Ethics Review Committee, Faculty of Medicine, University of Colombo';
-  static const String ercApprovalNumber = '[ERC-XXXX/XX/XXX — UPDATE AFTER APPROVAL]';
-  static const String ercSecretaryEmail = '[erc-secretary@cmb.ac.lk — UPDATE]';
+  static const String ercName =
+      'Relevant ethics review committee (confirm before participant recruitment)';
+  static const String ercApprovalNumber = 'Not yet recorded in this app';
+  static const String ercSecretaryEmail = 'To be added after ethics approval';
 
   /// Research team contact (for participant queries)
-  static const String researchTeamEmail = '[it22130648@my.sliit.lk, it22171542@my.sliit.lk, it22107596@my.sliit.lk, it22093950@my.sliit.lk]';
+  static const String researchTeamEmail =
+      'it22130648@my.sliit.lk, it22171542@my.sliit.lk, '
+      'it22107596@my.sliit.lk, it22093950@my.sliit.lk';
 
   /// Data retention period
-  static const String dataRetentionPeriod = '1 years after study completion and publication';
+  static const String dataRetentionPeriod =
+      'the retention period approved in the final ethics-reviewed research protocol';
 
   /// Data controller (legal entity responsible for the data)
-  static const String dataController = 'SLIIT Research Team, SLIIT Malabe Campus';
+  static const String dataController =
+      'Sri Lanka Institute of Information Technology (SLIIT), research group R26-DS-012';
 }

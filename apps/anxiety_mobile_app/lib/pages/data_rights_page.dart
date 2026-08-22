@@ -1,10 +1,15 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+
 import '../theme/app_theme.dart';
 import '../services/background/service_config.dart';
 import '../services/background_service_helper.dart';
+import '../services/user_manager.dart';
+import '../services/participant_identity_service.dart';
+import '../services/anxiety_feedback_service.dart';
 import 'informed_consent_page.dart';
 import 'privacy_policy_page.dart';
 import '../main.dart';
@@ -33,7 +38,8 @@ class _DataRightsPageState extends State<DataRightsPage> {
     setState(() {
       _participantId = prefs.getString('user_id') ?? 'Not set';
       _consentTimestamp = prefs.getString('consent_timestamp') ?? 'Unknown';
-      _consentVersion = prefs.getString('consent_version') ?? '1.0';
+      _consentVersion =
+          prefs.getString('consent_version') ?? ServiceConfig.consentVersion;
       _isWithdrawn = prefs.getBool('consent_withdrawn') ?? false;
     });
   }
@@ -41,18 +47,19 @@ class _DataRightsPageState extends State<DataRightsPage> {
   // ── Request Data Export (Right to Access) ──
   Future<void> _requestDataExport() async {
     final confirm = await _showConfirmDialog(
-      title: 'Request Data Export',
-      content: 'This will send a request to the research team to provide you with '
+      title: 'Get a Copy of My Data',
+      content:
+          'This will send a request to the research team to provide you with '
           'a copy of all data collected about you.\n\n'
-          'You will be contacted at the email associated with your research enrollment.',
-      confirmText: 'Request Export',
+          'Aura does not collect your email address. After sending the request, email the research team with your Participant ID so they can verify the request and arrange secure delivery.',
+      confirmText: 'Send Request',
       confirmColor: AppTheme.kPrimaryDeep,
     );
     if (confirm != true) return;
 
     final prefs = await SharedPreferences.getInstance();
     final uid = prefs.getString('user_id') ?? 'Unknown';
-    
+
     await BackgroundServiceHelper.sendToSheet(
       uid,
       'Data_Export_Request',
@@ -67,7 +74,9 @@ class _DataRightsPageState extends State<DataRightsPage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Data export request submitted. The research team will process your request.'),
+          content: Text(
+            'Request logged. Email the research team with your Participant ID to arrange secure delivery.',
+          ),
           backgroundColor: Colors.green,
           duration: Duration(seconds: 4),
         ),
@@ -78,19 +87,20 @@ class _DataRightsPageState extends State<DataRightsPage> {
   // ── Request Data Deletion (Right to Erasure) ──
   Future<void> _requestDataDeletion() async {
     final confirm = await _showConfirmDialog(
-      title: '⚠️ Request Data Deletion',
-      content: 'This will send a formal request to the research team to permanently '
+      title: 'Delete My Data',
+      content:
+          'This will ask the research team to permanently '
           'delete all data associated with your Participant ID.\n\n'
-          'This action is logged and cannot be undone. The research team will '
-          'process your request within 21 business days as required by the PDPA.',
-      confirmText: 'Request Deletion',
+          'Once the data is deleted, it cannot be restored. The research team will '
+          'handle your request within the period required by applicable data protection law.',
+      confirmText: 'Send Delete Request',
       confirmColor: Colors.red,
     );
     if (confirm != true) return;
 
     final prefs = await SharedPreferences.getInstance();
     final uid = prefs.getString('user_id') ?? 'Unknown';
-    
+
     await BackgroundServiceHelper.sendToSheet(
       uid,
       'Data_Deletion_Request',
@@ -105,7 +115,9 @@ class _DataRightsPageState extends State<DataRightsPage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Data deletion request submitted. Processing within 21 business days.'),
+          content: Text(
+            'Delete request sent. The research team will handle it within the legally required period.',
+          ),
           backgroundColor: Colors.orange,
           duration: Duration(seconds: 4),
         ),
@@ -117,11 +129,12 @@ class _DataRightsPageState extends State<DataRightsPage> {
   Future<void> _withdrawFromStudy() async {
     final confirm = await _showConfirmDialog(
       title: '⚠️ Withdraw from Study',
-      content: 'This will:\n\n'
-          '• Stop all data collection immediately\n'
-          '• Stop the background service\n'
-          '• Clear all locally stored data\n'
-          '• Send a withdrawal record to the research team\n\n'
+      content:
+          'This will:\n\n'
+          '• Stop collecting new data immediately\n'
+          '• Stop Aura from working in the background\n'
+          '• Delete data saved on this phone\n'
+          '• Tell the research team that you left the study\n\n'
           'You can also request deletion of previously collected data.\n\n'
           'This action cannot be undone. Are you sure?',
       confirmText: 'Yes, Withdraw',
@@ -132,8 +145,9 @@ class _DataRightsPageState extends State<DataRightsPage> {
     // Double confirmation
     final doubleConfirm = await _showConfirmDialog(
       title: 'Final Confirmation',
-      content: 'Please confirm one more time that you wish to withdraw from '
-          'the research study. All local data will be erased.',
+      content:
+          'Please confirm one more time that you wish to withdraw from '
+          'the research study. All data saved on this phone will be deleted.',
       confirmText: 'Confirm Withdrawal',
       confirmColor: Colors.red.shade700,
     );
@@ -141,7 +155,7 @@ class _DataRightsPageState extends State<DataRightsPage> {
 
     final prefs = await SharedPreferences.getInstance();
     final uid = prefs.getString('user_id') ?? 'Unknown';
-    
+
     // 1. Send withdrawal record to Google Sheet
     await BackgroundServiceHelper.sendToSheet(
       uid,
@@ -162,16 +176,30 @@ class _DataRightsPageState extends State<DataRightsPage> {
       service.invoke('stopService');
     } catch (_) {}
 
+    // Stop the in-memory physiological session immediately. Clearing only
+    // SharedPreferences would otherwise leave BLE/simulator packets uploading
+    // under the withdrawn participant ID until the app process restarts.
+    UserManager().logout();
+
     // 3. Mark as withdrawn and clear local data
     await prefs.setBool('consent_withdrawn', true);
-    await prefs.setString('withdrawal_timestamp', DateTime.now().toIso8601String());
-    
+    await prefs.setString(
+      'withdrawal_timestamp',
+      DateTime.now().toIso8601String(),
+    );
+
     // Clear all study data but keep withdrawal record
-    await prefs.remove('user_id');
+    await AnxietyFeedbackService.clearLocalEvents();
+    await ParticipantIdentityService.clearLocalIdentity();
     await prefs.remove('consent_accepted');
     await prefs.remove('profile_complete');
+    await prefs.remove('calibration_complete');
+    await prefs.remove('chest_strap_last_reading');
     await prefs.remove('user_profile_data');
+    await prefs.remove('profile_image_path');
     await prefs.remove('offline_queue');
+    await prefs.remove('offline_queue_main');
+    await prefs.remove('offline_queue_bg');
     await prefs.remove('last_battery_level');
     await prefs.remove('rating_enabled');
 
@@ -193,8 +221,14 @@ class _DataRightsPageState extends State<DataRightsPage> {
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        content: Text(content, style: const TextStyle(fontSize: 14, height: 1.5)),
+        title: Text(
+          title,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          content,
+          style: const TextStyle(fontSize: 14, height: 1.5),
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         actions: [
           TextButton(
@@ -204,7 +238,10 @@ class _DataRightsPageState extends State<DataRightsPage> {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: confirmColor),
-            child: Text(confirmText, style: const TextStyle(color: Colors.white)),
+            child: Text(
+              confirmText,
+              style: const TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -214,10 +251,8 @@ class _DataRightsPageState extends State<DataRightsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.kBgTop,
-      appBar: AppBar(
-        title: const Text('Data Rights & Privacy'),
-      ),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      appBar: AppBar(title: const Text('Your Data and Privacy')),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -227,7 +262,7 @@ class _DataRightsPageState extends State<DataRightsPage> {
 
           // ── Your Rights ──
           const Text(
-            'Your Rights Under the PDPA',
+            'Your Rights Under Sri Lanka\'s Data Protection Law',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
@@ -237,7 +272,7 @@ class _DataRightsPageState extends State<DataRightsPage> {
             icon: Icons.download_outlined,
             iconColor: Colors.blue,
             title: 'Request My Data',
-            subtitle: 'Get a copy of all data collected about you (Right to Access)',
+            subtitle: 'Get a copy of all data collected about you',
             onTap: _isWithdrawn ? null : _requestDataExport,
           ),
 
@@ -245,8 +280,8 @@ class _DataRightsPageState extends State<DataRightsPage> {
           _buildActionCard(
             icon: Icons.delete_forever_outlined,
             iconColor: Colors.orange,
-            title: 'Request Data Deletion',
-            subtitle: 'Request permanent deletion of your data (Right to Erasure)',
+            title: 'Delete My Data',
+            subtitle: 'Ask for all data about you to be permanently deleted',
             onTap: _isWithdrawn ? null : _requestDataDeletion,
           ),
 
@@ -255,7 +290,8 @@ class _DataRightsPageState extends State<DataRightsPage> {
             icon: Icons.exit_to_app_rounded,
             iconColor: Colors.red,
             title: 'Withdraw from Study',
-            subtitle: 'Stop all data collection and clear local data',
+            subtitle:
+                'Stop new data collection and delete data saved on this phone',
             onTap: _isWithdrawn ? null : _withdrawFromStudy,
           ),
 
@@ -272,7 +308,7 @@ class _DataRightsPageState extends State<DataRightsPage> {
             icon: Icons.description_outlined,
             iconColor: AppTheme.kPrimaryDeep,
             title: 'Privacy Policy',
-            subtitle: 'Full PDPA-compliant privacy notice',
+            subtitle: 'Full privacy notice',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const PrivacyPolicyPage()),
@@ -282,11 +318,13 @@ class _DataRightsPageState extends State<DataRightsPage> {
           _buildActionCard(
             icon: Icons.gavel_outlined,
             iconColor: AppTheme.kPrimaryDeep,
-            title: 'View Informed Consent',
-            subtitle: 'Review the consent document you agreed to',
+            title: 'View Consent Form',
+            subtitle: 'Review the form you agreed to',
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const InformedConsentPage()),
+              MaterialPageRoute(
+                builder: (_) => const InformedConsentPage(readOnly: true),
+              ),
             ),
           ),
 
@@ -296,22 +334,30 @@ class _DataRightsPageState extends State<DataRightsPage> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.grey.shade50,
+              color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.grey.shade200),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Contact the Research Team',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const Text(
+                  'Contact the Research Team',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
                 const SizedBox(height: 8),
                 Text(
-                  'For any queries about your data or rights:\n'
+                  'For any questions about your data or rights:\n'
                   '${ServiceConfig.researchTeamEmail}\n\n'
                   'Ethics Review Committee:\n'
                   '${ServiceConfig.ercSecretaryEmail}',
-                  style: TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.5),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    height: 1.5,
+                  ),
                 ),
               ],
             ),
@@ -326,13 +372,7 @@ class _DataRightsPageState extends State<DataRightsPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: _isWithdrawn
-              ? [Colors.red.shade50, Colors.red.shade100]
-              : [Colors.green.shade50, Colors.green.shade100],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: _isWithdrawn ? Colors.red.shade300 : Colors.green.shade300,
@@ -344,24 +384,30 @@ class _DataRightsPageState extends State<DataRightsPage> {
           Row(
             children: [
               Icon(
-                _isWithdrawn ? Icons.cancel_outlined : Icons.verified_user_outlined,
+                _isWithdrawn
+                    ? Icons.cancel_outlined
+                    : Icons.verified_user_outlined,
                 color: _isWithdrawn ? Colors.red : Colors.green,
                 size: 22,
               ),
               const SizedBox(width: 8),
               Text(
-                _isWithdrawn ? 'Consent Status: Withdrawn' : 'Consent Status: Active',
+                _isWithdrawn
+                    ? 'Study Agreement: Ended'
+                    : 'Study Agreement: Active',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: _isWithdrawn ? Colors.red.shade800 : Colors.green.shade800,
+                  color: _isWithdrawn
+                      ? Colors.red.shade800
+                      : Colors.green.shade800,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
           _statusRow('Participant ID', _participantId),
-          _statusRow('Consent Given', _formatTimestamp(_consentTimestamp)),
-          _statusRow('Consent Version', _consentVersion),
+          _statusRow('Agreed on', _formatTimestamp(_consentTimestamp)),
+          _statusRow('Form version', _consentVersion),
           _statusRow('Study', ServiceConfig.studyTitle),
         ],
       ),
@@ -376,10 +422,23 @@ class _DataRightsPageState extends State<DataRightsPage> {
         children: [
           SizedBox(
             width: 120,
-            child: Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
           ),
           Expanded(
-            child: Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
           ),
         ],
       ),
@@ -398,16 +457,28 @@ class _DataRightsPageState extends State<DataRightsPage> {
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: Colors.grey.shade200),
+        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: iconColor.withValues(alpha: 0.1),
           child: Icon(icon, color: iconColor, size: 22),
         ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-        subtitle: Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-        trailing: Icon(Icons.chevron_right, color: onTap != null ? Colors.grey : Colors.grey.shade300),
+        title: Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        trailing: Icon(
+          Icons.chevron_right,
+          color: onTap != null ? Colors.grey : Colors.grey.shade300,
+        ),
         onTap: onTap,
         enabled: onTap != null,
       ),
