@@ -1,0 +1,26 @@
+name: aux_w2.0
+description: >
+  Auxiliary CE weight 2.0, no temporal weight, no prototype-consistency weight.
+  Part of the auxiliary dose-response sweep. aux_only (weight 0.3) and
+  protonet_temp (weight 0.0) are the two endpoints already measured.
+  SELECT ON VALIDATION ONLY -- the test set is locked.
+model:
+  preset: aux_w2.0
+  encoder_name: emilyalsentzer/Bio_ClinicalBERT
+  projection_dim: 256
+  freeze_bert: false
+  init_temperature: 10.0
+  init_lambda: 0.5
+  init_beta: 2.0
+  consistency_passes: 1
+optim:
+  encoder_lr: 2.0e-5
+  head_lr: 1.0e-3
+  weight_decay: 0.01
+  warmup_frac: 0.1
+  grad_accum: 1
+  grad_clip: 1.0
+  amp: true
+  eval_every: 250
+  val_episodes: 60
+threshold_objective: f1

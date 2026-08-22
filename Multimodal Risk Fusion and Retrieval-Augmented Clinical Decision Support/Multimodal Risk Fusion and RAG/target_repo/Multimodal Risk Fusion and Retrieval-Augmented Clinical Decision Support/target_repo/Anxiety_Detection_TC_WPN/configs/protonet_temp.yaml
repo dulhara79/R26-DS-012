@@ -1,0 +1,23 @@
+name: protonet_temp
+description: >
+  ProtoNet + learnable temperature only. Isolates how much of the gain is just logit scaling.
+model:
+  preset: protonet_temp
+  encoder_name: emilyalsentzer/Bio_ClinicalBERT
+  projection_dim: 256
+  freeze_bert: false
+  init_temperature: 10.0
+  init_lambda: 0.5
+  init_beta: 2.0
+  consistency_passes: 1
+optim:
+  encoder_lr: 2.0e-5
+  head_lr: 1.0e-3
+  weight_decay: 0.01
+  warmup_frac: 0.1
+  grad_accum: 1
+  grad_clip: 1.0
+  amp: true
+  eval_every: 250
+  val_episodes: 60
+threshold_objective: f1
