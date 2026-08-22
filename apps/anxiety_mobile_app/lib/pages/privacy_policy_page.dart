@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../theme/app_theme.dart';
 import '../services/background/service_config.dart';
 
@@ -9,7 +10,7 @@ class PrivacyPolicyPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.kBgTop,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Privacy Policy'),
         actions: [
@@ -24,7 +25,11 @@ class PrivacyPolicyPage extends StatelessWidget {
                 ),
                 child: Text(
                   'v${ServiceConfig.consentVersion}',
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.kPrimaryDeep),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.kPrimaryDeep,
+                  ),
                 ),
               ),
             ),
@@ -36,146 +41,127 @@ class PrivacyPolicyPage extends StatelessWidget {
         children: [
           _header(),
           const SizedBox(height: 20),
-          _section('1. Data Controller', 
+          _section(
+            '1. Who Is Responsible for Your Data',
             '${ServiceConfig.dataController}\n'
-            'Principal Investigator: ${ServiceConfig.piName}\n'
-            'Email: ${ServiceConfig.piEmail}\n\n'
-            'The Data Controller is responsible for ensuring that your personal '
-            'data is processed in accordance with the Sri Lanka Personal Data '
-            'Protection Act (PDPA), No. 9 of 2022.',
+                'Project: R26-DS-012\n'
+                'Research supervisor: ${ServiceConfig.supervisorName}\n'
+                'Email: ${ServiceConfig.supervisorEmail}\n\n'
+                'The final data-controller and ethics-approval details must be confirmed in the approved participant information sheet before recruitment.',
           ),
-          _section('2. Lawful Basis for Processing',
-            'We process your personal data under the following lawful bases as '
-            'defined by the PDPA:\n\n'
-            '• Explicit Consent: You have provided informed consent through the '
-            'in-app consent process.\n'
-            '• Scientific Research: Processing is necessary for scientific research '
-            'purposes, carried out in the public interest with appropriate safeguards.\n\n'
-            'Ethics Approval: ${ServiceConfig.ercApprovalNumber}\n'
-            'Approved by: ${ServiceConfig.ercName}',
+          _section(
+            '2. Purpose and Legal Basis',
+            'Aura processes pseudonymous research data to study personalized anxiety vulnerability and short-term escalation forecasting. Health-related data and other personal data are processed on the basis described in the final approved research protocol and your documented consent where consent is relied on.\n\n'
+                'Withdrawing consent does not make earlier lawful processing unlawful, but it stops future consent-based processing after the request is applied.\n\n'
+                'Ethics approval recorded in this app: ${ServiceConfig.ercApprovalNumber}',
           ),
-          _section('3. Personal Data We Collect',
-            'We collect the following categories of data:\n\n'
-            'Clinical Data:\n'
-            '• GAD-7 anxiety assessment scores (weekly)\n'
-            '• PSS-10 perceived stress scores (weekly)\n'
-            '• EMA mood ratings (3x daily)\n'
-            '• Touch pressure interactions\n\n'
-            'Sensor Data:\n'
-            '• Screen on/off/unlock events\n'
-            '• Significant motion events (accelerometer)\n'
-            '• Battery level and charging state\n\n'
-            'Communication Patterns (counts only):\n'
-            '• Number of incoming/outgoing/missed calls\n'
-            '• Number of sent/received SMS messages\n'
-            '(No names, numbers, or content are collected)\n\n'
-            'App Usage:\n'
-            '• Time spent in app categories (Social Media, Browser, etc.)\n'
-            '(Individual app names are replaced with categories)\n\n'
-            'Location:\n'
-            '• Periodic GPS coordinates fuzzed to ±1 km precision\n'
-            '(Exact location is never stored)\n\n'
-            'Demographics (collected once):\n'
-            '• Age, gender, marital status, employment, education\n'
-            '• Living situation, anxiety diagnosis history, medication status\n'
-            '• Self-reported sleep quality',
+          _section(
+            '3. Information We Collect',
+            'Research identity and profile:\n'
+                '• Random Participant ID\n'
+                '• Age, gender, marital status, employment, financial status, education, living situation, anxiety diagnosis, medication status, and sleep quality\n'
+                '• Your display name and optional profile picture stay locally on the phone and are not uploaded as research data\n\n'
+                'Check-in answers:\n'
+                '• GAD-7 weekly anxiety check answers and score\n'
+                '• PSS-10 weekly stress check answers and score\n'
+                '• Short mood check-ins three times a day\n\n'
+                'Phone activity:\n'
+                '• When the screen is turned on, turned off, or unlocked\n'
+                '• High-movement event times and movement magnitude\n'
+                '• Battery level and charging state\n'
+                '• Precise GPS latitude and longitude, movement speed, and the phone\'s reported location accuracy about every 15 minutes\n'
+                '• Individual app package names and the foreground duration recorded for each app about every 15 minutes\n\n'
+                'Communication totals:\n'
+                '• Number of incoming/outgoing/missed calls\n'
+                '• Number of sent/received SMS messages\n'
+                '• No names, numbers, message text, or call content\n\n'
+                'Wearable and model data:\n'
+                '• Heart-rate, heart-rate-variability, breathing, skin-temperature, and movement summaries\n'
+                '• Calibration values, risk estimates, 10-minute forecast trajectories, alerts, ratings, and follow-up feedback\n\n'
+                'Service and rights-request records:\n'
+                '• Heartbeat, restart, battery-warning, sync, and error records used to check data collection\n'
+                '• Requests to access, delete, or withdraw data and the Participant ID used for the request',
           ),
-          _section('4. Data We Do NOT Collect',
-            '• Your real name, phone number, or email address\n'
-            '• SMS or call content\n'
-            '• Contact lists or address books\n'
-            '• Photos, videos, or camera data\n'
-            '• Browsing history or search queries\n'
-            '• Passwords or financial information\n'
-            '• Social media account details',
+          _section(
+            '4. Data We Do NOT Collect',
+            '• Your display name or profile picture as uploaded research data\n'
+                '• Your phone number or email address through normal sensing\n'
+                '• SMS or call content\n'
+                '• Contact lists or address books\n'
+                '• Uploaded photos, videos, microphone, or camera data\n'
+                '• Browsing history or search queries\n'
+                '• Passwords or financial information\n'
+                '• Social media account details',
           ),
-          _section('5. How We Use Your Data',
-            'Your data is used exclusively for:\n\n'
-            '• Identifying digital behavioural patterns associated with anxiety\n'
-            '• Developing predictive models for anxiety detection\n'
-            '• Publishing anonymised, aggregated research findings\n'
-            '• Improving digital mental health interventions\n\n'
-            'We do NOT use your data for:\n'
-            '• Marketing or advertising\n'
-            '• Selling to third parties\n'
-            '• Individual profiling or automated decision-making\n'
-            '• Clinical diagnosis or treatment recommendations',
+          _section(
+            '5. How We Use Your Data',
+            'Your data is used to:\n\n'
+                '• Study wearable, phone-use, questionnaire, and related clinical patterns that may be associated with anxiety vulnerability\n'
+                '• Build and evaluate personalized models and short-term forecasts\n'
+                '• Show research estimates, reminders, alerts, and check-ins inside Aura\n'
+                '• Publish research findings that group many people together and do not identify you\n'
+                '• Test and improve the research system\n\n'
+                'We do NOT use your data for:\n'
+                '• Marketing or advertising\n'
+                '• Selling to third parties\n'
+                '• Automated decisions that determine legal rights, education, employment, insurance, or access to care\n'
+                '• Diagnosing or treating a health condition',
           ),
-          _section('6. Data Storage & Security',
-            'Storage: Data is stored in Google Cloud infrastructure (Google Sheets '
-            'via Google Apps Script), encrypted in transit via HTTPS/TLS.\n\n'
-            'Pseudonymisation: All data is linked only to your Participant ID. '
-            'Your real identity is not stored on research servers.\n\n'
-            'Access Control: Data access is restricted to authorised members of '
-            'the research team (${ServiceConfig.piAffiliation}).\n\n'
-            'Privacy Measures:\n'
-            '• GPS coordinates fuzzed to ±1 km\n'
-            '• App names replaced with categories\n'
-            '• Communication data limited to counts\n'
-            '• No message content or contact names stored',
+          _section(
+            '6. Data Storage & Security',
+            'Behavioral records, questionnaire answers, service records, data-rights requests, and chest-strap vital summaries are currently sent through Google Apps Script to Google Sheets. Physiological windows, calibration, forecasts, and feedback are also processed through Hugging Face Spaces and InfluxDB Cloud. Some pending records are temporarily held on the phone until they can be uploaded.\n\n'
+                'Research traffic uses HTTPS. Access controls, pseudonymous Participant IDs, and communication counts are used to reduce privacy risk. Precise location and package-level app usage are sensitive and must be available only to authorized researchers and approved processors. No system can promise perfect security.\n\n'
+                'Identity protection: All data is linked only to your Participant ID. '
+                'Your local display name and profile picture are not attached to uploaded research records.\n\n'
+                'Access must be limited to authorized researchers, ethics or institutional reviewers where required, and service providers needed to operate the study.',
           ),
-          _section('7. Cross-Border Data Transfer',
-            'Your pseudonymised data may be transferred to and stored on servers '
-            'located outside Sri Lanka (Google Cloud infrastructure).\n\n'
-            'This transfer is conducted with appropriate safeguards as required '
-            'by Section 25 of the PDPA, including:\n\n'
-            '• Data pseudonymisation before transfer\n'
-            '• HTTPS encryption for all data transmissions\n'
-            '• Access restricted to authorised researchers\n'
-            '• Your explicit consent for cross-border transfer',
+          _section(
+            '7. Data Stored Outside Sri Lanka',
+            'Google, Hugging Face, and InfluxDB services may process or store pseudonymous research data outside Sri Lanka. Cross-border processing must follow the Sri Lanka PDPA No. 9 of 2022, as amended, and any applicable approval, contractual, security, and consent requirements.\n\n'
+                'The final participant information sheet must identify the approved processors and safeguards before recruitment.',
           ),
-          _section('8. Data Retention',
-            'Your data will be retained for ${ServiceConfig.dataRetentionPeriod}.\n\n'
-            'After this period, all data associated with your Participant ID '
-            'will be permanently deleted from all storage systems.\n\n'
-            'Anonymised, aggregated data (which cannot be linked back to you) '
-            'may be retained indefinitely for future research reference.',
+          _section(
+            '8. How Long We Keep Your Data',
+            'Pseudonymous research data will be kept for ${ServiceConfig.dataRetentionPeriod}. That period must be replaced with a definite, approved duration before recruitment.\n\n'
+                'When the approved period ends, data linked to your Participant ID will be deleted or irreversibly anonymized unless law or an ethics-approved protocol requires otherwise. Truly anonymous grouped findings may be retained because they can no longer be linked to you.',
           ),
-          _section('9. Your Rights',
-            'Under the PDPA, you have the following rights:\n\n'
-            'Right to Access (Section 17): Request a copy of your data.\n\n'
-            'Right to Rectification (Section 18): Request correction of '
-            'inaccurate data.\n\n'
-            'Right to Erasure (Section 19): Request deletion of your data.\n\n'
-            'Right to Withdraw Consent (Section 5): Withdraw your consent '
-            'at any time without giving reasons.\n\n'
-            'Right to Object (Section 20): Object to specific data processing.\n\n'
-            'Right to Complain: Lodge a complaint with the Data Protection '
-            'Authority of Sri Lanka.\n\n'
-            'Response Time: We will respond to your request within 21 business '
-            'days as required by the PDPA.\n\n'
-            'To exercise these rights, use the Data Rights section in the app '
-            'or contact: ${ServiceConfig.researchTeamEmail}',
+          _section(
+            '9. Your Rights',
+            'Subject to applicable law and research requirements, you may ask to access, correct, erase, or restrict processing of your personal data; withdraw consent where processing relies on consent; leave the study without penalty; and complain or appeal to the relevant authority.\n\n'
+                'Withdrawal does not affect processing that was lawful before withdrawal. A request may require verification of your Participant ID and will be handled within the period required by law.\n\n'
+                'To use these rights, open Your Data and Privacy in the app '
+                'or contact: ${ServiceConfig.researchTeamEmail}',
           ),
-          _section('10. Data Sharing',
-            'We may share your data only in the following circumstances:\n\n'
-            '• Anonymised, aggregated findings in academic publications\n'
-            '• With the Ethics Review Committee for audit purposes\n'
-            '• If required by law or court order\n\n'
-            'We will NEVER sell your data to third parties or share identifiable '
-            'data outside the research team without your explicit consent.',
+          _section(
+            '10. Data Sharing',
+            'Data may be disclosed only as needed for:\n\n'
+                '• Google, Hugging Face, and InfluxDB services that process or store the study data\n'
+                '• Authorized researchers and institutional or ethics oversight\n'
+                '• Research reports containing grouped or anonymous findings\n'
+                '• If required by law or court order\n\n'
+                'The research team will not sell participant data or use it for advertising.',
           ),
-          _section('11. Changes to This Policy',
+          _section(
+            '11. Changes to This Policy',
             'We may update this privacy policy to reflect changes in our '
-            'practices or legal requirements. The version number and date '
-            'at the top of this document indicate the latest revision.\n\n'
-            'Material changes will be communicated through in-app notification.\n\n'
-            'Current Version: ${ServiceConfig.consentVersion}\n'
-            'Last Updated: ${ServiceConfig.consentDate}',
+                'practices or legal requirements. The version number and date '
+                'at the top of this document indicate the latest revision.\n\n'
+                'Material changes to the research purpose, data types, processors, retention, or risk will be communicated. New consent will be requested where required before the changed processing begins.\n\n'
+                'Current Version: ${ServiceConfig.consentVersion}\n'
+                'Last Updated: ${ServiceConfig.consentDate}',
           ),
-          _section('12. Contact Information',
-            'Principal Investigator:\n'
-            '${ServiceConfig.piName}\n'
-            '${ServiceConfig.piEmail}\n\n'
-            'Research Supervisor:\n'
-            '${ServiceConfig.supervisorName}\n'
-            '${ServiceConfig.supervisorEmail}\n\n'
-            'Ethics Review Committee:\n'
-            '${ServiceConfig.ercName}\n'
-            '${ServiceConfig.ercSecretaryEmail}\n\n'
-            'Data Controller:\n'
-            '${ServiceConfig.dataController}\n'
-            '${ServiceConfig.researchTeamEmail}',
+          _section(
+            '12. Contact Information',
+            'Research supervisor:\n'
+                '${ServiceConfig.piName}\n'
+                '${ServiceConfig.piEmail}\n\n'
+                'Research team:\n'
+                '${ServiceConfig.researchTeamEmail}\n\n'
+                'Ethics Review Committee:\n'
+                '${ServiceConfig.ercName}\n'
+                '${ServiceConfig.ercSecretaryEmail}\n\n'
+                'Data Controller:\n'
+                '${ServiceConfig.dataController}',
           ),
           const SizedBox(height: 40),
         ],
@@ -195,16 +181,27 @@ class PrivacyPolicyPage extends StatelessWidget {
         children: [
           Text(
             'Privacy Policy',
-            style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.kPrimaryDeep),
+            style: GoogleFonts.poppins(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.kPrimaryDeep,
+            ),
           ),
           const SizedBox(height: 4),
-          Text(ServiceConfig.studyTitle, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          Text(
+            ServiceConfig.studyTitle,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 8),
           Text(
             'This privacy policy explains how we collect, use, store, and protect '
             'your personal data in compliance with the Sri Lanka Personal Data '
-            'Protection Act (PDPA), No. 9 of 2022.',
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.5),
+            'Protection Act (PDPA), No. 9 of 2022, as amended. This version is for the research prototype and must be finalized against the approved protocol before participant recruitment.',
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade700,
+              height: 1.5,
+            ),
           ),
         ],
       ),
@@ -217,9 +214,12 @@ class PrivacyPolicyPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87)),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 8),
-          Text(content, style: TextStyle(fontSize: 13, height: 1.6, color: Colors.grey.shade800)),
+          Text(content, style: const TextStyle(fontSize: 13, height: 1.6)),
         ],
       ),
     );

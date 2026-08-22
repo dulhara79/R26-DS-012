@@ -1,182 +1,190 @@
-import 'dart:convert';
 import 'package:battery_plus/battery_plus.dart';
-import 'package:flutter/foundation.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:call_log/call_log.dart';
-import 'package:usage_stats/usage_stats.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_sms_inbox/flutter_sms_inbox.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:usage_stats/usage_stats.dart';
 import '../background_service_helper.dart';
 
 class DataCollector {
+  static const Duration _hourly = Duration(hours: 1);
+
   static Future<void> collectAndSync(String userId) async {
-    debugPrint("🚀 DataCollector: Starting sync for $userId");
+    debugPrint('🚀 DataCollector: Starting sync for $userId');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    await _collectHourlyHeartbeat(userId, prefs);
+    await _collectLocation(userId);
+    await _collectPreviousDayCommunication(userId, prefs);
+    await _collectAppUsage(userId);
+    await _collectHourlyBattery(userId, prefs);
+    await BackgroundServiceHelper.retryOfflineQueue();
+    debugPrint('✅ DataCollector: Sync Complete');
+  }
 
-    // 0. SERVICE HEARTBEAT — always succeeds, proves the service is alive.
-    await _sendData(
-      userId,
-      "Service_Heartbeat",
-      "Active_${DateTime.now().toIso8601String()}",
-    );
+  static Future<void> _collectHourlyHeartbeat(String userId, SharedPreferences prefs) async {
+    final now = DateTime.now();
+    final last = DateTime.tryParse(prefs.getString('c2_last_heartbeat_at') ?? '');
+    if (last != null && now.difference(last) < _hourly) return;
+    await _send(userId, 'Service_Heartbeat', {'status': 'active'}, eventTime: now);
+    await prefs.setString('c2_last_heartbeat_at', now.toIso8601String());
+  }
 
-    // A. LOCATION
+  static Future<void> _collectLocation(String userId) async {
     try {
-      debugPrint("📍 DataCollector: Requesting Location...");
-      final Position position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.medium,
-        ),
+      final p = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
       ).timeout(const Duration(seconds: 15));
-
-      final locData = {
-        'lat': position.latitude,
-        'lng': position.longitude,
-        'speed': position.speed,
-        'accuracy': position.accuracy,
-      };
-      await _sendData(userId, "Location", jsonEncode(locData));
+      await _send(userId, 'Location_Grid_100m', {
+        'lat': _round(p.latitude, 3),
+        'lng': _round(p.longitude, 3),
+        'speed_mps': _round(p.speed, 2),
+        'accuracy_m': _round(p.accuracy, 1),
+        'privacy_grid_decimals': 3,
+      });
     } catch (e) {
-      debugPrint("Location Error or Timeout: $e");
-      await _sendData(userId, "System_Log", "Location_Error: $e");
+      debugPrint('Location Error or Timeout: $e');
+      await _send(userId, 'System_Log', {'event': 'location_error', 'message': e.toString()});
+    }
+  }
+
+  /// Stores one complete communication aggregate for the previous local day.
+  /// This avoids 96 near-duplicate rolling records/day and avoids incomplete
+  /// "today so far" counts. Data before the recorded enrollment date is skipped.
+  static Future<void> _collectPreviousDayCommunication(
+    String userId,
+    SharedPreferences prefs,
+  ) async {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final targetStart = todayStart.subtract(const Duration(days: 1));
+    final targetEnd = todayStart;
+    final targetKey = _dateKey(targetStart);
+
+    if (prefs.getString('c2_last_communication_day') == targetKey) return;
+
+    final enrolledRaw = prefs.getString('enrolled_date');
+    final enrolled = enrolledRaw == null ? null : DateTime.tryParse(enrolledRaw);
+    if (enrolled != null) {
+      final enrolledStart = DateTime(enrolled.year, enrolled.month, enrolled.day);
+      if (targetStart.isBefore(enrolledStart)) {
+        await prefs.setString('c2_last_communication_day', targetKey);
+        return;
+      }
     }
 
-    // B. CALL LOGS (Last 24 h)
     try {
-      debugPrint("📞 DataCollector: Querying Call Logs...");
-      final int now = DateTime.now().millisecondsSinceEpoch;
-      final Iterable<CallLogEntry> entries = await CallLog.query(
-        dateFrom: now - (24 * 60 * 60 * 1000),
+      final entries = await CallLog.query(
+        dateFrom: targetStart.millisecondsSinceEpoch,
+        dateTo: targetEnd.millisecondsSinceEpoch - 1,
       ).timeout(const Duration(seconds: 10));
-
-      final callStats = {
-        'incoming':
-            entries.where((c) => c.callType == CallType.incoming).length,
-        'outgoing':
-            entries.where((c) => c.callType == CallType.outgoing).length,
+      await _send(userId, 'Call_Stats_Daily', {
+        'date': targetKey,
+        'incoming': entries.where((c) => c.callType == CallType.incoming).length,
+        'outgoing': entries.where((c) => c.callType == CallType.outgoing).length,
         'missed': entries.where((c) => c.callType == CallType.missed).length,
-        'rejected':
-            entries.where((c) => c.callType == CallType.rejected).length,
-      };
-      await _sendData(userId, "Call_Stats_24h", jsonEncode(callStats));
+        'rejected': entries.where((c) => c.callType == CallType.rejected).length,
+      });
     } catch (e) {
-      debugPrint("Call Log Error or Timeout: $e");
+      debugPrint('Call Log Error or Timeout: $e');
     }
 
-    // C. SMS COUNTS (today only — no content)
     try {
-      debugPrint("💬 DataCollector: Querying SMS...");
-      final SmsQuery query = SmsQuery();
-
-      final List<SmsMessage> inbox = await query
-          .querySms(kinds: [SmsQueryKind.inbox])
-          .timeout(const Duration(seconds: 10));
-
-      final List<SmsMessage> sent = await query
-          .querySms(kinds: [SmsQueryKind.sent])
-          .timeout(const Duration(seconds: 10));
-
-      final int receivedToday = inbox.where((m) => _isToday(m.date)).length;
-      final int sentToday = sent.where((m) => _isToday(m.date)).length;
-
-      await _sendData(
-        userId,
-        "SMS_Activity",
-        jsonEncode({
-          "received_today": receivedToday,
-          "sent_today": sentToday,
-          "total_today": receivedToday + sentToday,
-        }),
-      );
+      final query = SmsQuery();
+      final inbox = await query.querySms(kinds: [SmsQueryKind.inbox]).timeout(const Duration(seconds: 10));
+      final sent = await query.querySms(kinds: [SmsQueryKind.sent]).timeout(const Duration(seconds: 10));
+      final received = inbox.where((m) => _isSameLocalDay(m.date, targetStart)).length;
+      final sentCount = sent.where((m) => _isSameLocalDay(m.date, targetStart)).length;
+      await _send(userId, 'SMS_Activity_Daily', {
+        'date': targetKey,
+        'received': received,
+        'sent': sentCount,
+        'total': received + sentCount,
+      });
     } catch (e) {
-      debugPrint("SMS Error or Timeout: $e");
+      debugPrint('SMS Error or Timeout: $e');
     }
 
-    // D. APP USAGE (Last 15 min)
+    await prefs.setString('c2_last_communication_day', targetKey);
+  }
+
+  static Future<void> _collectAppUsage(String userId) async {
     try {
-      debugPrint("📱 DataCollector: Querying Usage Stats...");
-      final DateTime end = DateTime.now();
-      final DateTime start = end.subtract(const Duration(minutes: 15));
-
-      final List<UsageInfo> usage =
-          await UsageStats.queryUsageStats(start, end)
-              .timeout(const Duration(seconds: 10));
-
-      final Map<String, String> appUsage = {};
+      final end = DateTime.now();
+      final start = end.subtract(const Duration(minutes: 15));
+      final usage = await UsageStats.queryUsageStats(start, end).timeout(const Duration(seconds: 10));
+      final categories = <String, double>{};
       for (final u in usage) {
-        final int totalTime =
-            int.tryParse(u.totalTimeInForeground ?? "0") ?? 0;
-        if (totalTime > 1000) {
-          appUsage[u.packageName ?? "unknown"] =
-              "${(totalTime / 1000).toStringAsFixed(1)}s";
-        }
+        final ms = int.tryParse(u.totalTimeInForeground ?? '0') ?? 0;
+        if (ms <= 1000) continue;
+        final category = _categorizeApp(u.packageName ?? 'unknown');
+        categories[category] = (categories[category] ?? 0) + ms / 1000.0;
       }
-      if (appUsage.isNotEmpty) {
-        await _sendData(userId, "App_Usage_15m", jsonEncode(appUsage));
+      if (categories.isNotEmpty) {
+        await _send(userId, 'App_Usage_Category_15m', {
+          'window_minutes': 15,
+          'categories_sec': {for (final e in categories.entries) e.key: double.parse(e.value.toStringAsFixed(1))},
+        });
       }
     } catch (e) {
-      debugPrint("Usage Stats Error or Timeout: $e");
+      debugPrint('Usage Stats Error or Timeout: $e');
     }
+  }
 
-    // E. BATTERY STATUS — read live from battery_plus, not from stale prefs.
-    // BUG FIX: the original code read a prefs int that was only written when
-    // the battery STATE changed.  On a phone sitting idle at 80 % all day the
-    // key is never written, so every record shows "0%".
-    // Fix: query the battery level directly here.
+  static Future<void> _collectHourlyBattery(String userId, SharedPreferences prefs) async {
+    final now = DateTime.now();
+    final last = DateTime.tryParse(prefs.getString('c2_last_battery_upload_at') ?? '');
+    if (last != null && now.difference(last) < _hourly) return;
     try {
       final battery = Battery();
-      final int level = await battery.batteryLevel
-          .timeout(const Duration(seconds: 5));
-      final BatteryState state = await battery.batteryState
-          .timeout(const Duration(seconds: 5));
-
-      // Also update the prefs key so the background monitor stays in sync.
-      final prefs = await SharedPreferences.getInstance();
+      final level = await battery.batteryLevel.timeout(const Duration(seconds: 5));
+      final state = await battery.batteryState.timeout(const Duration(seconds: 5));
       await prefs.setInt('last_battery_level', level);
-
-      await _sendData(
-        userId,
-        "Battery_Status",
-        jsonEncode({
-          "level_percent": level,
-          "state": state.name,            // 'charging', 'discharging', etc.
-        }),
-      );
+      await _send(userId, 'Battery_Status', {'level_percent': level, 'state': state.name});
+      await prefs.setString('c2_last_battery_upload_at', now.toIso8601String());
     } catch (e) {
-      debugPrint("Battery Status Error: $e");
+      debugPrint('Battery Status Error: $e');
     }
-
-    // Push everything queued in this cycle to the server immediately.
-    await BackgroundServiceHelper.retryOfflineQueue();
-
-    debugPrint("✅ DataCollector: Sync Complete");
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // HELPERS
-  // ─────────────────────────────────────────────────────────────
-
-  static Future<void> _sendData(
-    String userId,
-    String dataType,
-    String value,
-  ) async {
+  static Future<void> _send(String userId, String type, dynamic value, {DateTime? eventTime}) async {
     try {
-      // Always re-read userId in case it was set after the service started.
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
-      final String currentId = prefs.getString('user_id') ?? userId;
-      await BackgroundServiceHelper.sendToSheet(currentId, dataType, value);
-      debugPrint("📤 Queued: $dataType");
+      final currentId = prefs.getString('user_id') ?? userId;
+      await BackgroundServiceHelper.enqueueResearchEvent(currentId, type, value, eventTime: eventTime);
+      debugPrint('📤 Queued: $type');
     } catch (e) {
-      debugPrint("Queue Error for $dataType: $e");
+      debugPrint('Queue Error for $type: $e');
     }
   }
 
-  static bool _isToday(DateTime? date) {
-    if (date == null) return false;
-    final now = DateTime.now();
-    return date.year == now.year &&
-        date.month == now.month &&
-        date.day == now.day;
+  static bool _isSameLocalDay(DateTime? value, DateTime day) {
+    if (value == null) return false;
+    return value.year == day.year && value.month == day.month && value.day == day.day;
+  }
+
+  static String _dateKey(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  static double _round(double value, int decimals) {
+    final factor = decimals == 1 ? 10.0 : decimals == 2 ? 100.0 : 1000.0;
+    return (value * factor).roundToDouble() / factor;
+  }
+
+  static String _categorizeApp(String pkg) {
+    final p = pkg.toLowerCase();
+    if (RegExp(r'whatsapp|telegram|signal|viber|messenger|instagram|snapchat|tiktok|facebook|twitter|linkedin').hasMatch(p)) return 'Social_Media';
+    if (RegExp(r'chrome|firefox|brave|opera|samsung.*internet|browser').hasMatch(p)) return 'Browser';
+    if (RegExp(r'youtube|netflix|spotify|prime.*video|disney|media').hasMatch(p)) return 'Entertainment';
+    if (RegExp(r'gmail|outlook|mail|email').hasMatch(p)) return 'Email';
+    if (RegExp(r'maps|waze|uber|grab|ola|navigation|gps').hasMatch(p)) return 'Maps_Navigation';
+    if (RegExp(r'camera|gallery|photo|video').hasMatch(p)) return 'Camera_Gallery';
+    if (RegExp(r'game|clash|pubg|free.*fire').hasMatch(p)) return 'Games';
+    if (RegExp(r'settings|launcher|home|systemui|android\.').hasMatch(p)) return 'System';
+    if (RegExp(r'bank|pay|wallet|finance|money').hasMatch(p)) return 'Finance';
+    if (RegExp(r'learn|study|course|education|university').hasMatch(p)) return 'Education';
+    if (RegExp(r'health|fitness|medic|hospital|therapy|mental|anxiety|doctor').hasMatch(p)) return 'Health_Wellness';
+    return 'Other';
   }
 }

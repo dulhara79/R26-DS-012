@@ -5,7 +5,7 @@
  * ================================================================
  */
 
-var ROTATED_TABS = ["Raw", "EMA"];
+var ROTATED_TABS = ["Raw", "EMA", "Physio"];
 var DATATYPE_TO_FAMILY = {
   "EMA_Rating_morning":   "EMA",
   "EMA_Rating_afternoon": "EMA",
@@ -17,12 +17,16 @@ var DATATYPE_TO_FAMILY = {
   "Consent_Withdrawal":   "Consent_Log",
   "Data_Deletion_Request": "Consent_Log",
   "Data_Export_Request":  "Consent_Log",
+  "Physio_Vitals":        "Physio",
 };
 
 var HEADERS = {
   "Raw": ["Timestamp","Date","Time","Participant ID","Data Type","Value"],
   "EMA": ["Timestamp","Date","Time","Participant ID","Period",
           "Stress","Anxiety","Fatigue","Social","Activity Context","Raw JSON"],
+  "Physio": ["Timestamp","Date","Time","Participant ID",
+             "Heart Rate","Breathing Rate","Body Temp",
+             "Motion Magnitude","Risk Score","Risk Label","Raw JSON"],
   "GAD7": ["Timestamp","Date","Participant ID","Total Score (0-21)","Severity",
            "Q1","Q2","Q3","Q4","Q5","Q6","Q7","Raw JSON"],
   "PSS10": ["Timestamp","Date","Participant ID","Total Score (0-40)",
@@ -236,7 +240,14 @@ function processUser(userId, entries, props) {
     try {
       var tab  = resolveTab(ss, fam, byFamily[fam], tz);
       var rows = buildRows(byFamily[fam], fam, userId, tz, ss);
-      if (rows.length > 0) { writeRows(tab, rows); written += rows.length; }
+      
+      // Deduplicate rows both against target sheet (last 100 rows) and within this batch
+      var uniqueRows = filterDuplicates(tab, rows, fam, tz);
+      
+      if (uniqueRows.length > 0) { 
+        writeRows(tab, uniqueRows); 
+        written += uniqueRows.length; 
+      }
     } catch (err) {
       console.error("[processUser] fam=" + fam + " err=" + err);
       logError(ss, userId, fam, byFamily[fam], String(err));
@@ -269,9 +280,19 @@ function buildRows(entries, family, userId, tz, ss) {
       } else if (family === "EMA") {
         var ema    = safeJSON(valStr);
         var period = ema.period || String(item.dataType||"").replace("EMA_Rating_","") || "unknown";
-        row = [ts, date, time, userId, capitalize(period),
+        row = [ts, date, time, userId, period.toLowerCase(),
                ema.stress||"", ema.anxiety||"", ema.fatigue||"", ema.social||"",
                ema.context||"", valStr];
+      } else if (family === "Physio") {
+        var phy = safeJSON(valStr);
+        row = [ts, date, time, userId,
+               phy.heart_rate!==undefined?phy.heart_rate:"",
+               phy.breathing_rate!==undefined?phy.breathing_rate:"",
+               phy.body_temp!==undefined?phy.body_temp:"",
+               phy.motion_magnitude!==undefined?phy.motion_magnitude:"",
+               phy.risk_score!==undefined?phy.risk_score:"",
+               phy.risk_label||"",
+               valStr];
       } else if (family === "GAD7") {
         var gad = safeJSON(valStr);
         var ans = Array.isArray(gad.answers) ? gad.answers : [];
@@ -320,6 +341,87 @@ function writeRows(tab, rows) {
       try { tab.appendRow(row); } catch(e2) { console.error("[appendRow failed] " + e2); }
     });
   }
+}
+
+// ════════════════════════════════════════════════════════════
+// DEDUPLICATION HELPERS
+// ════════════════════════════════════════════════════════════
+
+function filterDuplicates(tab, rows, family, tz) {
+  var lastRow = tab.getLastRow();
+  if (lastRow <= 1) {
+    // Only header or empty sheet, so all rows are unique
+    return rows;
+  }
+  
+  // Retrieve the last 100 rows to compare against. 
+  // Checking the last 100 rows is extremely fast and covers recent updates.
+  var startRow = Math.max(2, lastRow - 99); 
+  var numRows = lastRow - startRow + 1;
+  var existingRows = tab.getRange(startRow, 1, numRows, tab.getLastColumn()).getValues();
+  
+  var uniqueRows = [];
+  rows.forEach(function(newRow) {
+    var isDuplicateInSheet = false;
+    for (var j = 0; j < existingRows.length; j++) {
+      if (rowsAreEqual(newRow, existingRows[j], family, tz)) {
+        isDuplicateInSheet = true;
+        break;
+      }
+    }
+    
+    var isDuplicateInBatch = false;
+    for (var k = 0; k < uniqueRows.length; k++) {
+      if (rowsAreEqual(newRow, uniqueRows[k], family, tz)) {
+        isDuplicateInBatch = true;
+        break;
+      }
+    }
+    
+    if (!isDuplicateInSheet && !isDuplicateInBatch) {
+      uniqueRows.push(newRow);
+    } else {
+      console.log("[DEDUPLICATED] Skipped duplicate row for family=" + family + " values=" + JSON.stringify(newRow.slice(1, 6)));
+    }
+  });
+  
+  return uniqueRows;
+}
+
+function rowsAreEqual(rowNew, rowExisting, family, tz) {
+  if (rowNew.length !== rowExisting.length) return false;
+  
+  // Skip column 0 (raw Date timestamp which has millisecond differences between double-taps)
+  for (var col = 1; col < rowNew.length; col++) {
+    var valNew = rowNew[col];
+    var valExt = rowExisting[col];
+    
+    if (col === 1) {
+      // Date column
+      if (!matchDates(valNew, valExt, tz)) return false;
+    } else if (col === 2 && (family === "Raw" || family === "EMA")) {
+      // Time column
+      if (!matchTimes(valNew, valExt, tz)) return false;
+    } else {
+      // General column string matching
+      if (String(valNew).trim() !== String(valExt).trim()) return false;
+    }
+  }
+  return true;
+}
+
+function matchDates(valA, valB, tz) {
+  if (valA === valB) return true;
+  var strA = valA instanceof Date ? Utilities.formatDate(valA, tz, "yyyy-MM-dd") : String(valA || "").trim();
+  var strB = valB instanceof Date ? Utilities.formatDate(valB, tz, "yyyy-MM-dd") : String(valB || "").trim();
+  return strA.split(" ")[0] === strB.split(" ")[0];
+}
+
+function matchTimes(valA, valB, tz) {
+  if (valA === valB) return true;
+  var strA = valA instanceof Date ? Utilities.formatDate(valA, tz, "HH:mm:ss") : String(valA || "").trim();
+  var strB = valB instanceof Date ? Utilities.formatDate(valB, tz, "HH:mm:ss") : String(valB || "").trim();
+  return strA === strB;
 }
 
 function logError(ss, userId, dataType, items, reason) {
