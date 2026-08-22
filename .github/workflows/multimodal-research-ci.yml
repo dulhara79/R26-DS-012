@@ -1,0 +1,137 @@
+name: Multimodal Research CI
+
+on:
+  pull_request:
+    paths:
+      - 'Multimodal Risk Fusion and Retrieval-Augmented Clinical Decision Support/**'
+      - '.github/workflows/multimodal-research-ci.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'Multimodal Risk Fusion and Retrieval-Augmented Clinical Decision Support/**'
+      - '.github/workflows/multimodal-research-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: multimodal-research-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TARGET_ROOT: Multimodal Risk Fusion and Retrieval-Augmented Clinical Decision Support
+
+jobs:
+  repository-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate research folder
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$TARGET_ROOT"
+          echo "Research folder found."
+          find "$TARGET_ROOT" -maxdepth 2 -type f | head -200
+
+      - name: Reject committed secrets and generated junk
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          bad_files="$(find "$TARGET_ROOT" \
+            -type f \
+            \( -name '.env' -o -name '*.pem' -o -name '*.key' -o -name '.DS_Store' \) \
+            -print || true)"
+
+          if [[ -n "$bad_files" ]]; then
+            echo "Potentially unsafe/generated files detected:"
+            echo "$bad_files"
+            exit 1
+          fi
+
+  python-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            Multimodal Risk Fusion and Retrieval-Augmented Clinical Decision Support/**/requirements*.txt
+            Multimodal Risk Fusion and Retrieval-Augmented Clinical Decision Support/**/pyproject.toml
+
+      - name: Compile Python sources
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if find "$TARGET_ROOT" -type f -name '*.py' -print -quit | grep -q .; then
+            python -m compileall -q "$TARGET_ROOT"
+          else
+            echo "No Python files found; skipping Python compilation."
+          fi
+
+      - name: Run pytest where available
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t reqs < <(find "$TARGET_ROOT" -type f -name 'requirements*.txt' | sort)
+          if (( ${#reqs[@]} > 0 )); then
+            python -m pip install --upgrade pip
+            for req in "${reqs[@]}"; do
+              echo "Installing $req"
+              pip install -r "$req"
+            done
+          fi
+
+          if find "$TARGET_ROOT" -type f \( -name 'test_*.py' -o -name '*_test.py' \) -print -quit | grep -q .; then
+            pip install pytest
+            pytest -q "$TARGET_ROOT"
+          else
+            echo "No pytest tests found; skipping tests."
+          fi
+
+  flutter-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect Flutter projects
+        id: flutter
+        shell: bash
+        run: |
+          set -euo pipefail
+          count="$(find "$TARGET_ROOT" -type f -name pubspec.yaml | wc -l | tr -d ' ')"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - uses: subosito/flutter-action@v2
+        if: steps.flutter.outputs.count != '0'
+        with:
+          channel: stable
+          cache: true
+
+      - name: Analyze Flutter projects
+        if: steps.flutter.outputs.count != '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          while IFS= read -r pubspec; do
+            project_dir="$(dirname "$pubspec")"
+            echo "Validating Flutter/Dart project: $project_dir"
+            (
+              cd "$project_dir"
+              flutter pub get
+              flutter analyze
+              if [[ -d test ]]; then
+                flutter test
+              fi
+            )
+          done < <(find "$TARGET_ROOT" -type f -name pubspec.yaml | sort)

@@ -1,0 +1,161 @@
+name: Sync Multimodal Research Components
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Component to sync"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - care-anxrag
+          - component4final
+  repository_dispatch:
+    types:
+      - sync-care-anxrag
+      - sync-component4final
+  schedule:
+    - cron: "17 2 * * 1"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-multimodal-research-components
+  cancel-in-progress: false
+
+env:
+  TARGET_ROOT: Multimodal Risk Fusion and Retrieval-Augmented Clinical Decision Support
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main research repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve requested source
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          requested="${{ github.event.inputs.source || '' }}"
+
+          if [[ "${{ github.event_name }}" == "repository_dispatch" ]]; then
+            case "${{ github.event.action }}" in
+              sync-care-anxrag) requested="care-anxrag" ;;
+              sync-component4final) requested="component4final" ;;
+              *) requested="all" ;;
+            esac
+          fi
+
+          if [[ -z "$requested" ]]; then
+            requested="all"
+          fi
+
+          echo "requested=$requested" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare temporary workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/research-sync
+          mkdir -p /tmp/research-sync
+
+      - name: Sync Care-AnxRAG safely
+        if: steps.source.outputs.requested == 'all' || steps.source.outputs.requested == 'care-anxrag'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git clone --depth 1 https://github.com/UVINDUSEN/Care-AnxRAG.git /tmp/research-sync/Care-AnxRAG
+
+          destination="$TARGET_ROOT/Care-AnxRAG"
+          mkdir -p "$destination"
+
+          rsync -a \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='__pycache__/' \
+            --exclude='.pytest_cache/' \
+            --exclude='.mypy_cache/' \
+            --exclude='.ruff_cache/' \
+            --exclude='.venv/' \
+            --exclude='venv/' \
+            --exclude='node_modules/' \
+            --exclude='.DS_Store' \
+            /tmp/research-sync/Care-AnxRAG/ "$destination/"
+
+      - name: Sync component4final safely
+        if: steps.source.outputs.requested == 'all' || steps.source.outputs.requested == 'component4final'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git clone --depth 1 https://github.com/UVINDUSEN/component4final.git /tmp/research-sync/component4final
+
+          destination="$TARGET_ROOT/component4final"
+          mkdir -p "$destination"
+
+          rsync -a \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='__pycache__/' \
+            --exclude='.pytest_cache/' \
+            --exclude='.mypy_cache/' \
+            --exclude='.ruff_cache/' \
+            --exclude='.venv/' \
+            --exclude='venv/' \
+            --exclude='node_modules/' \
+            --exclude='build/' \
+            --exclude='.dart_tool/' \
+            --exclude='.DS_Store' \
+            /tmp/research-sync/component4final/ "$destination/"
+
+      - name: Verify protected research folder still exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$TARGET_ROOT"
+
+          echo "Files changed by sync:"
+          git status --short -- "$TARGET_ROOT"
+
+      - name: Block accidental deletions
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git status --porcelain -- "$TARGET_ROOT" | grep -q '^ D\|^D '; then
+            echo "ERROR: Sync attempted to delete existing research files."
+            git status --short -- "$TARGET_ROOT"
+            exit 1
+          fi
+
+      - name: Commit synchronized changes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet && git diff --cached --quiet && [[ -z "$(git ls-files --others --exclude-standard -- "$TARGET_ROOT")" ]]; then
+            echo "No synchronization changes detected."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -- "$TARGET_ROOT"
+
+          if git diff --cached --quiet; then
+            echo "No staged synchronization changes detected."
+            exit 0
+          fi
+
+          git commit -m "chore(research): sync multimodal research components"
+          git push origin HEAD:${{ github.ref_name }}
