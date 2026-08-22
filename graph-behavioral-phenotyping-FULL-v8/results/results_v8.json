@@ -1,0 +1,88 @@
+{
+  "version": "component2_consolidated_v8",
+  "dataset": {
+    "name": "GLOBEM",
+    "development_cohort": "INS-W_1",
+    "final_cohorts": [
+      "INS-W_2",
+      "INS-W_3",
+      "INS-W_4"
+    ],
+    "graphs_total": 6362,
+    "participants_total": 700,
+    "final_windows": 4735,
+    "final_participants": 547,
+    "window_days": 28,
+    "node_raw_dim": 80
+  },
+  "headline": {
+    "auroc": 0.5205,
+    "auroc_ci": [
+      0.485,
+      0.56
+    ],
+    "null_mean": 0.4991,
+    "null_sd": 0.0333,
+    "n_permutations": 50,
+    "p_empirical": 0.255,
+    "auprc": 0.227,
+    "brier": 0.1847,
+    "brier_skill": -0.0752,
+    "resolution": 0.00064,
+    "ece": 0.084,
+    "verdict": "not distinguishable from chance"
+  },
+  "baselines": {
+    "Logistic Regression": 0.5458,
+    "Random Forest": 0.5617,
+    "Gradient Boosting": 0.5681,
+    "GATv2": 0.5205,
+    "graph_gain_vs_best": -0.0439
+  },
+  "loco": {
+    "GATv2": {
+      "pooled": 0.5529,
+      "loco": 0.5036,
+      "gap": 0.0493
+    },
+    "Logistic Regression": {
+      "pooled": 0.5832,
+      "loco": 0.5553,
+      "gap": 0.0279
+    },
+    "Random Forest": {
+      "pooled": 0.5654,
+      "loco": 0.5417,
+      "gap": 0.0237
+    },
+    "Gradient Boosting": {
+      "pooled": 0.5503,
+      "loco": 0.5385,
+      "gap": 0.0117
+    },
+    "graph_robustness_supported": false
+  },
+  "feature_breadth_control": {
+    "n_features": 5952,
+    "auroc": 0.5335,
+    "ci": [
+      0.496,
+      0.571
+    ]
+  },
+  "label_reliability": {
+    "sensitivity": 0.86,
+    "specificity": 0.83,
+    "reference_auroc": 0.7714,
+    "graph_fraction_captured": 0.076
+  },
+  "compliance_ablation": {
+    "availability_volume_only": 0.5172,
+    "behavioral_values_only": 0.5616,
+    "both": 0.5681
+  },
+  "deployment": {
+    "fusion_weight": 0.0,
+    "surface_as_clinical_risk_score": false
+  }
+}
