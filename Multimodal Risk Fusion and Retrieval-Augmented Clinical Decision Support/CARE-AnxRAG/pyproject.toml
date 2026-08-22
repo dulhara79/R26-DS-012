@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "care-anxrag"
+version = "0.1.0"
+description = "Contradiction-, authority-, reliability-, and evidence-aware RAG for anxiety information research"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{name = "CARE-AnxRAG Research Project"}]
+dependencies = [
+  "beautifulsoup4>=4.12,<5",
+  "fastapi>=0.115,<1",
+  "httpx>=0.27,<1",
+  "networkx>=3.2,<4",
+  "numpy>=1.26,<3",
+  "pydantic>=2.8,<3",
+  "PyYAML>=6,<7",
+  "typer>=0.12,<1",
+  "uvicorn>=0.30,<1",
+]
+
+[project.optional-dependencies]
+production = [
+  "chromadb>=1.5.9,<2",
+  "sentence-transformers>=3,<6",
+]
+dev = [
+  "build>=1.2,<2",
+  "coverage>=7,<8",
+  "pytest>=8,<10",
+]
+
+[project.scripts]
+care-anxrag = "care_anxrag.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+care_anxrag = ["resources/*.yaml", "resources/*.example"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"]

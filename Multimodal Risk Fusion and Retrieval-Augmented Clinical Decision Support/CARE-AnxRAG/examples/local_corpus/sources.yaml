@@ -1,0 +1,15 @@
+sources:
+  - id: synthetic_demo
+    name: Synthetic Validation Corpus
+    connector: local_files
+    enabled: true
+    publish_to_rag: true
+    auto_promote: true
+    layer: clinical_core
+    authority_score: 0.50
+    evidence_level: general_information
+    check_interval_minutes: 60
+    settings:
+      path: examples/local_corpus
+      patterns:
+        - "*.md"
