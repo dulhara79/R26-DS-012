@@ -1,0 +1,76 @@
+.gitignore for Python project — organized sections
+
+# --- Virtual environments ---
+.venv/
+venv/
+ENV/
+env/
+
+# --- Environment files / secrets ---
+.env
+.env.*
+
+# --- Python bytecode / caches ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Distribution / packaging ---
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# --- Installer / pip files ---
+pip-log.txt
+pip-delete-this-directory.txt
+
+# --- Test / coverage ---
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# --- Type checkers / language server ---
+.mypy_cache/
+.pyright/
+
+# --- IDEs / editors ---
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# --- OS generated files ---
+.DS_Store
+Thumbs.db
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- Logs ---
+*.log
+*.out
+
+# --- Project data, exports, and large binaries (project-specific) ---
+# Keep dataset and output files out of the repository.
+mimic_pkl/
+mimic_processed/
+logs/
+*.csv
+*.xlsx
+*.xls
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.docx
+*.zip
+*.tar.gz
+*.pkl
+
+what_next.txt

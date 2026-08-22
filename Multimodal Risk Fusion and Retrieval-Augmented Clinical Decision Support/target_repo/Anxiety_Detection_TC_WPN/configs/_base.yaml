@@ -1,0 +1,14 @@
+# _base.yaml — shared optimiser block. Not runnable on its own; every concrete
+# config repeats these keys explicitly so that a results/ directory is always
+# self-describing (no hidden inheritance to reconstruct months later).
+optim:
+  encoder_lr: 2.0e-5      # Bio_ClinicalBERT
+  head_lr: 1.0e-3         # projection, weighting modules, temperature
+  weight_decay: 0.01
+  warmup_frac: 0.1
+  grad_accum: 1
+  grad_clip: 1.0
+  amp: true
+  eval_every: 250
+  val_episodes: 60
+threshold_objective: f1   # threshold locked on VAL, never re-tuned on test
