@@ -1,0 +1,233 @@
+{
+  "generated_at": "2026-08-16T21:11:22.196738+00:00",
+  "status": "passed",
+  "project": {
+    "name": "care-anxrag",
+    "version": "0.1.0"
+  },
+  "environment": {
+    "python": "3.13.5",
+    "platform": "Linux-6.18.35-x86_64-with-glibc2.41",
+    "sqlite": "3.46.1"
+  },
+  "static_audit": {
+    "status": "passed",
+    "python_compileall": "passed",
+    "tabnanny": "passed",
+    "shell_syntax": "passed",
+    "pyproject_toml": "passed",
+    "yaml_documents": [
+      "config/sources.yaml",
+      "compose.yaml",
+      "CITATION.cff"
+    ],
+    "source_registry_count": 7,
+    "enabled_source_count": 5,
+    "packaged_resources_match": true,
+    "benchmark_record_count": 2,
+    "local_markdown_links_checked": 7,
+    "ruff": {
+      "status": "not_executed",
+      "reason": "Ruff is not installed in the offline validation environment; compileall, tabnanny, shell parsing, tests, and package audits were executed instead."
+    }
+  },
+  "tests": {
+    "total": 66,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "coverage": {
+    "percent_covered": 75.17942583732058,
+    "covered_lines": 2514,
+    "missing_lines": 830,
+    "num_statements": 3344,
+    "required_minimum_percent": 70
+  },
+  "selfcheck": {
+    "health": {
+      "status": "ok",
+      "database": true,
+      "vector_store": true,
+      "ollama": null,
+      "details": {
+        "database_path": "/tmp/care-anxrag-validation.ZDCsMS/selfcheck/care.sqlite3",
+        "vector_backend": "sqlite",
+        "embedding_provider": "hash",
+        "generator_provider": "rule",
+        "reranker_provider": "heuristic",
+        "nli_provider": "heuristic",
+        "runtime_embedding_identity": "hash:256:v2",
+        "stored_embedding_identity": null,
+        "embedding_identity_ok": true,
+        "clinical_vectors": 0,
+        "research_vectors": 0
+      }
+    },
+    "database_integrity": "ok",
+    "source_count": 7,
+    "weights_sum": 1.0
+  },
+  "offline_acceptance": {
+    "status": "passed",
+    "sync": {
+      "run_id": "ab5f560245b079f3aae252ab",
+      "started_at": "2026-08-16T21:11:13.854126Z",
+      "finished_at": "2026-08-16T21:11:13.865055Z",
+      "source_ids": [
+        "synthetic_demo"
+      ],
+      "discovered": 1,
+      "unchanged": 0,
+      "staged": 0,
+      "promoted": 1,
+      "rejected": 0,
+      "failed": 0,
+      "errors": []
+    },
+    "database_integrity": "ok",
+    "clinical_vector_count": 1,
+    "research_vector_count": 0,
+    "answerable": {
+      "abstained": false,
+      "citation_count": 1,
+      "confidence": 0.5350066879777264
+    },
+    "out_of_domain": {
+      "abstained": true,
+      "reason": "no_active_evidence_after_conflict_resolution"
+    },
+    "crisis": {
+      "abstained": true,
+      "safety_level": "crisis"
+    },
+    "evaluation": {
+      "count": 2,
+      "retrieval_evaluable_count": 1,
+      "recall_at_5": 1.0,
+      "precision_at_5": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_5": 1.0,
+      "abstention_accuracy": 1.0,
+      "conflict_accuracy": 1.0,
+      "citation_validity": 1.0,
+      "per_item": [
+        {
+          "id": "example-answerable",
+          "recall_at_5": 1.0,
+          "precision_at_5": 1.0,
+          "reciprocal_rank": 1.0,
+          "ndcg_at_5": 1.0,
+          "predicted_abstain": false,
+          "expected_abstain": false,
+          "conflict_score": 0.0,
+          "expected_conflict": false,
+          "citation_valid": true,
+          "retrieved_chunk_ids": [
+            "bff86ebaf73dc7e6a5aa41f7acd426f230736b58"
+          ]
+        },
+        {
+          "id": "example-out-of-domain",
+          "recall_at_5": null,
+          "precision_at_5": null,
+          "reciprocal_rank": null,
+          "ndcg_at_5": null,
+          "predicted_abstain": true,
+          "expected_abstain": true,
+          "conflict_score": 0.0,
+          "expected_conflict": false,
+          "citation_valid": true,
+          "retrieved_chunk_ids": [
+            "bff86ebaf73dc7e6a5aa41f7acd426f230736b58"
+          ]
+        }
+      ]
+    },
+    "reconciliation": {
+      "active_chunks": 1,
+      "indexed": 1,
+      "deleted_stale": 0,
+      "embedding_identity": "hash:256:v2",
+      "identity_reset": false
+    }
+  },
+  "package": {
+    "status": "passed",
+    "wheel": {
+      "name": "care_anxrag-0.1.0-py3-none-any.whl",
+      "size_bytes": 83034,
+      "sha256": "12f7c41315aab2c0ec627d61e6990d6da6593d765893e42311defbf8a79b1062",
+      "file_count": 41,
+      "required_files_present": true
+    },
+    "source_distribution": {
+      "name": "care_anxrag-0.1.0.tar.gz",
+      "size_bytes": 113163,
+      "sha256": "87bfbe894413f975dcfda3474133e9f6e4d2403a52aa550d01083e669366f7ba",
+      "file_count": 99,
+      "required_files_present": true
+    },
+    "isolated_target_install": "passed",
+    "import_and_cli": "passed",
+    "installed_wheel_init": {
+      "scaffold": {
+        "/tmp/care-anxrag-validation.ZDCsMS/wheel-project/config/sources.yaml": "written",
+        "/tmp/care-anxrag-validation.ZDCsMS/wheel-project/.env.example": "written"
+      },
+      "health": {
+        "status": "ok",
+        "database": true,
+        "vector_store": true,
+        "ollama": null,
+        "details": {
+          "database_path": "/tmp/care-anxrag-validation.ZDCsMS/wheel-project/var/care.sqlite3",
+          "vector_backend": "sqlite",
+          "embedding_provider": "hash",
+          "generator_provider": "rule",
+          "reranker_provider": "heuristic",
+          "nli_provider": "heuristic",
+          "runtime_embedding_identity": "hash:256:v2",
+          "stored_embedding_identity": null,
+          "embedding_identity_ok": true,
+          "clinical_vectors": 0,
+          "research_vectors": 0
+        }
+      }
+    },
+    "installed_wheel_selfcheck": {
+      "health": {
+        "status": "ok",
+        "database": true,
+        "vector_store": true,
+        "ollama": null,
+        "details": {
+          "database_path": "/tmp/care-anxrag-validation.ZDCsMS/wheel-project/var/care.sqlite3",
+          "vector_backend": "sqlite",
+          "embedding_provider": "hash",
+          "generator_provider": "rule",
+          "reranker_provider": "heuristic",
+          "nli_provider": "heuristic",
+          "runtime_embedding_identity": "hash:256:v2",
+          "stored_embedding_identity": null,
+          "embedding_identity_ok": true,
+          "clinical_vectors": 0,
+          "research_vectors": 0
+        }
+      },
+      "database_integrity": "ok",
+      "source_count": 7,
+      "weights_sum": 1.0
+    }
+  },
+  "release_source_tree_sha256": "61c8dfffca56d00aa6c2a5309d64b384cdabcbcb9b487c24aed1f87748bd8372",
+  "not_executed_in_this_offline_environment": [
+    "live NIMH/WHO/PubMed/PMC/NICE synchronization",
+    "licensed NICE endpoint authentication",
+    "real Chroma persistence with chromadb",
+    "real Ollama embedding and generation",
+    "real Sentence Transformers reranker/NLI inference",
+    "clinical correctness, clinical safety, or regulatory validation",
+    "online dependency resolution and vulnerability scanning"
+  ]
+}

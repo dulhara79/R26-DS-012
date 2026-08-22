@@ -1,0 +1,24 @@
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.DS_Store
+
+# Environments
+.venv/
+venv/
+env/
+
+# Data / large generated artefacts
+globem/
+data/raw/
+outputs/
+outputs_v8/
+saved_models/
+*.pt
+*.pth
+*.pkl
+*.npy
+*.npz
+
+# Local configuration
+.env

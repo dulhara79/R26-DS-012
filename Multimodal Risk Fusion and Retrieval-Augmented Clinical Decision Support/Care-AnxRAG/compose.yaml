@@ -1,0 +1,46 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      CARE_PROJECT_ROOT: /app
+      CARE_HOME: /app/var
+      CARE_DATABASE_PATH: /app/var/care_anxrag.sqlite3
+      CARE_VECTOR_PATH: /app/var/chroma
+      CARE_SOURCE_REGISTRY: /app/config/sources.yaml
+      CARE_OLLAMA_BASE_URL: http://ollama:11434
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - care-data:/app/var
+      - model-cache:/home/care/.cache
+      - ./config:/app/config:ro
+      - ./data/local:/app/data/local:ro
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  care-data:
+  model-cache:
+  ollama-data:

@@ -1,0 +1,206 @@
+name: Sync Multimodal Research Components
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Component to sync"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - care-anxrag
+          - component4final
+  repository_dispatch:
+    types:
+      - sync-care-anxrag
+      - sync-component4final
+  schedule:
+    - cron: "17 2 * * 1"
+
+# The workflow uses MAIN_REPO_TOKEN for branch creation and PR creation.
+# Keep the built-in token read-only.
+permissions:
+  contents: read
+
+env:
+  TARGET_ROOT: Multimodal Risk Fusion and Retrieval-Augmented Clinical Decision Support
+  SYNC_TOKEN: ${{ secrets.MAIN_REPO_TOKEN }}
+  BASE_BRANCH: ${{ github.event.repository.default_branch }}
+
+concurrency:
+  group: sync-multimodal-research-components
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate sync token
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${SYNC_TOKEN:-}" ]]; then
+            echo "ERROR: MAIN_REPO_TOKEN is not configured in the R26-DS-012 repository."
+            echo "Add it under Settings > Secrets and variables > Actions > Repository secrets."
+            echo "The token needs access to R26-DS-012 with Contents: Read and write and Pull requests: Read and write."
+            exit 1
+          fi
+
+      - name: Checkout main research repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.MAIN_REPO_TOKEN }}
+
+      - name: Resolve requested source
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          requested="${{ github.event.inputs.source || '' }}"
+
+          if [[ "${{ github.event_name }}" == "repository_dispatch" ]]; then
+            case "${{ github.event.action }}" in
+              sync-care-anxrag) requested="care-anxrag" ;;
+              sync-component4final) requested="component4final" ;;
+              *)
+                echo "ERROR: Unsupported repository_dispatch action: ${{ github.event.action }}"
+                exit 1
+                ;;
+            esac
+          fi
+
+          if [[ -z "$requested" ]]; then
+            requested="all"
+          fi
+
+          echo "requested=$requested" >> "$GITHUB_OUTPUT"
+          echo "Sync request: $requested"
+
+      - name: Prepare temporary workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/research-sync
+          mkdir -p /tmp/research-sync
+
+      - name: Sync Care-AnxRAG safely
+        if: steps.source.outputs.requested == 'all' || steps.source.outputs.requested == 'care-anxrag'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git clone --depth 1 https://github.com/UVINDUSEN/Care-AnxRAG.git /tmp/research-sync/Care-AnxRAG
+
+          destination="$TARGET_ROOT/Care-AnxRAG"
+          mkdir -p "$destination"
+
+          rsync -a \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='__pycache__/' \
+            --exclude='.pytest_cache/' \
+            --exclude='.mypy_cache/' \
+            --exclude='.ruff_cache/' \
+            --exclude='.venv/' \
+            --exclude='venv/' \
+            --exclude='node_modules/' \
+            --exclude='.DS_Store' \
+            /tmp/research-sync/Care-AnxRAG/ "$destination/"
+
+      - name: Sync component4final safely
+        if: steps.source.outputs.requested == 'all' || steps.source.outputs.requested == 'component4final'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git clone --depth 1 https://github.com/UVINDUSEN/component4final.git /tmp/research-sync/component4final
+
+          destination="$TARGET_ROOT/component4final"
+          mkdir -p "$destination"
+
+          rsync -a \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='__pycache__/' \
+            --exclude='.pytest_cache/' \
+            --exclude='.mypy_cache/' \
+            --exclude='.ruff_cache/' \
+            --exclude='.venv/' \
+            --exclude='venv/' \
+            --exclude='node_modules/' \
+            --exclude='build/' \
+            --exclude='.dart_tool/' \
+            --exclude='.DS_Store' \
+            /tmp/research-sync/component4final/ "$destination/"
+
+      - name: Stage and validate synchronized changes
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! -d "$TARGET_ROOT" ]]; then
+            echo "ERROR: Protected research root does not exist: $TARGET_ROOT"
+            exit 1
+          fi
+
+          git add -- "$TARGET_ROOT"
+
+          echo "Staged sync changes:"
+          git status --short -- "$TARGET_ROOT"
+
+          if ! git diff --cached --diff-filter=D --quiet -- "$TARGET_ROOT"; then
+            echo "ERROR: Sync attempted to delete existing files. No commit will be created."
+            git diff --cached --name-status --diff-filter=D -- "$TARGET_ROOT"
+            exit 1
+          fi
+
+          if git diff --cached --quiet -- "$TARGET_ROOT"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No synchronization changes detected."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create sync branch and commit
+        if: steps.changes.outputs.changed == 'true'
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          source_name="${{ steps.source.outputs.requested }}"
+          branch="sync/${source_name}/${GITHUB_RUN_ID}"
+
+          git switch -c "$branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git commit -m "chore(research): sync ${source_name}"
+          git push --set-upstream origin "$branch"
+
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Open pull request
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.MAIN_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          source_name="${{ steps.source.outputs.requested }}"
+          branch="${{ steps.commit.outputs.branch }}"
+
+          gh pr create \
+            --repo "${{ github.repository }}" \
+            --base "$BASE_BRANCH" \
+            --head "$branch" \
+            --title "chore(research): sync ${source_name}" \
+            --body "Automated non-destructive synchronization from **${source_name}**. Existing files outside the component destination are preserved, and deletion attempts are blocked."
