@@ -1,8 +1,0 @@
-numpy
-pandas
-matplotlib
-scikit-learn
-torch
-neurokit2
-reportlab
-jupyter

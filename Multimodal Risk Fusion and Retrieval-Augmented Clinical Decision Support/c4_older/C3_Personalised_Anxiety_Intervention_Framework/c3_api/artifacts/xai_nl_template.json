@@ -1,0 +1,66 @@
+{
+  "version": "2.0",
+  "feature_descriptions": {
+    "physiological_risk": "heart rate and physiological stress signals (from C1 wearable)",
+    "behavioral_risk": "behavioural patterns \u2014 GPS, screen time, communication (from C2)",
+    "textual_risk": "clinical notes and journal language analysis (from C4 NLP)",
+    "composite_risk": "overall weighted risk score (0.25\u00d7physiological + 0.20\u00d7behavioural + 0.40\u00d7textual)",
+    "age_norm": "age relative to the 18\u201335 target group",
+    "gender_enc": "gender demographic context",
+    "marital_enc": "relationship status context",
+    "education_enc": "education level context",
+    "income_enc": "income and socioeconomic context",
+    "risk_tier_enc": "risk level from the previous session",
+    "interaction_count_norm": "app engagement history (sessions completed)",
+    "last_reward_norm": "composite outcome quality from the most recent session",
+    "escalation_count_norm": "history of panic episodes requiring escalation"
+  },
+  "tier_context": {
+    "Low": "The system recommends a structured daily routine or social engagement plan.",
+    "Medium": "The system recommends a CBT journal, PMR programme, MBSR plan, or behavioural activation.",
+    "High": "The system recommends an immediate coping exercise (breathing, grounding, or PMR)."
+  },
+  "tier_severity": {
+    "Low": "low anxiety risk",
+    "Medium": "moderate anxiety risk",
+    "High": "high anxiety risk requiring prompt attention"
+  },
+  "sample_outputs": [
+    {
+      "tier": "Low",
+      "severity_label": "low anxiety risk",
+      "clinician_summary": "The model classifies this patient as low anxiety risk. The primary factor elevating this patient's risk is their heart rate and physiological stress signals (from C1 wearable) (value: 0.07, SHAP contribution: +2.325). Additionally, overall weighted risk score (0.25\u00d7physiological + 0.20\u00d7behavioural + 0.40\u00d7textual) contributes (SHAP: +1.785). No significant protective factors were identified. The system recommends a structured daily routine or social engagement plan.",
+      "user_facing": "Based on your recent data, your heart rate and physiological stress signals suggests low anxiety risk. The system recommends a structured daily routine or social engagement plan.",
+      "primary_driver": "physiological_risk",
+      "protective_factor": null,
+      "recommendation": "The system recommends a structured daily routine or social engagement plan.",
+      "primary_sentence": "The primary factor elevating this patient's risk is their heart rate and physiological stress signals (from C1 wearable) (value: 0.07, SHAP contribution: +2.325).",
+      "protective_sentence": "No significant protective factors were identified.",
+      "patient_idx": 0
+    },
+    {
+      "tier": "Medium",
+      "severity_label": "moderate anxiety risk",
+      "clinician_summary": "The model classifies this patient as moderate anxiety risk. The primary factor elevating this patient's risk is their heart rate and physiological stress signals (from C1 wearable) (value: 0.21, SHAP contribution: +1.257). Additionally, overall weighted risk score (0.25\u00d7physiological + 0.20\u00d7behavioural + 0.40\u00d7textual) contributes (SHAP: +0.369). No significant protective factors were identified. The system recommends a CBT journal, PMR programme, MBSR plan, or behavioural activation.",
+      "user_facing": "Based on your recent data, your heart rate and physiological stress signals suggests moderate anxiety risk. The system recommends a CBT journal, PMR programme, MBSR plan, or behavioural activation.",
+      "primary_driver": "physiological_risk",
+      "protective_factor": null,
+      "recommendation": "The system recommends a CBT journal, PMR programme, MBSR plan, or behavioural activation.",
+      "primary_sentence": "The primary factor elevating this patient's risk is their heart rate and physiological stress signals (from C1 wearable) (value: 0.21, SHAP contribution: +1.257).",
+      "protective_sentence": "No significant protective factors were identified.",
+      "patient_idx": 4
+    },
+    {
+      "tier": "High",
+      "severity_label": "high anxiety risk requiring prompt attention",
+      "clinician_summary": "The model classifies this patient as high anxiety risk requiring prompt attention. The primary factor elevating this patient's risk is their heart rate and physiological stress signals (from C1 wearable) (value: 0.63, SHAP contribution: +4.173). Additionally, overall weighted risk score (0.25\u00d7physiological + 0.20\u00d7behavioural + 0.40\u00d7textual) contributes (SHAP: +0.971). A protective factor is their income and socioeconomic context (SHAP: -0.172), which reduces the predicted risk. The system recommends an immediate coping exercise (breathing, grounding, or PMR).",
+      "user_facing": "Based on your recent data, your heart rate and physiological stress signals suggests high anxiety risk requiring prompt attention. The system recommends an immediate coping exercise (breathing, grounding, or PMR).",
+      "primary_driver": "physiological_risk",
+      "protective_factor": "income_enc",
+      "recommendation": "The system recommends an immediate coping exercise (breathing, grounding, or PMR).",
+      "primary_sentence": "The primary factor elevating this patient's risk is their heart rate and physiological stress signals (from C1 wearable) (value: 0.63, SHAP contribution: +4.173).",
+      "protective_sentence": "A protective factor is their income and socioeconomic context (SHAP: -0.172), which reduces the predicted risk.",
+      "patient_idx": 2
+    }
+  ]
+}

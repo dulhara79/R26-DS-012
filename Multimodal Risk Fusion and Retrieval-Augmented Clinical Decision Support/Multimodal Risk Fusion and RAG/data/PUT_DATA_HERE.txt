@@ -1,1 +1,0 @@
-Download demographic.csv and gad7.csv from zenodo.org/records/10423537
