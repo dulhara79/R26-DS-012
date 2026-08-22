@@ -71,15 +71,31 @@ def stub_c1(subject_id, window=None, client=None):
 
 
 def stub_c3(note_text, note_type="progress", anxiety_support=None,
-            control_support=None, client=None):
+            control_support=None, subject_external_id=None, client=None):
     if not note_text or not note_text.strip():
         return mc.ComponentResult(status="error", note="no clinical note supplied")
     if _C3_SUPPORT_K[0] == 0:
         return mc.ComponentResult(status="no_support_set", raw_score=None, confidence=0.5,
                                   coverage=1.0, model_version="TC-WPN-v1.0",
                                   note="no_support_set (support_k=0)")
-    return mc.ComponentResult(raw_score=_C3_SCORE[0], status="ok", confidence=0.83,
+    # mirrors the REAL C3 response: entropy present, so confidence is derived
+    # from it rather than from C3's own score-shaped `confidence` field
+    return mc.ComponentResult(raw_score=_C3_SCORE[0], status="ok",
+                              confidence=mc.confidence_from_entropy(0.6331) or 0.5,
                               coverage=1.0, model_version="TC-WPN-v1.0")
+
+
+def stub_c2(subject_external_id, payload=None, client=None):
+    """Mirrors the REAL C2 Vercel response verbatim — including the trap: an
+    experimental behavioral_vulnerability_score sitting next to score=null."""
+    return mc.ComponentResult(
+        raw_score=None, status="not_validated", confidence=0.0,
+        coverage=0.9642857142857143, model_version="M2_mobile_screen_location_v1",
+        note="fusion_eligible=false — excluded from composite.",
+        detail={"subject_id": subject_external_id, "modality": "c2_behavioral",
+                "score": None, "status": "not_validated", "fusion_eligible": False,
+                "behavioral_vulnerability_score": 0.025467511026434304,
+                "validation_status": "experimental"})
 
 
 def stub_c4(subject_id, demographics, client=None):
@@ -87,9 +103,10 @@ def stub_c4(subject_id, demographics, client=None):
                               coverage=1.0, model_version="dcar-v1.0")
 
 
-mc.call_c1, mc.call_c3, mc.call_c4 = stub_c1, stub_c3, stub_c4
+mc.call_c1, mc.call_c2, mc.call_c3, mc.call_c4 = stub_c1, stub_c2, stub_c3, stub_c4
 import main  # noqa: E402
-main.mc.call_c1, main.mc.call_c3, main.mc.call_c4 = stub_c1, stub_c3, stub_c4
+main.mc.call_c1, main.mc.call_c2, main.mc.call_c3, main.mc.call_c4 = (
+    stub_c1, stub_c2, stub_c3, stub_c4)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -655,6 +672,104 @@ check("rag block reports configured", h["rag"].get("configured") is True)
 
 
 
+
+
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+section("17 · Real component payloads — C1, C2, C3 integration")
+# ═════════════════════════════════════════════════════════════════════════════
+import math  # noqa: E402
+
+# ── C3's confidence field is the score restated; entropy is the real measure ──
+print("  C3 published: risk_score=0.6715, confidence=0.671, entropy=0.6331")
+conf = mc.confidence_from_entropy(0.6331)
+print(f"  entropy-derived confidence: {conf:.4f}")
+check("entropy converts to an honest confidence, not the score restated",
+      abs(conf - 0.0866) < 0.002, f"got {conf}")
+check("a certain prediction (H=0) gives confidence 1.0",
+      mc.confidence_from_entropy(0.0) == 1.0)
+check("a maximally uncertain prediction (H=ln2) gives confidence 0.0",
+      abs(mc.confidence_from_entropy(math.log(2))) < 1e-9)
+check("missing entropy returns None (so caller can fall back)",
+      mc.confidence_from_entropy(None) is None)
+check("malformed entropy returns None rather than crashing",
+      mc.confidence_from_entropy("not-a-number") is None)
+check("entropy-derived confidence is far lower than C3's own claim",
+      conf < 0.671 / 2,
+      "if these were close, the circularity concern would be moot")
+
+# ── the subject-echo safety check ────────────────────────────────────────────
+check("matching subject echo passes",
+      mc.verify_subject_echo("P_123", "P_123", "C2") is None)
+check("MISMATCHED subject echo is caught",
+      "SUBJECT MISMATCH" in (mc.verify_subject_echo("P_123", "P_999", "C2") or ""))
+check("absent echo is tolerated (not all services echo)",
+      mc.verify_subject_echo("P_123", None, "C2") is None)
+
+# ── C2: the experimental score must NEVER become the fused score ─────────────
+r = client.post("/v1/ingest/behavioural", json={
+    "app_user_id": "phone-aaa", "observations": {"steps": 4200}}).json()
+print(f"  C2 ingest: status={r['status']}  score={r['score']}")
+check("C2 stored as not_validated", r["status"] == "not_validated")
+check("C2 score is null, NOT the 0.0254 experimental value", r["score"] is None)
+
+db = SessionLocal()
+c2_row = db.scalar(select(ModalityReading)
+                   .where(ModalityReading.subject_id == P1,
+                          ModalityReading.modality == "c2_behavioral")
+                   .order_by(ModalityReading.id.desc()))
+detail = c2_row.detail or {}
+resp = (detail.get("response") or {})
+db.close()
+check("C2 raw_score column is NULL in the database", c2_row.raw_score is None)
+check("the experimental value IS preserved for the clinician timeline",
+      resp.get("behavioral_vulnerability_score") == 0.025467511026434304)
+check("...but it is never promoted to raw_score",
+      c2_row.raw_score != 0.025467511026434304)
+
+# ── three independent locks keep C2 out of the composite ────────────────────
+import gate as gate_mod  # noqa: E402
+import fusion as fusion_mod2  # noqa: E402
+check("LOCK 1: their service reports fusion_eligible=false",
+      resp.get("fusion_eligible") is False)
+check("LOCK 2: our gate excludes c2_behavioral unconditionally",
+      "c2_behavioral" in gate_mod.EXCLUDED_MODALITIES)
+check("LOCK 3: fusion weight for c2 is exactly 0.0",
+      fusion_mod2.base_weights()["c2_behavioral"] == 0.0)
+
+r = client.post("/v1/fusion/run", json={"subject_id": P1}).json()
+check("c2 absent from usable modalities after a real C2 ingest",
+      "c2_behavioral" not in r["gate"]["usable_modalities"])
+
+# ── external id mapping (C2 keys on P_65DC..., we key on UUIDs) ──────────────
+r = client.post(f"/v1/subjects/{P1}/external-ids",
+                json={"modality": "c2_behavioral",
+                      "external_id": "P_65DC4002E7863773"}).json()
+check("external id registered", r.get("external_id") == "P_65DC4002E7863773")
+
+from db_models import SessionLocal as _SL  # noqa: E402
+db = _SL()
+check("backend resolves our UUID to C2's own id",
+      main._external_id(db, P1, "c2_behavioral") == "P_65DC4002E7863773")
+check("unmapped modality falls back to our subject_id",
+      main._external_id(db, P1, "c1_physiological") == P1)
+db.close()
+
+check("re-registering updates rather than duplicating",
+      client.post(f"/v1/subjects/{P1}/external-ids",
+                  json={"modality": "c2_behavioral",
+                        "external_id": "P_NEWVALUE"}).status_code == 200)
+check("bad modality name rejected",
+      client.post(f"/v1/subjects/{P1}/external-ids",
+                  json={"modality": "c9_nonsense", "external_id": "x"}).status_code == 422)
+
+# one external id must never map to two patients
+r2 = client.post("/v1/subjects", json={"mrn": "NHSL-2026-0555"}).json()
+check("the same external id cannot be claimed by a second patient",
+      client.post(f"/v1/subjects/{r2['subject_id']}/external-ids",
+                  json={"modality": "c2_behavioral",
+                        "external_id": "P_NEWVALUE"}).status_code == 409)
 
 
 print(f"\n{'=' * 74}")

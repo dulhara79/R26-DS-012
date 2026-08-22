@@ -42,7 +42,7 @@ VALIDATION_AUROC = {
     "c1_physiological": 0.6191,   # AffectiveROAD, recalibrated, real-world driving
     "c2_behavioral": 0.5205,      # GLOBEM held-out; did not clear its permutation null
     "c3_clinical_nlp": 0.7380,    # MIMIC-IV five-shot held-out cohort
-    "c4_demographic": 0.6600,     # <-- REPLACE with the test AUROC from your notebook
+    "c4_demographic": 0.6220,     # DCAR, real Zenodo test split (was placeholder 0.66)
 }
 
 # A component that does not exceed its own permutation null contributes nothing.

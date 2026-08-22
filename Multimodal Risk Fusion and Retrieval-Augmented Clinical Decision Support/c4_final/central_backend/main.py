@@ -73,6 +73,74 @@ def _resolve(db: Session, alias_type: str, alias_value: str) -> str:
     return row.subject_id
 
 
+# Each component keys patients differently: C2 uses ids like "P_65DC4002E7863773",
+# C1 streams under a device id, C3 may use its own. SubjectAlias already supports
+# arbitrary alias_type values, so external ids need no schema migration — they are
+# just more aliases pointing at the same subject_id. This is the same join problem
+# the MRN/app_user_id pairing flow solves, extended to the component services.
+EXTERNAL_ID_TYPES = {
+    "c1_physiological": "c1_device_id",
+    "c2_behavioral": "c2_subject_id",
+    "c3_clinical_nlp": "c3_patient_id",
+}
+
+
+def _external_id(db: Session, subject_id: str, modality: str) -> str:
+    """The id THIS component knows the patient by, falling back to our own
+    subject_id when no mapping is registered (correct for services that simply
+    accept whatever id we send)."""
+    alias_type = EXTERNAL_ID_TYPES.get(modality)
+    if not alias_type:
+        return subject_id
+    row = db.scalar(select(SubjectAlias).where(
+        SubjectAlias.subject_id == subject_id,
+        SubjectAlias.alias_type == alias_type))
+    return row.alias_value if row else subject_id
+
+
+class ExternalIdRequest(BaseModel):
+    modality: str = Field(..., description="c1_physiological | c2_behavioral | c3_clinical_nlp")
+    external_id: str = Field(..., min_length=1)
+
+
+@app.post("/v1/subjects/{subject_id}/external-ids", tags=["enrolment"])
+def register_external_id(subject_id: str, req: ExternalIdRequest,
+                         db: Session = Depends(get_session),
+                         authorization: Optional[str] = Header(None)):
+    """Tell the backend what id a given component knows this patient by.
+
+    Without this, the backend would ask C2 about a UUID that C2 has never heard
+    of. Registering is idempotent: re-registering the same modality updates the
+    mapping rather than creating a duplicate alias."""
+    _auth(authorization)
+    _require_subject(db, subject_id)
+    alias_type = EXTERNAL_ID_TYPES.get(req.modality)
+    if not alias_type:
+        raise HTTPException(422, f"modality must be one of {sorted(EXTERNAL_ID_TYPES)}")
+
+    clash = db.scalar(select(SubjectAlias).where(
+        SubjectAlias.alias_type == alias_type,
+        SubjectAlias.alias_value == req.external_id))
+    if clash and clash.subject_id != subject_id:
+        # The same component id already points at a different patient. Refusing is
+        # the only safe answer — silently repointing would merge two clinical records.
+        raise HTTPException(409, f"external_id '{req.external_id}' is already mapped "
+                                 f"to a different subject")
+
+    existing = db.scalar(select(SubjectAlias).where(
+        SubjectAlias.subject_id == subject_id, SubjectAlias.alias_type == alias_type))
+    if existing:
+        existing.alias_value = req.external_id
+    else:
+        db.add(SubjectAlias(subject_id=subject_id, alias_type=alias_type,
+                            alias_value=req.external_id))
+    _audit(db, subject_id, "external_id.registered",
+           {"modality": req.modality, "alias_type": alias_type})
+    db.commit()
+    return {"subject_id": subject_id, "modality": req.modality,
+            "external_id": req.external_id}
+
+
 def _require_subject(db: Session, subject_id: str) -> Subject:
     s = db.get(Subject, subject_id)
     if not s:
@@ -261,7 +329,12 @@ class PhysiologicalWindow(BaseModel):
     window_end: Optional[dt.datetime] = None
     sampling_hz: Optional[int] = None
     features: Optional[Dict[str, float]] = Field(
-        None, description="the 11 features exactly as C1 was trained on")
+        None, description="the 10 features exactly as C1 was trained on: mean HR, "
+                          "mean RR interval, SDNN, RMSSD, mean breathing rate, "
+                          "breathing-rate variability, mean temperature, temperature "
+                          "variability, mean acceleration magnitude, acceleration "
+                          "variability (paper §III.A — was documented as 11 before "
+                          "the paper's exact feature list was available)")
 
 
 @app.post("/v1/ingest/physiological", tags=["ingestion"])
@@ -281,7 +354,8 @@ def ingest_physiological(req: PhysiologicalWindow, db: Session = Depends(get_ses
             "features": req.features,
         }
 
-    result = mc.call_c1(req.device_user_id or subject_id, window=window)
+    result = mc.call_c1(req.device_user_id or _external_id(db, subject_id, "c1_physiological"),
+                        window=window)
     row = _store(db, subject_id, "c1_physiological", result)
     db.commit()
     fusion_info = _auto_fuse(db, subject_id, "physio-ingest", debounce=True)
@@ -305,11 +379,18 @@ def ingest_behavioural(req: BehaviouralAggregate, db: Session = Depends(get_sess
     subject_id = req.subject_id or _resolve(db, "app_user_id", req.app_user_id or "")
     _require_subject(db, subject_id)
 
-    result = mc.call_c2(req.observations)
+    result = mc.call_c2(_external_id(db, subject_id, "c2_behavioral"), req.observations)
     row = _store(db, subject_id, "c2_behavioral", result)
     db.commit()
     return {"subject_id": subject_id, "reading_id": row.id,
-            "status": result.status, "excluded_from_composite": True, "note": result.note}
+            "status": result.status,
+            # Explicitly null rather than omitted: a caller inspecting this
+            # response should see that there is no fusable score, not have to
+            # infer it from a missing key. The experimental
+            # behavioral_vulnerability_score lives in the stored detail blob and
+            # is deliberately NOT surfaced here as a score.
+            "score": result.raw_score,
+            "excluded_from_composite": True, "note": result.note}
 
 
 class ContextualIntake(BaseModel):
@@ -382,7 +463,8 @@ def ingest_clinical_note(req: ClinicalNote, db: Session = Depends(get_session),
     _require_subject(db, subject_id)
 
     result = mc.call_c3(req.note_text, req.note_type,
-                        req.anxiety_support, req.control_support)
+                        req.anxiety_support, req.control_support,
+                        subject_external_id=_external_id(db, subject_id, "c3_clinical_nlp"))
     row = _store(db, subject_id, "c3_clinical_nlp", result)
     db.commit()
     fusion_info = _auto_fuse(db, subject_id, "note-ingest")
