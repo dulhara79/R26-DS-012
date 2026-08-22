@@ -1,0 +1,135 @@
+sources:
+  - id: local_curated
+    name: Curated Local Anxiety Corpus
+    connector: local_files
+    enabled: true
+    publish_to_rag: true
+    auto_promote: false
+    layer: clinical_core
+    authority_score: 0.80
+    evidence_level: general_information
+    check_interval_minutes: 60
+    settings:
+      path: data/local
+      patterns:
+        - "**/*.md"
+        - "**/*.txt"
+        - "**/*.html"
+        - "**/*.json"
+
+  - id: nimh_anxiety
+    name: National Institute of Mental Health
+    connector: http_page
+    enabled: true
+    publish_to_rag: true
+    auto_promote: false
+    layer: clinical_core
+    authority_score: 0.96
+    evidence_level: government_health_information
+    check_interval_minutes: 10080
+    settings:
+      urls:
+        - https://www.nimh.nih.gov/health/topics/anxiety-disorders
+      request_interval_seconds: 1.0
+
+  - id: who_anxiety
+    name: World Health Organization
+    connector: http_page
+    enabled: true
+    publish_to_rag: true
+    auto_promote: false
+    layer: clinical_core
+    authority_score: 0.98
+    evidence_level: government_health_information
+    check_interval_minutes: 10080
+    settings:
+      urls:
+        - https://www.who.int/news-room/fact-sheets/detail/anxiety-disorders
+      request_interval_seconds: 1.0
+
+  - id: nice_update_monitor
+    name: NICE CG113 Update Monitor
+    connector: http_page
+    enabled: true
+    publish_to_rag: false
+    auto_promote: false
+    layer: clinical_core
+    authority_score: 1.00
+    evidence_level: clinical_guideline
+    check_interval_minutes: 1440
+    settings:
+      urls:
+        - https://www.nice.org.uk/guidance/cg113/chapter/Update-information
+      request_interval_seconds: 1.0
+
+  - id: nice_syndication
+    name: NICE Licensed Syndication
+    connector: nice_syndication
+    enabled: false
+    publish_to_rag: true
+    auto_promote: false
+    layer: clinical_core
+    authority_score: 1.00
+    evidence_level: clinical_guideline
+    check_interval_minutes: 1440
+    settings:
+      feed_url: ""
+      api_key_env: NICE_API_KEY
+      accept: application/vnd.nice.syndication.services+json
+
+  - id: pubmed_anxiety
+    name: PubMed Anxiety Research
+    connector: pubmed
+    enabled: true
+    publish_to_rag: true
+    auto_promote: false
+    layer: research_frontier
+    authority_score: 0.75
+    evidence_level: unknown
+    check_interval_minutes: 1440
+    settings:
+      query: >-
+        ("Anxiety Disorders"[Mesh] OR anxiety[Title/Abstract]
+        OR "generalized anxiety disorder"[Title/Abstract]
+        OR "panic disorder"[Title/Abstract]
+        OR "social anxiety disorder"[Title/Abstract])
+        AND (systematic review[Publication Type]
+        OR meta-analysis[Publication Type]
+        OR randomized controlled trial[Publication Type]
+        OR practice guideline[Publication Type])
+      initial_lookback_days: 30
+      overlap_days: 2
+      max_records_per_sync: 1000
+      search_batch_size: 200
+      fetch_batch_size: 100
+      api_key_env: NCBI_API_KEY
+      email_env: NCBI_EMAIL
+      tool: CARE-AnxRAG
+
+  - id: pmc_anxiety_oa
+    name: PMC Open-Access Anxiety Full Text
+    connector: pmc
+    enabled: false
+    publish_to_rag: true
+    auto_promote: false
+    layer: research_frontier
+    authority_score: 0.75
+    evidence_level: unknown
+    check_interval_minutes: 1440
+    settings:
+      query: >-
+        (anxiety[Title/Abstract] OR "panic disorder"[Title/Abstract]
+        OR "social anxiety"[Title/Abstract])
+      initial_lookback_days: 180
+      overlap_days: 2
+      max_records_per_sync: 100
+      fetch_batch_size: 20
+      api_key_env: NCBI_API_KEY
+      email_env: NCBI_EMAIL
+      tool: CARE-AnxRAG
+      license_allowlist:
+        - creativecommons.org/licenses/by/
+        - creativecommons.org/publicdomain/zero/
+        - creativecommons.org/publicdomain/mark/
+        - cc0
+        - public domain

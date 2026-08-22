@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+title: CARE-AnxRAG
+message: Please cite this software and the exact source/model snapshot used in your experiment.
+type: software
+version: 0.1.0
+date-released: 2026-08-17
+license: Apache-2.0
+abstract: >-
+  Contradiction-, authority-, reliability-, evidence-, and freshness-aware
+  retrieval-augmented generation for anxiety information research.
