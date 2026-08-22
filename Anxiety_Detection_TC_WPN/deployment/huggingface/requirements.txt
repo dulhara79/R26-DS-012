@@ -1,0 +1,24 @@
+# CPU wheels only. Without this the default torch wheel pulls ~2.5 GB of CUDA
+# onto a Space that has 2 CPU cores and no GPU.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+torch==2.4.1+cpu   # requires python_version 3.11 in README.md front matter (no cp313 wheel)
+transformers>=4.36.0,<5.0.0
+huggingface_hub>=0.23.0
+numpy
+fastapi
+pydantic>=2.0
+uvicorn
+gradio
+sentencepiece
+safetensors
+
+# auth (unchanged from the existing Space)
+python-jose[cryptography]
+bcrypt
+email-validator
+requests
+
+# tests (Phase 6 / Phase 7)
+pytest
+httpx
