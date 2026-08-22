@@ -1,20 +1,53 @@
-# React + Vite
+# Aura – Anxiety Research Mobile Application
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Aura is a Flutter-based mobile research application developed as part of the
+multimodal anxiety research project.
 
-Currently, two official plugins are available:
+The application supports passive smartphone sensing, questionnaire collection,
+wearable integration, behavioural digital phenotyping, and multimodal research
+data collection.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Project Components
 
-## React Compiler
+The wider research framework contains multiple components:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Component 1 – Wearable / physiological sensing
+- Component 2 – Digital phenotyping and behavioural sensing
+- Component 4 – Clinical / NLP component
+- Multimodal fusion – combines eligible component outputs
 
-## Expanding the ESLint configuration
+## Component 2 – Digital Phenotyping
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Component 2 collects passive smartphone behavioural information and uses it to
+construct behavioural features.
 
+Current mobile-compatible sensing includes:
 
+- Location patterns
+- Screen and app-use behaviour
+- Movement-related information
+- Device and collection-status information
+- Passive behavioural coverage
+- Participant questionnaire/check-in information where applicable
 
-# HIIIII
+Research data is associated with a pseudonymous participant ID rather than the
+participant's display name.
+
+## Component 2 Data Flow
+
+```text
+Android App
+    ↓
+Passive smartphone sensing
+    ↓
+Local offline queue
+    ↓
+Supabase
+    ↓
+sensor_events
+    ↓
+Daily Component 2 processing
+    ↓
+daily_behavior_features
+    ↓
+behavioral_observations
