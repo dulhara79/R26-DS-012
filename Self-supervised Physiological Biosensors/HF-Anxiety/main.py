@@ -1,7 +1,7 @@
 import os
 import re
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import torch
@@ -99,9 +99,32 @@ FEATURE_NAMES = (
     "mean_acc_mag",
     "std_acc_mag",
 )
+# Broad sensor-output limits. These are data-quality bounds, not diagnostic
+# thresholds, and deliberately include vigorous physical activity.
+FEATURE_LIMITS = (
+    (30.0, 200.0),  # mean_hr, bpm
+    (300.0, 2000.0),  # mean_rr, ms
+    (0.0, 1300.0),  # sdnn, ms
+    (0.0, 1700.0),  # rmssd, ms
+    (4.0, 40.0),  # mean_br, breaths/min
+    (0.0, 25.0),  # std_br
+    (10.0, 45.0),  # mean_temp, degrees C
+    (0.0, 10.0),  # std_temp
+    (0.0, 3.6),  # mean_acc_mag, g (MPU6500 is configured for +/-2 g)
+    (0.0, 2.0),  # std_acc_mag, g
+)
+MAX_FORECAST_READING_AGE_SECONDS = 90.0
 NORM_MEAN_FIELDS = tuple(f"{name}_baseline_mean" for name in FEATURE_NAMES)
 NORM_STD_FIELDS = tuple(f"{name}_baseline_std" for name in FEATURE_NAMES)
 DEFAULT_RECONSTRUCTION_ERROR_THRESHOLD = 0.25
+# Three one-minute calm summaries are not enough to estimate very small
+# per-feature variation reliably. These floors prevent normal calm jitter from
+# being divided by a near-zero standard deviation and becoming an extreme
+# model input. The values remain small relative to physiological stress shifts.
+MINIMUM_BASELINE_STDS = np.array(
+    [1.0, 15.0, 2.0, 2.0, 0.5, 0.10, 0.05, 0.01, 0.01, 0.005],
+    dtype=np.float32,
+)
 USER_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 EVENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,160}$")
 
@@ -166,7 +189,7 @@ class NormParamsPayload(BaseModel):
     baseline windows exactly as in the notebook:
         b_mean = np.mean(base_feats, axis=0)
         b_std  = np.std(base_feats,  axis=0)
-        b_std[b_std == 0] = 1e-8
+        b_std  = max(b_std, small feature-specific stability floors)
     Both arrays must have exactly 10 values — one per feature:
     [mean_HR, mean_RR, SDNN, RMSSD, mean_BR, std_BR, mean_temp, std_temp, mean_acc_mag, std_acc_mag]
     """
@@ -230,6 +253,33 @@ def _record_norm_value(record: dict, index: int, *, std: bool) -> float | None:
     return value
 
 
+def _feature_quality_issue(
+    features: list[float] | np.ndarray,
+    *,
+    check_hr_rr_consistency: bool = True,
+) -> str | None:
+    """Return why a 10-feature window is unusable, or None when valid."""
+    values = np.asarray(features, dtype=np.float64)
+    if values.shape != (FEATURE_COUNT,):
+        return f"expected exactly {FEATURE_COUNT} physiological features"
+    if not np.isfinite(values).all():
+        return "contains NaN or infinite values"
+
+    for name, value, (minimum, maximum) in zip(
+        FEATURE_NAMES,
+        values,
+        FEATURE_LIMITS,
+    ):
+        if value < minimum or value > maximum:
+            return f"{name}={value:g} is outside [{minimum:g}, {maximum:g}]"
+
+    if check_hr_rr_consistency:
+        expected_hr = 60000.0 / values[1]
+        if abs(values[0] - expected_hr) > 15.0:
+            return "mean_hr and mean_rr are physiologically inconsistent"
+    return None
+
+
 def _risk_from_reconstruction_error(error: float, threshold: float) -> float:
     """Map model error to a user-facing risk index using calibration anchors.
 
@@ -251,51 +301,44 @@ def _risk_from_reconstruction_error(error: float, threshold: float) -> float:
     ))
 
 
-def _physiological_risk_from_features(row: list[float]) -> float:
-    """Mirror the app's transparent current-signal risk index for history."""
-    mean_hr, _, _, rmssd, mean_br, _, mean_temp, _, _, _ = row
+def _active_ae_model_for_user(user_id: str) -> MaskedLSTMAutoEncoder:
+    """Load the same personalized ten-feature model used by /predict."""
+    if user_id in user_model_cache:
+        return user_model_cache[user_id]
 
-    if mean_hr > 110:
-        hr_score = 100.0
-    elif mean_hr > 90:
-        hr_score = 40.0 + (mean_hr - 90.0) / 20.0 * 40.0
-    elif mean_hr > 70:
-        hr_score = (mean_hr - 70.0) / 20.0 * 40.0
-    else:
-        hr_score = 0.0
+    personalized_weight_path = MODEL_DIR / f"{user_id}.pth"
+    if not personalized_weight_path.exists():
+        try:
+            hf_hub_download(
+                repo_id=HF_WEIGHTS_REPO,
+                filename=f"{user_id}.pth",
+                repo_type="dataset",
+                local_dir=str(MODEL_DIR),
+                token=HF_TOKEN,
+            )
+        except Exception:
+            pass
 
-    if mean_br > 26:
-        br_score = 100.0
-    elif mean_br > 20:
-        br_score = 40.0 + (mean_br - 20.0) / 6.0 * 40.0
-    elif mean_br > 16:
-        br_score = (mean_br - 16.0) / 4.0 * 40.0
-    else:
-        br_score = 0.0
+    if personalized_weight_path.exists():
+        try:
+            personalized_model = MaskedLSTMAutoEncoder(
+                n_features=10,
+                hidden_size=64,
+                n_layers=1,
+            )
+            personalized_model.load_state_dict(
+                torch.load(
+                    personalized_weight_path,
+                    map_location=device,
+                )
+            )
+            personalized_model.eval()
+            user_model_cache[user_id] = personalized_model
+            return personalized_model
+        except Exception:
+            pass
+    return global_ae_model
 
-    temp_deviation = abs(mean_temp - 36.75)
-    if temp_deviation > 0.6:
-        temp_score = 100.0
-    elif temp_deviation > 0.3:
-        temp_score = (temp_deviation - 0.3) / 0.3 * 50.0 + 50.0
-    else:
-        temp_score = 0.0
-
-    if rmssd >= 40:
-        hrv_score = 0.0
-    elif rmssd >= 20:
-        hrv_score = (40.0 - rmssd) / 20.0 * 50.0
-    else:
-        hrv_score = min(50.0 + (20.0 - rmssd) / 20.0 * 50.0, 100.0)
-
-    return float(np.clip(
-        hr_score * 0.35
-        + br_score * 0.25
-        + temp_score * 0.15
-        + hrv_score * 0.25,
-        0.0,
-        100.0,
-    ))
 
 @app.get("/")
 def home():
@@ -320,6 +363,15 @@ def store_norm_params(user_id: str, payload: NormParamsPayload):
 
     b_mean = np.asarray(payload.b_mean, dtype=np.float64)
     b_std = np.asarray(payload.b_std, dtype=np.float64)
+    b_mean_issue = _feature_quality_issue(
+        b_mean,
+        check_hr_rr_consistency=False,
+    )
+    if b_mean_issue is not None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"b_mean was rejected: {b_mean_issue}.",
+        )
     if not np.isfinite(b_mean).all() or not np.isfinite(b_std).all():
         raise HTTPException(
             status_code=400,
@@ -330,6 +382,7 @@ def store_norm_params(user_id: str, payload: NormParamsPayload):
             status_code=400,
             detail="Every b_std value must be greater than zero.",
         )
+    b_std = np.maximum(b_std, MINIMUM_BASELINE_STDS)
 
     reconstruction_threshold = DEFAULT_RECONSTRUCTION_ERROR_THRESHOLD
     if payload.baseline_windows is not None:
@@ -351,6 +404,15 @@ def store_norm_params(user_id: str, payload: NormParamsPayload):
                 status_code=400,
                 detail="baseline_windows must contain only finite numbers.",
             )
+        for row_index, row in enumerate(baseline_windows):
+            issue = _feature_quality_issue(row)
+            if issue is not None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"baseline_windows[{row_index}] was rejected: {issue}."
+                    ),
+                )
 
         normalized_baseline = (baseline_windows - b_mean) / b_std
         # Calibration currently yields three calm one-minute summaries. Pad
@@ -374,7 +436,7 @@ def store_norm_params(user_id: str, payload: NormParamsPayload):
         if baseline_errors:
             reconstruction_threshold = max(
                 float(np.percentile(baseline_errors, 90)),
-                1e-6,
+                DEFAULT_RECONSTRUCTION_ERROR_THRESHOLD,
             )
 
     point = Point("norm_params").tag("user_id", user_id)
@@ -401,6 +463,20 @@ def process_and_ingest_raw_data(payload: ChestStrapFeaturesPayload):
             detail="Data window rejected: Chest strap is currently not worn."
         )
 
+    payload_timestamp = payload.timestamp
+    if payload_timestamp.tzinfo is None:
+        payload_timestamp = payload_timestamp.replace(tzinfo=timezone.utc)
+    else:
+        payload_timestamp = payload_timestamp.astimezone(timezone.utc)
+    timestamp_age = (
+        datetime.now(timezone.utc) - payload_timestamp
+    ).total_seconds()
+    if timestamp_age < -30.0 or timestamp_age > 120.0:
+        raise HTTPException(
+            status_code=400,
+            detail="Data window rejected: timestamp is not a fresh live reading.",
+        )
+
     # --- E. BUILD AND VALIDATE FEATURE VECTOR ---
     # Feature order matches the notebook exactly:
     # [mean_HR, mean_RR, SDNN, RMSSD, mean_BR, std_BR, mean_temp, std_temp, mean_acc_mag, std_acc_mag]
@@ -410,11 +486,11 @@ def process_and_ingest_raw_data(payload: ChestStrapFeaturesPayload):
         payload.mean_acc_mag, payload.std_acc_mag
     ]
 
-    # Reject NaN and infinity before they can poison normalization/inference.
-    if not np.isfinite(np.asarray(features, dtype=np.float64)).all():
+    quality_issue = _feature_quality_issue(features)
+    if quality_issue is not None:
         raise HTTPException(
             status_code=400,
-            detail="Data window rejected: Payload contains invalid NaN or Infinite numerical values."
+            detail=f"Data window rejected: {quality_issue}.",
         )
 
     try:
@@ -480,18 +556,20 @@ def get_escalation_forecast(user_id: str):
             ],
             dtype=np.float32,
         )
-        reconstruction_threshold = float(
-            norm_records[0].get(
-                "reconstruction_error_p90",
-                DEFAULT_RECONSTRUCTION_ERROR_THRESHOLD,
-            )
+        reconstruction_threshold = max(
+            float(
+                norm_records[0].get(
+                    "reconstruction_error_p90",
+                    DEFAULT_RECONSTRUCTION_ERROR_THRESHOLD,
+                )
+            ),
+            DEFAULT_RECONSTRUCTION_ERROR_THRESHOLD,
         )
 
         if not np.isfinite(b_mean).all() or not np.isfinite(b_std).all():
             raise ValueError("Stored normalization parameters are incomplete or non-finite.")
 
-        # Exact notebook guard: b_std[b_std == 0] = 1e-8
-        b_std[b_std <= 0] = 1e-8
+        b_std = np.maximum(b_std, MINIMUM_BASELINE_STDS)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve norm params: {str(e)}")
@@ -506,18 +584,20 @@ def get_escalation_forecast(user_id: str):
       |> sort(columns: ["_time"])
     '''
     try:
-        tables  = query_api.query(query)
-        records = []
+        tables = query_api.query(query)
+        valid_records = []
         for table in tables:
             for record in table.records:
                 row = [
                     _record_feature(record.values, i)
                     for i in range(FEATURE_COUNT)
                 ]
-                if None not in row and np.isfinite(
-                    np.asarray(row, dtype=np.float64)
-                ).all():
-                    records.append(row)
+                if None in row or _feature_quality_issue(row) is not None:
+                    continue
+                valid_records.append((record.get_time(), row))
+
+        valid_records.sort(key=lambda item: item[0])
+        records = [row for _, row in valid_records]
 
         current_length = len(records)
         
@@ -527,6 +607,28 @@ def get_escalation_forecast(user_id: str):
                 "status": "buffering",
                 "message": "Waiting for the first 60-second data block from your chest strap to arrive.",
                 "forecast": []
+            }
+
+        latest_reading_at = valid_records[-1][0]
+        if latest_reading_at.tzinfo is None:
+            latest_reading_at = latest_reading_at.replace(tzinfo=timezone.utc)
+        else:
+            latest_reading_at = latest_reading_at.astimezone(timezone.utc)
+        latest_reading_age = (
+            datetime.now(timezone.utc) - latest_reading_at
+        ).total_seconds()
+        if (
+            latest_reading_age < -30.0
+            or latest_reading_age > MAX_FORECAST_READING_AGE_SECONDS
+        ):
+            return {
+                "status": "stale",
+                "message": (
+                    "Waiting for a fresh one-minute chest-strap data block."
+                ),
+                "forecast": [],
+                "latest_reading_at": latest_reading_at.isoformat(),
+                "latest_reading_age_seconds": latest_reading_age,
             }
 
         # Pull whatever records are available, up to the last 19 minutes
@@ -543,45 +645,7 @@ def get_escalation_forecast(user_id: str):
             # Stack the calm padding at the front (past) and our live data at the back (present)
             normalized_sequence = np.vstack([padding_block, normalized_sequence])
 
-        # --- DYNAMIC PERSONALIZATION LOGIC ---
-        # Look into our memory cache first to see if this user's model is already in RAM
-        if user_id in user_model_cache:
-            active_ae_model = user_model_cache[user_id]
-        else:
-            personalized_weight_path = MODEL_DIR / f"{user_id}.pth"
-            
-            # If the file is not on the local hard drive, try to fetch it from your permanent Dataset vault
-            if not personalized_weight_path.exists():
-                try:
-                    # Reach into your private dataset repository and pull down their specific .pth file
-                    hf_hub_download(
-                        repo_id=HF_WEIGHTS_REPO,
-                        filename=f"{user_id}.pth",
-                        repo_type="dataset",
-                        local_dir=str(MODEL_DIR),
-                        token=HF_TOKEN
-                    )
-                except Exception:
-                    # If the file isn't in the vault (like for a brand new user), fail silently and use the fallback
-                    pass
-
-            # Check if the file exists now (either because it was already here, or we just successfully downloaded it)
-            if personalized_weight_path.exists():
-                try:
-                    # Create a fresh model structure and load their custom weights
-                    personalized_model = MaskedLSTMAutoEncoder(n_features=10, hidden_size=64, n_layers=1)
-                    personalized_model.load_state_dict(torch.load(personalized_weight_path, map_location=device))
-                    personalized_model.eval()
-                    
-                    # Store it in the cache memory so the next 60-second request is instant
-                    user_model_cache[user_id] = personalized_model
-                    active_ae_model = personalized_model
-                except Exception:
-                    # If the file exists but fails to load for any reason, use the global fallback
-                    active_ae_model = global_ae_model
-            else:
-                # No personalized weights found anywhere (new user), use the global default model
-                active_ae_model = global_ae_model
+        active_ae_model = _active_ae_model_for_user(user_id)
 
         embeddings_list = []
         observed_errors = []
@@ -642,6 +706,8 @@ def get_escalation_forecast(user_id: str):
                 reconstruction_threshold,
             ),
             "reconstruction_error_threshold": reconstruction_threshold,
+            "latest_reading_at": latest_reading_at.isoformat(),
+            "latest_reading_age_seconds": latest_reading_age,
         }
 
     except Exception as e:
@@ -654,6 +720,15 @@ def get_physiological_history(user_id: str, days: int = 30):
     if days < 1 or days > 90:
         raise HTTPException(status_code=400, detail="days must be between 1 and 90.")
 
+    norm_query = f'''
+    from(bucket: "{INFLUX_BUCKET}")
+      |> range(start: -1y)
+      |> filter(fn: (r) => r["_measurement"] == "norm_params")
+      |> filter(fn: (r) => r["user_id"] == "{user_id}")
+      |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+      |> sort(columns: ["_time"], desc: true)
+      |> limit(n: 1)
+    '''
     query = f'''
     from(bucket: "{INFLUX_BUCKET}")
       |> range(start: -{days}d)
@@ -664,7 +739,43 @@ def get_physiological_history(user_id: str, days: int = 30):
     '''
 
     try:
+        norm_records = [
+            record.values
+            for table in query_api.query(norm_query)
+            for record in table.records
+        ]
+        if not norm_records:
+            return {
+                "status": "not_calibrated",
+                "days": days,
+                "history": [],
+            }
+        b_mean = np.asarray(
+            [
+                _record_norm_value(norm_records[0], i, std=False)
+                for i in range(FEATURE_COUNT)
+            ],
+            dtype=np.float32,
+        )
+        b_std = np.asarray(
+            [
+                _record_norm_value(norm_records[0], i, std=True)
+                for i in range(FEATURE_COUNT)
+            ],
+            dtype=np.float32,
+        )
+        reconstruction_threshold = float(
+            norm_records[0].get(
+                "reconstruction_error_p90",
+                DEFAULT_RECONSTRUCTION_ERROR_THRESHOLD,
+            )
+        )
+        if not np.isfinite(b_mean).all() or not np.isfinite(b_std).all():
+            raise ValueError("Stored normalization parameters are incomplete.")
+        b_std[b_std <= 0] = 1e-8
+
         tables = query_api.query(query)
+        valid_records = []
         daily_rows: dict[str, list[list[float]]] = defaultdict(list)
         for table in tables:
             for record in table.records:
@@ -675,10 +786,70 @@ def get_physiological_history(user_id: str, days: int = 30):
                 if None in row:
                     continue
                 values = np.asarray(row, dtype=np.float64)
-                if not np.isfinite(values).all():
+                if _feature_quality_issue(values) is not None:
                     continue
-                day = record.get_time().date().isoformat()
+                observed_at = record.get_time()
+                day = observed_at.date().isoformat()
                 daily_rows[day].append(values.tolist())
+                valid_records.append((observed_at, values.astype(np.float32)))
+
+        valid_records.sort(key=lambda item: item[0])
+        model_windows = []
+        model_days = []
+        recent_normalized_rows = []
+        previous_time = None
+        for observed_at, values in valid_records:
+            if (
+                previous_time is None
+                or (observed_at - previous_time).total_seconds() > 120.0
+                or observed_at < previous_time
+            ):
+                recent_normalized_rows = []
+            normalized = (values - b_mean) / b_std
+            recent_normalized_rows.append(normalized)
+            recent_normalized_rows = recent_normalized_rows[
+                -global_ae_model.T:
+            ]
+            padding = np.zeros(
+                (
+                    global_ae_model.T - len(recent_normalized_rows),
+                    FEATURE_COUNT,
+                ),
+                dtype=np.float32,
+            )
+            model_windows.append(
+                np.vstack([
+                    padding,
+                    np.asarray(recent_normalized_rows, dtype=np.float32),
+                ])
+            )
+            model_days.append(observed_at.date().isoformat())
+            previous_time = observed_at
+
+        daily_risks: dict[str, list[float]] = defaultdict(list)
+        active_ae_model = _active_ae_model_for_user(user_id)
+        with torch.no_grad():
+            for start in range(0, len(model_windows), 256):
+                batch_windows = np.asarray(
+                    model_windows[start : start + 256],
+                    dtype=np.float32,
+                )
+                batch = torch.tensor(batch_windows, dtype=torch.float32)
+                reconstructed = active_ae_model(batch)
+                errors = torch.mean(
+                    (batch - reconstructed) ** 2,
+                    dim=(1, 2),
+                ).cpu().numpy()
+                for day, error in zip(
+                    model_days[start : start + len(errors)],
+                    errors,
+                ):
+                    daily_risks[day].append(
+                        _risk_from_reconstruction_error(
+                            float(error),
+                            reconstruction_threshold,
+                        )
+                    )
 
         history = []
         for day in sorted(daily_rows):
@@ -691,10 +862,7 @@ def get_physiological_history(user_id: str, days: int = 30):
                 "mean_br": means[4],
                 "mean_temp": means[6],
                 "mean_motion": means[9],
-                "risk_index": float(np.mean([
-                    _physiological_risk_from_features(row.tolist())
-                    for row in rows
-                ])),
+                "risk_index": float(np.mean(daily_risks[day])),
             })
 
         return {"status": "success", "days": days, "history": history}
@@ -781,11 +949,11 @@ def get_weekly_feedback_summary(user_id: str):
         ]
         activities: dict[str, int] = defaultdict(int)
         effective_actions: dict[str, int] = defaultdict(int)
-        for record in confirmed:
+        for record in answered:
             activity = record.get("activity")
             if activity:
                 activities[str(activity)] += 1
-
+        for record in confirmed:
             improved = record.get("felt_better") is True
             if not improved:
                 initial = record.get("initial_risk_score")
