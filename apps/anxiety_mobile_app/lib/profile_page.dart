@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'background_service_helper.dart';
 import 'theme/app_theme.dart';
 import 'pages/data_rights_page.dart';
+import 'pages/share_participant_id_page.dart';
 import 'pages/baseline_calibration_page.dart';
 import 'pages/appearance_settings_page.dart';
 import 'services/background/service_config.dart';
@@ -28,6 +29,7 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   bool _isEditing = false;
   String _displayName = '';
+  String? _participantId;
   String? _profileImagePath;
   final ImagePicker _picker = ImagePicker();
   final TextEditingController _displayNameController = TextEditingController();
@@ -43,6 +45,9 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _loadProfile() async {
     final prefs = await SharedPreferences.getInstance();
     final displayName = prefs.getString('display_name') ?? '';
+    final participantId = prefs.getString(
+      ParticipantIdentityService.participantIdKey,
+    );
     final savedProfileImagePath = prefs.getString('profile_image_path');
     final validProfileImagePath =
         savedProfileImagePath != null &&
@@ -61,6 +66,7 @@ class _ProfilePageState extends State<ProfilePage> {
       }
       setState(() {
         _displayName = displayName;
+        _participantId = participantId;
         _displayNameController.text = displayName;
         _ageController.text = data['age'] ?? '';
         _gender = data['gender'];
@@ -91,6 +97,7 @@ class _ProfilePageState extends State<ProfilePage> {
     } else {
       setState(() {
         _displayName = displayName;
+        _participantId = participantId;
         _displayNameController.text = displayName;
         _profileImagePath = validProfileImagePath;
       });
@@ -565,6 +572,8 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ]),
                   const SizedBox(height: 14),
+                  _buildDoctorConnectionCard(),
+                  const SizedBox(height: 14),
                   _buildAppearanceCard(),
                   const SizedBox(height: 14),
                   _buildFaqSection(),
@@ -656,6 +665,50 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDoctorConnectionCard() {
+    final participantId = _participantId;
+    final canShare =
+        participantId != null &&
+        ParticipantIdentityService.isParticipantId(participantId);
+
+    return _infoCard(
+      'Doctor Connection',
+      Icons.qr_code_2_rounded,
+      [
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(
+            Icons.medical_information_outlined,
+            color: AppTheme.kPrimaryDeep,
+          ),
+          title: Text(
+            canShare ? 'Show my Patient ID QR' : 'Patient ID unavailable',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            canShare
+                ? 'Let your doctor scan this while you are together.'
+                : 'Complete your Aura setup before connecting to a doctor.',
+            style: GoogleFonts.poppins(fontSize: 12),
+          ),
+          trailing: canShare
+              ? const Icon(Icons.chevron_right_rounded)
+              : null,
+          onTap: canShare
+              ? () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ShareParticipantIdPage(
+                        participantId: participantId!,
+                      ),
+                    ),
+                  )
+              : null,
+        ),
+      ],
     );
   }
 
