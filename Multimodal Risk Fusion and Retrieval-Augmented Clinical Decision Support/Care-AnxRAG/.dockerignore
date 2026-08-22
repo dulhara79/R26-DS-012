@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+.pytest_cache
+.coverage
+__pycache__
+*.py[cod]
+*.sqlite3
+var
+dist
+build
+src/*.egg-info
+validation-report.json
+.env

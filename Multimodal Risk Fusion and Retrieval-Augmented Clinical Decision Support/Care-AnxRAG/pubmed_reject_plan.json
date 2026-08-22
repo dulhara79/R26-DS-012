@@ -1,0 +1,331 @@
+[
+  {
+    "version_id": "f484206e24699344bff01d04196ad5131674e278",
+    "title": "Anxiety and depression associated oral health problems in pediatric populations: A systematic review and meta-analysis.",
+    "role": "out_of_domain",
+    "evidence_role": "review_evidence",
+    "score": 0.1
+  },
+  {
+    "version_id": "e0e4200c3d6343c6dbe25f53e7a16c80ec22320c",
+    "title": "Comparative Evaluation of Virtual Reality versus Standard Nursing Care in Managing Pain and Fear during Lumbar Puncture Procedures: A Randomised Controlled Trial.",
+    "role": "procedural_anxiety",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "3bd65880443d15b799d1d61d34c13b2bc38fb6a2",
+    "title": "The effects of haptonomy and virtual reality, anxiety, prenatal attachment and acceptance of pregnancy in unplanned pregnancy.",
+    "role": "out_of_domain",
+    "evidence_role": "result_evidence",
+    "score": 0.18
+  },
+  {
+    "version_id": "92516fab5f8a22843e8f2bfe8f69dd26be065753",
+    "title": "Aromatherapy effects on pain and anxiety during transrectal ultrasound-guided prostate biopsy: A randomized controlled trial.",
+    "role": "procedural_anxiety",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "972d0f5dd7ce28714ac108a0e0bf4e484195aac8",
+    "title": "Effect of Acupressure on Anxiety, Embarrassment, and Procedural Fear in Patients Undergoing Urodynamic Testing: Randomized Controlled Study.",
+    "role": "procedural_anxiety",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "0cd2a8c9dbaa2be64ab25c5c22a409e8d7c99a76",
+    "title": "Comparison of the Effects of Different Manual Therapy Techniques on Mandibular Mobility, Cervical Joint Position Sense, Jaw Function and Anxiety Levels in Individuals With Rheumatoid Arthritis and Temporomandibular Disorders: A Randomized Controlled Trial.",
+    "role": "secondary_anxiety_outcome",
+    "evidence_role": "result_evidence",
+    "score": 0.08
+  },
+  {
+    "version_id": "d5620ae8348603b64207817c294442f8a8950af2",
+    "title": "Depression and anxiety changes in patients after orthognathic surgery: a systematic review and meta-analysis.",
+    "role": "out_of_domain",
+    "evidence_role": "review_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "9331b4b8f3148d400cbcba51835eea2d43c98df4",
+    "title": "The effects of transcranial direct current stimulation (tDCS) on subjective, autonomic and neuropsychological response in the 7.5% CO2 experimental model of anxiety.",
+    "role": "out_of_domain",
+    "evidence_role": "result_evidence",
+    "score": 0.18
+  },
+  {
+    "version_id": "e1cfcaa7189c1f2ede3a886d4912631e914b7a9e",
+    "title": "Effects of guided imagery, and breathing exercise device on nausea-vomiting, and anxiety in hyperemesis gravidarum.",
+    "role": "secondary_anxiety_outcome",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "83a54c15f60b8e656a736cf6d394f1562bb0717c",
+    "title": "The effectiveness of supplemental and replacement blended cognitive behavioral therapy for internalizing disorders: a meta-analysis.",
+    "role": "out_of_domain",
+    "evidence_role": "review_evidence",
+    "score": 0.02
+  },
+  {
+    "version_id": "fcb13d09572595e09befdd1ea8a5a01b0854f324",
+    "title": "Depression and Anxiety in Patients With Irreversible Vision Loss: Meta-Analysis and Systematic Review.",
+    "role": "secondary_anxiety_outcome",
+    "evidence_role": "review_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "0a50be6fafeb803092e6c6140007be1e170e7a3b",
+    "title": "The effect of high-fidelity simulation based education on self-efficacy and childbirth fear in pregnant women.",
+    "role": "out_of_domain",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "5305f7bd8d6d8d898e71a7b1028f4eeddbe373b9",
+    "title": "Cognitive behavioural therapy for intolerance of uncertainty: A study protocol for the prevention of postpartum anxiety.",
+    "role": "anxiety_comorbid",
+    "evidence_role": "study_protocol",
+    "score": 0.45
+  },
+  {
+    "version_id": "da410a1b7fd26f4b8cdf2dea1dd810886cdc8123",
+    "title": "The Effect of Reiki on the Self-Efficacy, Death Anxiety, and Sleep Quality of Patients Diagnosed With Chronic Obstructive Pulmonary Disease: A Randomized-Controlled Study.",
+    "role": "secondary_anxiety_outcome",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "037430c851bcabbeb54b968ecfee3fc758fc1405",
+    "title": "Investigating impact of a comprehensive support program on death anxiety among women with breast cancer: a clinical trial.",
+    "role": "secondary_anxiety_outcome",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "e51d0d4e5d91af4407009c0317d78c0efc312244",
+    "title": "The effect of stress ball use during caesarean delivery on maternal anxiety, postoperative pain, and breastfeeding success: a prospective, randomized trial.",
+    "role": "procedural_anxiety",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "1c0b69b1daf38e92f3337480ad6da1d773fac86e",
+    "title": "A systematic review culturally adapted Cognitive Behavioral Therapy (CaCBT) for Arabic-speaking populations including North African subgroups.",
+    "role": "out_of_domain",
+    "evidence_role": "review_evidence",
+    "score": 0.02
+  },
+  {
+    "version_id": "430d5dde16241f2817c51f48d08b8bb0e9a60e25",
+    "title": "Music intervention for reducing anxiety in patients undergoing CT or MRI examinations: a systematic review and meta-analysis of randomized controlled trials.",
+    "role": "procedural_anxiety",
+    "evidence_role": "review_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "91962054b48c2a29fe000e0885e70c321b5a1890",
+    "title": "The Effect of Preoperative Chewing Gum on Anxiety and Postoperative Sore Throat in Patients Using a Laryngeal Mask Airway: A Randomized Controlled Trial.",
+    "role": "procedural_anxiety",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "bf88791d8c6d4ca1c08821bbee1a7bf452fdb5bd",
+    "title": "Redefining menopausal care: a randomized trial of group CBT for vasomotor symptoms in Korean women.",
+    "role": "secondary_anxiety_outcome",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "499f1f8427c6b13f273c6f84e3beca0329523198",
+    "title": "The effect of robot-based interventions on depression in older adults with cognitive impairment: A systematic review and meta-analysis.",
+    "role": "secondary_anxiety_outcome",
+    "evidence_role": "review_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "ecaa0069501b33ee7108508324e006ac741d0416",
+    "title": "Hypnosis in photoablative refractive surgery: monocentric prospective study.",
+    "role": "secondary_anxiety_outcome",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "06519e51e020abeee740230e254ab93aa95c1aa1",
+    "title": "A feasibility study for a randomised control trial on the effects of engagement with a dental anxiety online peer support group.",
+    "role": "procedural_anxiety",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "df1d544acfa04b545b6368f2b8c342625a4681e6",
+    "title": "The impact of vitamin D supplementation on depression and anxiety in young individuals with depression and vitamin D insufficiency/deficiency.",
+    "role": "secondary_anxiety_outcome",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "3ae618cf0575b59483c9a1ff497fac7a7dbf3a93",
+    "title": "Reductions in suicide ideation via PTSD symptoms following an anxiety sensitivity intervention: Evidence for chained mediation.",
+    "role": "out_of_domain",
+    "evidence_role": "result_evidence",
+    "score": 0.07
+  },
+  {
+    "version_id": "d23dba02b68b8363f97bde641e9c224028f0aa88",
+    "title": "Online cognitive behaviour therapy for asthma-related anxiety: a randomised controlled trial.",
+    "role": "secondary_anxiety_outcome",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "4ac6c619fba8499463e8948710ef7a14bfa0cb50",
+    "title": "Effectiveness of non-pharmacological interventions for older adults with dementia: An umbrella review.",
+    "role": "secondary_anxiety_outcome",
+    "evidence_role": "review_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "e78f55bd44492bcbbadcc64ec3482321c2822269",
+    "title": "Longitudinal studies of neighbourhood social cohesion and mental health: a systematic review with meta-analysis.",
+    "role": "out_of_domain",
+    "evidence_role": "review_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "ff957e8a170924cf2249b04d88a4c99030fa881b",
+    "title": "Efficacy of Short Course Cognitive Behavioral Therapy on Stress Reduction Among First-Year Surgical Residents.",
+    "role": "out_of_domain",
+    "evidence_role": "result_evidence",
+    "score": 0.1
+  },
+  {
+    "version_id": "685601f0854bf1b95d038eba22586cb07bcbbb32",
+    "title": "Effect of music intervention on anxiety and pain after anatomical endoscopic enucleation of the prostate: a prospective randomized controlled trial.",
+    "role": "secondary_anxiety_outcome",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "19f2b6659a85993a82ccef7029e11b4ccafb0f8a",
+    "title": "The effect of social skills training on loneliness among adolescent girls in Iran: a randomized controlled trial.",
+    "role": "secondary_anxiety_outcome",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "6b54e5690cddee8e67b8fc9a1ca9f7b7ad4441a7",
+    "title": "Cognitive mechanisms of change in OCD: Inferential confusion, obsessive beliefs, and mindfulness across three randomized treatments.",
+    "role": "out_of_domain",
+    "evidence_role": "result_evidence",
+    "score": 0.02
+  },
+  {
+    "version_id": "eb36a2183e0f7fe96600a3af9af9dc8215a9468b",
+    "title": "Impact of Restriction-Resumption Protocols on Mood and Anxiety in Healthy Adults: Randomized Controlled Trial.",
+    "role": "secondary_anxiety_outcome",
+    "evidence_role": "result_evidence",
+    "score": 0.1
+  },
+  {
+    "version_id": "5f0f3ed265c664bfbc148856cab72ea8af92eba6",
+    "title": "The effect of virtual reality glasses used during inhaler treatment on anxiety, fear and vital signs in children: a randomized controlled trial.",
+    "role": "procedural_anxiety",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "85fa410c0f8f4ac78adac18e33506e32d2ddf64a",
+    "title": "The Impact of BWM-T Versus Brief Mindfulness Induction on Stress, Anxiety and Self-Efficacy in University Students: Immediate and Short-Term Outcomes of RCT on Psychological Well-Being and Autonomic Balance.",
+    "role": "out_of_domain",
+    "evidence_role": "result_evidence",
+    "score": 0.18
+  },
+  {
+    "version_id": "b61be8a4bcac5fc0b9c11ef2d9c243fb0f36d92e",
+    "title": "Randomized Clinical Trial of Imagery Stabilization and Rescripting Therapy for Psychiatric Outpatients with Posttraumatic Stress Disorder.",
+    "role": "out_of_domain",
+    "evidence_role": "result_evidence",
+    "score": 0.02
+  },
+  {
+    "version_id": "890d361d23b1ef28e706bef17c0a0ecaa7e27c16",
+    "title": "Acute Music-Frequency Exposure Modulates Salivary Stress and Neurotrophic Markers in Young Adults: A Randomized Controlled Trial.",
+    "role": "out_of_domain",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "af2553f002df8ea34b97594c8166ecca2775d956",
+    "title": "The impact of a self-affirmation intervention on the mental and social health, and academic performance of minoritized students in STEM.",
+    "role": "out_of_domain",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "3c35a042eec545fe342125d27cb5696229479d1b",
+    "title": "The Effect of Telenursing Using Self-care Education Podcasts on Anxiety and Quality of Life of Patients with Diabetic Retinopathy Undergoing Intravitreal Injection: A Randomized Clinical Trail.",
+    "role": "secondary_anxiety_outcome",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "93662531b4f81f05322a036d34bbc916570d45e3",
+    "title": "Modified Cryotherapy During Final Irrigation Reduces Postoperative Pain and Anxiety in Pediatric Primary Molar Root Canal Therapy.",
+    "role": "procedural_anxiety",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "ee5b75fd69a359ef38cfe7db5ad26c2b82d0d51d",
+    "title": "The Model of Occupational Self-Efficacy: A Contemporary Model to Enhance Work Skills, Cognitive and Emotional Skills of Individuals With Brain Injury-A Pilot Randomized Control Trial.",
+    "role": "out_of_domain",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "4b90cbcc739f1de1e75e33534570e71ecb7bf685",
+    "title": "Prevalence of co-morbid anxiety and depression in pregnancy and postpartum: a systematic review and meta-analysis.",
+    "role": "out_of_domain",
+    "evidence_role": "review_evidence",
+    "score": 0.1
+  },
+  {
+    "version_id": "3eb1ca65f7dac38607cbfec0fa4da62fbfee365e",
+    "title": "Effectiveness of digital intelligence interventions on depression and anxiety in older adults: A systematic review and meta-analysis.",
+    "role": "secondary_anxiety_outcome",
+    "evidence_role": "review_evidence",
+    "score": 0.3
+  },
+  {
+    "version_id": "6c5946c09e3bd15489d4bb40b126176ab1a3aeb8",
+    "title": "Seeing is believing: The effect of subtle communication in social media on viewers' beliefs about depression and anxiety symptom trajectories.",
+    "role": "out_of_domain",
+    "evidence_role": "result_evidence",
+    "score": 0.1
+  },
+  {
+    "version_id": "d77f254726adaf4b18ac523019c24f919ab71705",
+    "title": "Virtual food exposure with positive mood induction or social support to reduce food anxiety in anorexia nervosa: A feasibility study.",
+    "role": "secondary_anxiety_outcome",
+    "evidence_role": "result_evidence",
+    "score": 0.08
+  },
+  {
+    "version_id": "4ad2382283e5e648f2f99ca2492c20817a2fca80",
+    "title": "Acute stress negatively impacts on-task behavior and lecture comprehension.",
+    "role": "out_of_domain",
+    "evidence_role": "result_evidence",
+    "score": 0.0
+  },
+  {
+    "version_id": "c40d12f6959f8fc86e3fae09fbf13087e40b59f1",
+    "title": "Does maternal anxiety and depression increase the risk of asthma in the offspring? A systematic review and meta-analysis.",
+    "role": "secondary_anxiety_outcome",
+    "evidence_role": "review_evidence",
+    "score": 0.0
+  }
+]

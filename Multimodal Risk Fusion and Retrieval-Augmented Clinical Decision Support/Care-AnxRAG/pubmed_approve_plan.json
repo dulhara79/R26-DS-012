@@ -1,0 +1,100 @@
+[
+  {
+    "version_id": "0b8b6d455dc1ab8f5015f86736e988291fbfa107",
+    "title": "Randomized controlled trial of a modular, transdiagnostic, cognitive-behavioral anxiety intervention versus primary care behavioral health treatment as usual.",
+    "role": "core_anxiety",
+    "evidence_role": "result_evidence",
+    "score": 1.0
+  },
+  {
+    "version_id": "0f14f7511f7c27985c71bfbce88611d93391a1fa",
+    "title": "Can positive mental imagery help high worriers stop worrying? An experimental test.",
+    "role": "core_anxiety",
+    "evidence_role": "result_evidence",
+    "score": 0.95
+  },
+  {
+    "version_id": "02f4e1e985523ed71a2a5902ed205000997a67cc",
+    "title": "Internet-based cognitive behavioral therapy (ICBT) for adolescents with anxiety disorders delivered with different types of therapist support: a randomized feasibility trial.",
+    "role": "core_anxiety",
+    "evidence_role": "result_evidence",
+    "score": 1.0
+  },
+  {
+    "version_id": "2a0751c5cbc78798b6b96907e97d1f2d64b31a95",
+    "title": "Internet-delivered cognitive behavioral therapy for adolescents with excessive worry: a randomized controlled trial with mediation analysis.",
+    "role": "core_anxiety",
+    "evidence_role": "result_evidence",
+    "score": 0.95
+  },
+  {
+    "version_id": "37f5f53daf79ea773ba50b2e5b8ebbc58af8a12a",
+    "title": "Genome-wide meta-analysis of quantitatively measured generalized anxiety symptoms in individuals of European ancestry.",
+    "role": "core_anxiety",
+    "evidence_role": "review_evidence",
+    "score": 0.88
+  },
+  {
+    "version_id": "fcda22c24a1e1c25f8fbeaf5d0f0b93a1cbe05bd",
+    "title": "Expectancy updating predicts anxiety symptom reduction from exposure therapy: Predictive analyses from a randomized clinical trial.",
+    "role": "anxiety_comorbid",
+    "evidence_role": "result_evidence",
+    "score": 0.5
+  },
+  {
+    "version_id": "44358bebcf86462a95044404a272948cd456c3ab",
+    "title": "The effectiveness of metacognitive therapy on emotional distress tolerance and medication adherence in patients with generalized anxiety disorder: a pilot randomized controlled trial.",
+    "role": "core_anxiety",
+    "evidence_role": "result_evidence",
+    "score": 1.0
+  },
+  {
+    "version_id": "d480597d26d4ec6221c0959c730302bc7bd96afa",
+    "title": "A brief ecological momentary intervention for generalized anxiety disorder: A randomized controlled trial of the worry outcome monitoring app.",
+    "role": "core_anxiety",
+    "evidence_role": "result_evidence",
+    "score": 1.0
+  },
+  {
+    "version_id": "97583abaf45937babf35ab6350f05e844f95f4c6",
+    "title": "Global prevalence and associated factors of social anxiety disorder among medical students: a systematic review and meta-analysis.",
+    "role": "core_anxiety",
+    "evidence_role": "review_evidence",
+    "score": 1.0
+  },
+  {
+    "version_id": "db3295116889fe15ef9d5a15b71ece9a99e720d0",
+    "title": "Virtual Reality Exposure-Enhanced Cognitive Behavioral Therapy (CBT + VRE) vs. CBT With Imaginal Exposure (CBT + IE) for Adolescent Patients Treatment of Social Anxiety Disorder Symptoms: A Pilot Randomized Controlled Trial.",
+    "role": "core_anxiety",
+    "evidence_role": "result_evidence",
+    "score": 1.0
+  },
+  {
+    "version_id": "9a2eac1556177eec6f7e389c7891ca2e46803dca",
+    "title": "Multi-session CBM-I for social anxiety: examining psychopathology, cognitive, neural, and psychophysiological effects in a randomized controlled trial.",
+    "role": "core_anxiety",
+    "evidence_role": "result_evidence",
+    "score": 0.98
+  },
+  {
+    "version_id": "d26a54abfe694c83092e61233f4f92d3008231ee",
+    "title": "Altered amygdala resting-state functional connectivity in anxiety disorders: a coordinate-based meta-analysis.",
+    "role": "core_anxiety",
+    "evidence_role": "review_evidence",
+    "score": 0.98
+  },
+  {
+    "version_id": "d9f00d0fe1cc6fd67b96fddac8a84ae2466ae8e7",
+    "title": "Innovative virtual reality exposure therapy for anxiety and posttraumatic stress disorder: a meta-analysis of randomised controlled trials.",
+    "role": "anxiety_comorbid",
+    "evidence_role": "review_evidence",
+    "score": 0.37
+  },
+  {
+    "version_id": "9de56b9e8f2db17bd40e1addfd4ec8cb887da787",
+    "title": "Acceptability, engagement, and efficacy of cognitive remediation for cognitive outcomes in young adults with first-episode psychosis and social anxiety: A randomized-controlled trial.",
+    "role": "anxiety_comorbid",
+    "evidence_role": "result_evidence",
+    "score": 1.0
+  }
+]
