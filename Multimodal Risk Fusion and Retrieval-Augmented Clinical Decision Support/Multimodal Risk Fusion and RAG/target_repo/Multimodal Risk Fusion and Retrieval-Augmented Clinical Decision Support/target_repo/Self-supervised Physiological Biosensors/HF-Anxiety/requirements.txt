@@ -1,0 +1,10 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+fastapi
+uvicorn[standard]
+torch
+numpy
+pandas
+scipy
+neurokit2
+influxdb-client
+huggingface_hub
