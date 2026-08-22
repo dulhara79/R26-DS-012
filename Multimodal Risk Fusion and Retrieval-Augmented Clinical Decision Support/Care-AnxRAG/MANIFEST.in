@@ -1,0 +1,21 @@
+include README.md
+include LICENSE
+include CHANGELOG.md
+include CITATION.cff
+include SECURITY.md
+include Makefile
+include Dockerfile
+include compose.yaml
+include .env.example
+recursive-include config *.yaml *.yml
+recursive-include data *.jsonl *.notice *.md *.txt
+recursive-include docs *.md
+recursive-include examples *.yaml *.yml *.md *.txt *.json
+recursive-include scripts *.py *.sh
+recursive-include requirements *.txt
+recursive-include tests *.py
+prune build
+prune dist
+prune .pytest_cache
+global-exclude *.py[cod]
+global-exclude __pycache__

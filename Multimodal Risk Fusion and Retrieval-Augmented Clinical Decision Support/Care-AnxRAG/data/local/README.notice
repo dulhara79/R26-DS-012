@@ -1,0 +1,5 @@
+Place licensed or otherwise authorized anxiety documents here.
+
+Supported formats: .md, .txt, .html, and .json.
+Markdown files may use YAML front matter. See docs/LOCAL_DOCUMENT_FORMAT.md.
+This directory intentionally contains no clinical content.

@@ -1,0 +1,3 @@
+# Replace these synthetic IDs with IDs from your controlled benchmark corpus.
+{"id":"example-answerable","question":"What evidence-based psychological intervention is discussed for panic disorder?","relevant_external_ids":["synthetic-panic-guidance"],"relevant_source_ids":[],"must_abstain":false,"expects_conflict":false}
+{"id":"example-out-of-domain","question":"How do I repair a diesel fuel injector?","relevant_external_ids":[],"relevant_source_ids":[],"must_abstain":true,"expects_conflict":false}
