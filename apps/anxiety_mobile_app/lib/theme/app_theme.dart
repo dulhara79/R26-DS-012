@@ -12,11 +12,43 @@ class AppTheme {
   static const Color kTextLight = Color(0xFF9095A7);
 
   static ThemeData get lightTheme {
+    final colorScheme = ColorScheme.fromSeed(seedColor: kPrimaryDeep);
     return ThemeData(
       useMaterial3: true,
       scaffoldBackgroundColor: kBgTop,
       textTheme: GoogleFonts.poppinsTextTheme(),
-      colorScheme: ColorScheme.fromSeed(seedColor: kPrimaryDeep),
+      colorScheme: colorScheme,
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+      ),
+    );
+  }
+
+  static ThemeData get darkTheme {
+    final colorScheme = ColorScheme.fromSeed(
+      seedColor: kPrimaryDeep,
+      brightness: Brightness.dark,
+      surface: const Color(0xFF1A1B24),
+    );
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: const Color(0xFF111218),
+      colorScheme: colorScheme,
+      textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+      ),
+      cardTheme: const CardThemeData(
+        color: Color(0xFF1A1B24),
+        surfaceTintColor: Colors.transparent,
+      ),
+      dialogTheme: const DialogThemeData(backgroundColor: Color(0xFF1A1B24)),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: Color(0xFF1A1B24),
+      ),
     );
   }
 }

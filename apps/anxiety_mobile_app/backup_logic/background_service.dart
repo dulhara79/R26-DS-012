@@ -135,8 +135,9 @@ void onStart(ServiceInstance service) async {
         String status = "Unknown";
         if (event == ScreenStateEvent.SCREEN_ON) status = "Screen_On";
         if (event == ScreenStateEvent.SCREEN_OFF) status = "Screen_Off";
-        if (event == ScreenStateEvent.SCREEN_UNLOCKED)
+        if (event == ScreenStateEvent.SCREEN_UNLOCKED) {
           status = "Screen_Unlocked";
+        }
         _sendData(userId, "Screen_Event", status);
       },
       onError: (e) => debugPrint("Screen State Stream Error: $e"),

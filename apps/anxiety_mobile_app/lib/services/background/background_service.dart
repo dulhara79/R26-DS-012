@@ -1,8 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:battery_plus/battery_plus.dart';
@@ -15,7 +20,10 @@ import 'daily_reminder.dart';
 
 /// Called once from main.dart / login_page.dart to register Android notification
 /// channels and configure the background service.  Must run in the UI isolate.
+bool _serviceConfigured = false;
+
 Future<void> initializeService() async {
+  if (_serviceConfigured) return;
   final service = FlutterBackgroundService();
 
   // ── Create ALL notification channels before configuring the service ──────
@@ -33,7 +41,7 @@ Future<void> initializeService() async {
       const AndroidNotificationChannel(
         ServiceConfig.channelId,
         ServiceConfig.channelName,
-        description: 'Running background research tasks',
+        description: 'Aura is working in the background',
         importance: Importance.low,
       ),
     );
@@ -42,16 +50,24 @@ Future<void> initializeService() async {
       const AndroidNotificationChannel(
         'ema_channel',
         'Daily Check-ins',
-        description: 'Scheduled mood and anxiety ratings',
+        description: 'Reminders to check how you feel',
         importance: Importance.high,
+      ),
+    );
+    await androidPlugin.createNotificationChannel(
+      const AndroidNotificationChannel(
+        'anxiety_alerts',
+        'Anxiety check-ins',
+        description: 'Gentle check-ins based on recent readings',
+        importance: Importance.max,
       ),
     );
     // GAD-7 weekly alert.
     await androidPlugin.createNotificationChannel(
       const AndroidNotificationChannel(
         'gad7_channel',
-        'Weekly Assessments',
-        description: 'Weekly GAD-7 clinical questionnaires',
+        'Weekly Check-ins',
+        description: 'Reminder for your weekly anxiety check-in',
         importance: Importance.high,
       ),
     );
@@ -59,8 +75,8 @@ Future<void> initializeService() async {
     await androidPlugin.createNotificationChannel(
       const AndroidNotificationChannel(
         'pss_channel',
-        'Monthly Assessments',
-        description: 'Monthly PSS-10 stress scale assessments',
+        'Weekly Check-ins',
+        description: 'Reminder for your weekly stress check-in',
         importance: Importance.high,
       ),
     );
@@ -69,16 +85,61 @@ Future<void> initializeService() async {
   await service.configure(
     androidConfiguration: AndroidConfiguration(
       onStart: onStart,
-      autoStart: true,
+      // Starting a location foreground service before the first frame, while
+      // permission is denied, or from a boot receiver can make Android throw a
+      // native SecurityException and terminate the whole process. Configure it
+      // here, then start it only through startBackgroundServiceIfPermitted().
+      autoStart: false,
       isForegroundMode: true,
       notificationChannelId: ServiceConfig.channelId,
-      initialNotificationTitle: 'Research Active',
-      initialNotificationContent: 'Monitoring in background…',
+      initialNotificationTitle: 'Aura is running',
+      initialNotificationContent: 'Keeping your check-ins ready',
       foregroundServiceNotificationId: ServiceConfig.notificationId,
-      autoStartOnBoot: true,
+      autoStartOnBoot: false,
     ),
     iosConfiguration: IosConfiguration(),
   );
+  _serviceConfigured = true;
+}
+
+/// Starts the long-running collector only while the app is visible and Android
+/// has the location permission required by its foreground-service type.
+///
+/// Android foreground-service failures occur in native code, outside Dart's
+/// try/catch boundary, so preventing an invalid start is the reliable fix.
+Future<bool> startBackgroundServiceIfPermitted() async {
+  await initializeService();
+
+  if (kIsWeb) return false;
+
+  if (Platform.isAndroid) {
+    final locationStatus = await Permission.locationWhenInUse.status;
+    if (!locationStatus.isGranted) {
+      debugPrint(
+        'Background Service: location permission is not granted; start skipped.',
+      );
+      return false;
+    }
+
+    final locationServicesEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!locationServicesEnabled) {
+      debugPrint(
+        'Background Service: Android location services are disabled; start skipped.',
+      );
+      return false;
+    }
+
+    if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      debugPrint(
+        'Background Service: app is not resumed; unsafe start skipped.',
+      );
+      return false;
+    }
+  }
+
+  final service = FlutterBackgroundService();
+  if (await service.isRunning()) return true;
+  return service.startService();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -92,6 +153,24 @@ void onStart(ServiceInstance service) async {
   // ── Mark as background isolate FIRST — before any sendToSheet call ────────
   // This routes queue writes to 'offline_queue_bg' instead of 'offline_queue_main'.
   BackgroundServiceHelper.isMainIsolate = false;
+
+  // Log every permitted service start explicitly so heartbeat-gap analysis
+  // can distinguish a restart from a continuously running collector.
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    final String? uid = prefs.getString('user_id');
+    if (uid != null && uid.isNotEmpty) {
+      await BackgroundServiceHelper.sendToSheet(
+        uid,
+        "Service_Restart",
+        "Restarted_${DateTime.now().toIso8601String()}",
+        immediate: true,
+      );
+    }
+  } catch (e) {
+    debugPrint("Service restart logging error: $e");
+  }
 
   debugPrint("🔋 Background Service: onStart — initialising…");
 
