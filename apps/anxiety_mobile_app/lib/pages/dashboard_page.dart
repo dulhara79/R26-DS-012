@@ -563,12 +563,18 @@ class _DashboardPageState extends State<DashboardPage>
     } else if (status == 'buffering') {
       setState(() {
         _predictionStatus = "buffering";
+        _forecastData = [];
+        _currentModelRisk = null;
+        _fusionRiskScore = null;
         _statusMessage = message;
       });
       _startBufferingCountdown();
     } else if (status == 'not_calibrated') {
       setState(() {
         _predictionStatus = "not_calibrated";
+        _forecastData = [];
+        _currentModelRisk = null;
+        _fusionRiskScore = null;
         _statusMessage = message;
       });
       _bufferingTimer?.cancel();
@@ -576,9 +582,10 @@ class _DashboardPageState extends State<DashboardPage>
     } else {
       // API Offline/Error state
       setState(() {
-        if (_predictionStatus != "success") {
-          _predictionStatus = "error";
-        }
+        _predictionStatus = "error";
+        _forecastData = [];
+        _currentModelRisk = null;
+        _fusionRiskScore = null;
         _statusMessage = message;
       });
     }

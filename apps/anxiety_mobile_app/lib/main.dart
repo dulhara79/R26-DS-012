@@ -22,6 +22,7 @@ import 'services/notification_helper.dart';
 import 'services/user_manager.dart';
 import 'services/participant_identity_service.dart';
 import 'services/anxiety_feedback_service.dart';
+import 'services/research_permission_service.dart';
 import 'services/background/background_service.dart' as bg;
 import 'services/background/service_config.dart';
 
@@ -40,6 +41,10 @@ Future<bool> _hasCurrentConsent() async {
 Future<void> _resumeExistingParticipant(String userId) async {
   UserManager().login(userId);
   if (!kIsWeb) {
+    // Existing participants can bypass LoginPage on later launches. Request
+    // any missing research permissions here so permission onboarding is tied
+    // to consent/startup, not to opening the Digital Phenotyping detail page.
+    await ResearchPermissionService.requestMissingPermissions();
     await bg.initializeService();
     await bg.startBackgroundServiceIfPermitted();
   }
@@ -259,7 +264,13 @@ void main() async {
           _routeNotificationPayload(NotificationHelper.consumeLaunchPayload());
         }
         if (shouldStartBackgroundService && !kIsWeb) {
-          unawaited(bg.startBackgroundServiceIfPermitted());
+          // Permission dialogs must be launched from the visible UI isolate.
+          // Existing participants may never revisit LoginPage, so run the
+          // centralised one-time permission onboarding before starting sensing.
+          unawaited(() async {
+            await ResearchPermissionService.requestMissingPermissions();
+            await bg.startBackgroundServiceIfPermitted();
+          }());
         }
       });
     },

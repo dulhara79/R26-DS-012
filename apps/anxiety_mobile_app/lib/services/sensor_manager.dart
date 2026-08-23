@@ -91,19 +91,10 @@ class SensorManager {
       );
 
       if (!success) {
-        print('Failed to transmit this minute feature block.');
-        if (isWorn && isCollecting) {
-          // Preserve a worn block after a network/server failure instead of
-          // silently losing it. Cap the retry buffer at five minutes.
-          _readingsBuffer.insertAll(0, readingsToSend);
-          final maxBufferedReadings = samplingRate * 60 * 5;
-          if (_readingsBuffer.length > maxBufferedReadings) {
-            _readingsBuffer.removeRange(
-              0,
-              _readingsBuffer.length - maxBufferedReadings,
-            );
-          }
-        }
+        print(
+          'Failed to transmit this minute feature block. '
+          'Discarding it because expired readings must not enter real-time forecasting.',
+        );
       }
     } finally {
       _isFlushing = false;

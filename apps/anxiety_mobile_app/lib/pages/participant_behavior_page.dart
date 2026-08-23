@@ -524,8 +524,8 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
                       ),
                     );
                   },
-                  icon: const Icon(Icons.science_outlined, size: 17),
-                  label: const Text('Open research/debug view'),
+                  icon: const Icon(Icons.sensors_rounded, size: 17),
+                  label: const Text('View sensing & collection details'),
                 ),
               ),
             ],
