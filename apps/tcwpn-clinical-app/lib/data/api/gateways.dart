@@ -1,30 +1,54 @@
 // lib/data/api/gateways.dart
 //
-// Two gateways, matching the two services ClinAnx talks to.
+// ONE gateway for the clinician workflow: the R26-DS-012 Central Backend.
 //
-//   TcwpnGateway   — submit a clinical note, get Component 4's assessment.
-//   FusionGateway  — contribute that assessment, read the fused composite.
+// WHAT WAS REMOVED, AND WHY
+// -------------------------
+// `FusionGateway` posted to `/contribute` and read `GET /state/{mrn}`. Those
+// routes exist in NO service in any repository. The fusion service serves
+// /v1/fuse, /v1/fuse/manual, /v1/physio/tick and /v1/patients/{mrn}/state; the
+// Central Backend serves none of them. Every fusion call in the previous build
+// therefore fell through to a local composite computed from a client-side weight
+// table, and was displayed with a "provisional" label that concealed the fact
+// that the framework score had never been fetched at all.
 //
-//   C3Gateway      — optional third, for the intervention engine.
+// `TcwpnGateway.analyse()` posted directly to the Space's /predict. That path is
+// gone from the clinician workflow: the backend owns ingestion (its own
+// modality_clients.py header says so), and it is the backend that applies the
+// gate, the recency and reliability weighting, the harmonisation and the
+// conformal calibration. An app calling /predict directly skips all of it.
 //
-// There is no C1 or C2 gateway, by design. The patient-facing app collects
-// wearable and behavioural data and pushes it to the fusion service itself.
-// ClinAnx sees those modalities only in the fused state it reads back.
+// WHAT REMAINS
+// ------------
+//   CentralBackendGateway  — enrolment, note ingestion, fusion, timeline,
+//                            evidence, verdict.
+//   TcwpnWarmupGateway     — /health only, to wake a sleeping Space.
+//   C3Gateway              — the Personalised Intervention Framework, called
+//                            directly. NOT a fusion modality; see Modality.
 
 import '../../core/config/env.dart';
 import '../../domain/models.dart';
 import 'api_client.dart';
+import 'session.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Component 4 — TC-WPN
+// Central Backend
 // ─────────────────────────────────────────────────────────────────────────────
 
-class TcwpnGateway {
+class CentralBackendGateway {
   final ApiClient _api;
-  TcwpnGateway([ApiClient? api]) : _api = api ?? ApiClient(Env.tcwpnBase);
 
-  /// Wakes a sleeping Space and reports model metadata. Called once at launch
-  /// so the first real analysis does not pay the full cold-start.
+  CentralBackendGateway([ApiClient? api])
+      : _api = api ??
+            ApiClient(
+              Env.backendBase,
+              // The backend checks a single shared token (main.py::_auth), not
+              // the clinician's session JWT. Sending the JWT here yields 401 on
+              // every call. Clinician identity travels in the body's `author`
+              // field instead — a documented prototype limitation, not a design.
+              bearer: () => Env.backendToken,
+            );
+
   Future<Map<String, dynamic>?> health() async {
     try {
       return await _api.get('/health', timeout: const Duration(seconds: 30));
@@ -33,140 +57,187 @@ class TcwpnGateway {
     }
   }
 
-  /// Analyse one clinical note against this patient's support set.
-  ///
-  /// The support set is sent with per-note dates because TC-WPN's temporal
-  /// weighting — exp(-λ·Δt/365), λ = 0.5 — and its visit-regularity term are
-  /// computed server-side from them. The client must not pre-weight anything.
-  Future<TcwpnResult> analyse({
-    required String patientMrn,
-    required String noteText,
-    required String noteType,
-    required DateTime noteDate,
-    required List<SupportNote> supportSet,
-    required int visitCount,
-  }) async {
-    final started = DateTime.now();
-    final json = await _api.post('/predict', {
-      'patient_id': patientMrn,
-      'note_text': noteText,
-      'note_type': noteType,
-      'note_date': noteDate.toIso8601String(),
-      'visit_count': visitCount,
-      'support_set': supportSet.map((n) => n.toWire()).toList(),
-      // Ask for the full explanation payload. Services that don't implement it
-      // simply omit the fields and the UI degrades honestly.
-      'return_attention': true,
-      'return_support_contributions': true,
-    });
+  // ── Enrolment ─────────────────────────────────────────────────────────────
 
-    return TcwpnResult.fromJson(
-      json,
-      fallbackLatency: DateTime.now().difference(started).inMilliseconds,
-    );
+  /// Enrols a patient by MRN. The backend HMAC-hashes it on arrival and never
+  /// persists the raw value; what comes back is an opaque `subject_id` plus a
+  /// pairing code for the patient app.
+  ///
+  /// Re-enrolling a known MRN is safe: the backend returns the existing subject
+  /// with a fresh code rather than creating a duplicate patient.
+  Future<EnrolmentResult> enrol({
+    required String mrn,
+    String? enrolledBy,
+  }) async {
+    final json = await _api.post('/v1/subjects', {
+      'mrn': mrn,
+      if (enrolledBy != null && enrolledBy.isNotEmpty) 'enrolled_by': enrolledBy,
+    }, timeout: Env.quickTimeout);
+    return EnrolmentResult.fromJson(json);
   }
 
-  void dispose() => _api.close();
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Late fusion — proposal §5.1
-// ─────────────────────────────────────────────────────────────────────────────
-
-class FusionGateway {
-  final ApiClient _api;
-  FusionGateway([ApiClient? api]) : _api = api ?? ApiClient(Env.fusionBase);
-
-  /// Read the current fused state for a patient.
+  /// Resolves an already-enrolled MRN to its subject_id.
   ///
-  /// The response carries all four modality snapshots, including the two this
-  /// app never collects. C1 and C2 arrive with their own capture timestamps,
-  /// written by the patient app, so the clinician can see how fresh the passive
-  /// signals are relative to the note they just wrote.
-  Future<FusionResult?> state(String mrn) async {
-    if (!Env.hasFusion) return null;
+  /// Returns null when the backend has never seen this MRN — a normal state for
+  /// a patient added to the local roster but not yet enrolled, not an error.
+  ///
+  /// Note that this sends the raw MRN over the wire so the server can hash it
+  /// with its pepper; the app cannot compute the hash itself. Keep it to HTTPS,
+  /// and prefer the stored subject_id for everything afterwards.
+  Future<String?> resolveMrn(String mrn) async {
     try {
-      final json = await _api.get('/state/$mrn');
-      return FusionResult.fromJson(json, mrn);
+      final json = await _api.get(
+        '/v1/subjects/resolve?mrn=${Uri.encodeQueryComponent(mrn)}',
+        timeout: Env.quickTimeout,
+      );
+      final id = json['subject_id'];
+      return id == null ? null : '$id';
     } on ApiException catch (e) {
-      // A patient with no fused record yet is a normal state, not an error.
       if (e.kind == ApiFailure.notFound) return null;
       rethrow;
     }
   }
 
-  /// Contribute Component 4's assessment and receive the recomputed composite.
+  /// Registers the id a component service knows this patient by, so the backend
+  /// does not ask C2 about a UUID C2 has never heard of.
   ///
-  /// This is the single point at which TC-WPN's output enters the framework.
-  /// The fusion service combines it with whatever C1, C2 and C3 have most
-  /// recently supplied, renormalises across the modalities that actually
-  /// reported, and returns the composite with its alert band.
-  Future<FusionResult> contributeClinicalNlp({
-    required String mrn,
-    required TcwpnResult result,
-    required String noteId,
-    required DateTime noteDate,
-  }) async {
-    if (!Env.hasFusion) {
-      // No fusion service configured: compute a provisional composite locally
-      // from the one modality we hold. Clearly labelled in the UI.
-      return FusionResult.local(
-        mrn: mrn,
-        readings: {
-          'c4_clinical_nlp': ModalityReading(
-            key: 'c4_clinical_nlp',
-            score: result.calibratedProbability,
-            capturedAt: noteDate,
-          ),
-        },
-      );
-    }
+  /// `modality` must be one of `c1_physiological`, `c2_behavioral`,
+  /// `c3_clinical_nlp`. Idempotent per modality; the backend returns 409 if that
+  /// external id already belongs to a different subject, which is a real
+  /// cross-patient error and must surface, not be swallowed.
+  Future<void> registerExternalId({
+    required String subjectId,
+    required String modality,
+    required String externalId,
+  }) =>
+      _api.post('/v1/subjects/$subjectId/external-ids', {
+        'modality': modality,
+        'external_id': externalId,
+      }, timeout: Env.quickTimeout);
 
-    try {
-      final json = await _api.post('/contribute', {
-        'patient_id': mrn,
-        'component': 'c4_clinical_nlp',
-        'score': result.calibratedProbability,
-        'confidence': result.confidence,
-        'captured_at': noteDate.toIso8601String(),
-        'source_id': noteId,
-        'model_version': result.modelVersion,
-        // Sent so the fusion layer can down-weight or flag a low-confidence
-        // contribution rather than treating every C4 score as equally solid.
-        'needs_review': result.needsManualReview,
-        'renormalise_on_missing': true,
+  // ── Clinical note ─────────────────────────────────────────────────────────
+
+  /// Submits one clinical note.
+  ///
+  /// Server-side this single call runs TC-WPN, stores the reading, and triggers
+  /// fusion. The support set is sent with per-note dates because TC-WPN's
+  /// temporal weighting and its visit-regularity term are computed from them
+  /// server-side; the client must not pre-weight anything.
+  ///
+  /// `author` is the clinician id. It is the only clinician attribution the
+  /// backend receives, because the transport token is a shared app credential.
+  Future<ClinicalNoteIngestResult> submitNote({
+    required String subjectId,
+    required String noteText,
+    required String noteType,
+    required DateTime noteDate,
+    required List<SupportNote> supportSet,
+    required int visitCount,
+    String? author,
+  }) async {
+    final started = DateTime.now();
+    final json = await _api.post('/v1/clinical-notes', {
+      'subject_id': subjectId,
+      'note_text': noteText,
+      'note_type': noteType,
+      'note_date': noteDate.toUtc().toIso8601String(),
+      'visit_count': visitCount,
+      'support_set': supportSet.map((n) => n.toWire()).toList(),
+      // Ask for the explanation payload. A service that does not implement it
+      // omits the fields and the UI degrades honestly rather than inventing
+      // attention weights.
+      'return_attention': true,
+      'return_support_contributions': true,
+      if (author != null && author.isNotEmpty) 'author': author,
+    });
+
+    return ClinicalNoteIngestResult.fromJson(
+      json,
+      fallbackLatency: DateTime.now().difference(started).inMilliseconds,
+    );
+  }
+
+  // ── Fusion and egress ─────────────────────────────────────────────────────
+
+  /// Re-runs fusion over the stored readings. Does not call any component
+  /// service — it re-derives the composite from what is already persisted.
+  Future<void> runFusion(String subjectId, {String trigger = 'manual'}) =>
+      _api.post('/v1/fusion/run', {
+        'subject_id': subjectId,
+        'trigger': trigger,
       });
-      return FusionResult.fromJson(json, mrn);
-    } on ApiException {
-      return FusionResult.local(
-        mrn: mrn,
-        readings: {
-          'c4_clinical_nlp': ModalityReading(
-            key: 'c4_clinical_nlp',
-            score: result.calibratedProbability,
-            capturedAt: noteDate,
-          ),
-        },
+
+  /// The clinician view: composite, per-modality readings with freshness and
+  /// status, the gate decision, the conformal set, and the trend history.
+  ///
+  /// Returns null only when the backend has no such subject.
+  Future<FusionResult?> timeline({
+    required String subjectId,
+    required String mrn,
+    int limit = 20,
+  }) async {
+    try {
+      final json = await _api.get(
+        '/v1/doctor/patients/$subjectId/timeline?limit=$limit',
+        timeout: Env.quickTimeout,
       );
+      return FusionResult.fromJson(json, mrn);
+    } on ApiException catch (e) {
+      if (e.kind == ApiFailure.notFound) return null;
+      rethrow;
     }
   }
 
-  /// Contribute Component 3's tier when the intervention engine has run.
-  Future<FusionResult?> contributeIntervention({
-    required String mrn,
-    required C3Result result,
-  }) async {
-    if (!Env.hasFusion) return null;
-    try {
-      final json = await _api.post('/contribute', {
-        'patient_id': mrn,
-        'component': 'c3_intervention',
-        'score': result.riskScore,
-        'confidence': result.confidence,
-        'captured_at': DateTime.now().toIso8601String(),
-        'renormalise_on_missing': true,
+  /// CARE-AnxRAG decision support. The backend forwards no patient data into
+  /// the RAG call; subject_id is used for auth and audit only.
+  Future<Map<String, dynamic>> evidence({
+    required String subjectId,
+    required String question,
+  }) =>
+      _api.post('/v1/doctor/patients/$subjectId/evidence', {
+        'question': question,
       });
-      return FusionResult.fromJson(json, mrn);
+
+  /// Records the clinician's tier judgement against a SPECIFIC fusion row.
+  ///
+  /// Two ordering rules, both from the backend's own docstring, and both the
+  /// UI's responsibility to enforce:
+  ///   • the verdict must be entered BEFORE the conformal set is shown, or the
+  ///     label is contaminated by the prediction it exists to calibrate;
+  ///   • `fusionResultId` must be the id of the row the clinician actually
+  ///     looked at, not the latest one.
+  Future<Map<String, dynamic>> submitVerdict({
+    required int fusionResultId,
+    required String tierLabel, // 'Low' | 'Medium' | 'High'
+    String? author,
+    String? note,
+  }) =>
+      _api.post('/v1/verdict', {
+        'fusion_result_id': fusionResultId,
+        'tier_label': tierLabel,
+        if (author != null && author.isNotEmpty) 'author': author,
+        if (note != null && note.isNotEmpty) 'note': note,
+      }, timeout: Env.quickTimeout);
+
+  void dispose() => _api.close();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TC-WPN — warm-up only
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Wakes a sleeping Space and reports model metadata, so the first real
+/// analysis does not pay the full cold-start. This is the ONLY call this app
+/// makes to the Space; inference goes through the Central Backend.
+class TcwpnWarmupGateway {
+  final ApiClient _api;
+  TcwpnWarmupGateway([ApiClient? api])
+      : _api = api ?? ApiClient(Env.tcwpnBase);
+
+  Future<Map<String, dynamic>?> health() async {
+    if (!Env.hasTcwpnWarmup) return null;
+    try {
+      return await _api.get('/health', timeout: const Duration(seconds: 30));
     } on ApiException {
       return null;
     }
@@ -179,17 +250,20 @@ class FusionGateway {
 // Component 3 — intervention engine
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// The Personalised Intervention Framework.
+///
+/// NOT a fusion modality. The backend's composite is built from four modalities
+/// and intervention is not one of them, so nothing this class returns may be
+/// rendered as a contribution to the composite. It is shown as its own section.
 class C3Gateway {
   final ApiClient _api;
-  C3Gateway([ApiClient? api]) : _api = api ?? ApiClient(Env.c3Base);
+  C3Gateway([ApiClient? api])
+      : _api = api ?? ApiClient(Env.c3Base, bearer: () => Session.token ?? '');
 
   /// Calibrated XGBoost + APS conformal classification.
   ///
-  /// `textualRisk` is TC-WPN's calibrated probability — a genuinely independent
-  /// modality, not a transform of the GAD-7 score. Physiological and behavioural
-  /// risks are passed through from the fused state when available and as null
-  /// otherwise, so the service can impute rather than receive a fabricated
-  /// value.
+  /// `textualRisk` is TC-WPN's score as the backend stored it — a genuinely
+  /// independent modality, not a transform of the GAD-7 score.
   Future<C3Result> classify({
     required Patient patient,
     required List<int> gad7Answers,

@@ -96,14 +96,33 @@ class ApiClient {
   final String baseUrl;
   final http.Client _http;
 
+  /// Supplies the bearer token for this service, evaluated per request.
+  ///
+  /// Different services want different credentials, and sending the wrong one
+  /// is a silent 401 rather than a visible error:
+  ///
+  ///   Central Backend — a single shared app token (main.py::_auth compares the
+  ///                     header against one static BACKEND_API_TOKEN). The
+  ///                     clinician's JWT is NOT what it checks.
+  ///   C3 / auth       — the clinician's session JWT.
+  ///   TC-WPN /health  — the build-time HF token, for a private Space.
+  ///
+  /// Defaults to the previous behaviour: session JWT when signed in, HF token
+  /// otherwise.
+  final String Function() _bearer;
+
   /// The client is chosen by base URL: a host in the pin set gets a client
   /// whose trust store contains only the pinned roots, so an intercepting proxy
   /// fails the handshake before any note text is written to the socket.
   ///
   /// Injecting a client (for tests) bypasses pinning, which is correct — a test
   /// double is not a network path.
-  ApiClient(this.baseUrl, {http.Client? client})
-      : _http = client ?? SecureHttp.clientFor(baseUrl);
+  ApiClient(this.baseUrl, {http.Client? client, String Function()? bearer})
+      : _http = client ?? SecureHttp.clientFor(baseUrl),
+        _bearer = bearer ?? _defaultBearer;
+
+  static String _defaultBearer() =>
+      Session.isActive ? Session.token! : Env.hfToken;
 
   /// Authorization precedence, and the order matters:
   ///
@@ -117,7 +136,7 @@ class ApiClient {
   /// class did previously — means /predict arrives with a deploy credential
   /// instead of a user credential, and the Space rejects it with 401.
   Map<String, String> get _headers {
-    final bearer = Session.isActive ? Session.token! : Env.hfToken;
+    final bearer = _bearer();
     return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
