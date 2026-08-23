@@ -1,19 +1,28 @@
 {
   "_comment": [
-    "deployment_config.json \u00e2\u20ac\u201d the single versioned unit required by \u00c2\u00a73 and \u00c2\u00a717.",
+    "deployment_config.json - the single versioned unit required by §3 and §17.",
     "",
-    "\u00c2\u00a73 states that TC-WPN source code + checkpoint + tokenizer + inference",
+    "§3 states that TC-WPN source code + checkpoint + tokenizer + inference",
     "preprocessing must be treated as ONE versioned unit. This file IS that unit.",
     "app.py refuses to start if the loaded checkpoint disagrees with any value",
-    "below (\u00c2\u00a715.6).",
+    "below (§15.6).",
     "",
     "EVERY FIELD MARKED <FILL> MUST BE COMPLETED IN PHASE 1/2 BEFORE DEPLOYMENT.",
     "Nothing here may be guessed. If a value is not known, the deployment is not",
-    "ready \u00e2\u20ac\u201d that is the point of the file."
+    "ready - that is the point of the file."
   ],
-  "deployment_config_version": "1.0.0",
+  "deployment_config_version": "1.1.0",
+
   "provenance": {
-    "_comment": "\u00c2\u00a717 \u00e2\u20ac\u201d the reproducible chain, every step traceable.",
+    "_comment": [
+      "§17 - the reproducible chain, every step traceable.",
+      "",
+      "BLOCKER at the time of writing: no .pt from the clean pipeline is",
+      "committed anywhere in tcwpn_test (either branch). checkpoint_sha256",
+      "below must be RE-VERIFIED against the file actually uploaded to the HF",
+      "model repo. If it was written before the upload, app.py will hard-fail",
+      "startup with a hash mismatch - which is the correct behaviour, not a bug."
+    ],
     "tcwpn_git_commit": "d5277314891077840316789e8eab55b23fd8c6e1",
     "tcwpn_git_commit_verified_at": "2026-08-22T11:00:38Z",
     "training_config": "configs/tcwpn_full.yaml",
@@ -21,16 +30,19 @@
     "run_name": "tcwpn_full_k5_seed42",
     "checkpoint_filename": "tcwpn_clean_v1_full_k5_seed42.pt",
     "checkpoint_sha256": "aab9641145b22942dae86353a215576a4f659aaabf2cd8d0574daf1f6d8a20f5",
+    "checkpoint_sha256_reverified": false,
     "hf_model_repo": "dulharakaushalya/tc-wpn-clinical",
     "hf_model_repo_revision": "892dab55932a7fe12c42691a2381c9b92d7086da",
     "hf_space": "dulharakaushalya/tc-wpn-demo",
     "hf_space_commit": "e8e58db5fd8d16090f833b556ae197cc8703af22"
   },
+
   "model_version": "tcwpn-clean-benchmark-36d7413",
   "preprocessing_version": "bioclinicalbert-maxlen512-maxchunks1-stride128-v1",
+
   "preprocessing": {
     "_comment": [
-      "\u00c2\u00a715.3 \u00e2\u20ac\u201d preprocessing is part of the model. These values MUST equal the",
+      "§15.3 - preprocessing is part of the model. These values MUST equal the",
       "arguments passed to scripts/tokenize_cohort.py for the run named above.",
       "The repo defaults are --max-len 512 --max-chunks 1 --stride 128, and the",
       "frozen five-seed benchmark used max_chunks=1."
@@ -42,9 +54,10 @@
     "padding": "max_length",
     "truncation": true
   },
+
   "inference_configuration": {
     "_comment": [
-      "\u00c2\u00a715.4. Left-hand names are the supervisor's; the bracketed name is the",
+      "§15.4. Left-hand names are the supervisor's; the bracketed name is the",
       "actual PrototypicalModel keyword in src/tcwpn/model.py, which is what the",
       "checkpoint's cfg block records. Values are read from configs/tcwpn_full.yaml."
     ],
@@ -63,43 +76,66 @@
       "aux_weight": "aux_head_weight"
     }
   },
+
+  "temporal_input": {
+    "_comment": [
+      "The quantity TemporalRecencyWeight consumes, stated once so no caller has",
+      "to infer it from a stale docstring.",
+      "",
+      "scripts/apply_index_time.py overwrites the column the model reads:",
+      "    days_before_patient_last_note := days_before_index",
+      "    days_before_index = (t_index - charttime), clipped at 0",
+      "t_index is the index time of THAT NOTE'S OWN PATIENT. sampler.py gives one",
+      "support slot per distinct patient, so a K-shot set carries K independent",
+      "reference points. There is no shared 'most recent note' axis.",
+      "",
+      "The vendored tc_wpn/model.py docstring for TemporalRecencyWeight still",
+      "describes the pre-index-time semantics. It is stale; this block and",
+      "src/tcwpn/indexing.py are authoritative. See NOTES_FOR_SRC_TCWPN_MODEL.md."
+    ],
+    "field": "days_before_index",
+    "definition": "(t_index - charttime) in days for the note's own patient, clipped at 0",
+    "formula": "w_i^T = exp(-lambda * days_before_index / 365)",
+    "supplied_by": "central backend",
+    "fallback": "(query note_date - support note_date); reported as temporal_axis 'approximated'"
+  },
+
   "operating_point": {
     "_comment": [
-      "\u00c2\u00a77 \u00e2\u20ac\u201d these are two DIFFERENT things and must not be conflated.",
+      "§7 - these are two DIFFERENT things and must not be conflated.",
       "AUROC is a threshold-free discrimination metric.",
-      "The threshold is an operating point selected on validation (threshold_objective: f1).",
-      "scripts/train.py writes locked_threshold into the run manifest; copy it here."
+      "The threshold is an operating point selected on validation (objective f1).",
+      "Full precision as locked in results/.../tcwpn_full_k5_seed42/eval_test.json.",
+      "Do not round it here; rounding changes predictions near the boundary."
     ],
-    "threshold": "0.2693",
+    "threshold": 0.26931220789750415,
     "threshold_source": "locked on the full validation plan, objective=f1, never re-tuned on test",
     "threshold_is_derived_from_auroc": false
   },
+
   "research_metrics": {
     "_comment": [
-      "\u00c2\u00a715.7 \u00e2\u20ac\u201d these are served ONLY from /health. They never appear in a",
+      "§15.7 - these are served ONLY from /health. They never appear in a",
       "/predict response.",
-      "\u00c2\u00a717 \u00e2\u20ac\u201d a metric may only be published here if it was measured on the",
+      "§17 - a metric may only be published here if it was measured on the",
       "checkpoint named in `provenance`. Values below are the five-seed frozen",
-      "benchmark from data/TC-WPN \u00e2\u20ac\u201d Phase 3B .../tcwpn_full_seed_results.csv and",
+      "benchmark from data/TC-WPN - Phase 3B .../tcwpn_full_seed_results.csv and",
       "the seed-42 eval_test.json in the same repo. Confirm they correspond to",
-      "the checkpoint you actually upload before setting metrics_verified true."
+      "the checkpoint you actually upload before setting metrics_verified true.",
+      "",
+      "The figures 0.9635, 0.8989 and 0.9291 that appear in earlier drafts of the",
+      "service-contract document and in the live Space's /health belong to the",
+      "ARCHIVED pipeline (keyword gate on positives, text-derived test filter,",
+      "support/query patient overlap - see AUDIT_OF_ARCHIVED_PIPELINE.md). They",
+      "must not be republished anywhere."
     ],
     "metrics_verified": false,
     "discrimination": {
       "auroc_mean_5_seeds": 0.7377,
       "auroc_sd_5_seeds": 0.0031,
-      "seeds": [
-        42,
-        43,
-        44,
-        45,
-        46
-      ],
+      "seeds": [42, 43, 44, 45, 46],
       "seed42_auroc": 0.7379,
-      "seed42_auroc_ci95": [
-        0.7184,
-        0.7582
-      ],
+      "seed42_auroc_ci95": [0.7184, 0.7582],
       "seed42_pr_auc": 0.7923
     },
     "at_locked_threshold": {
@@ -112,20 +148,76 @@
       "ece": 0.0849,
       "calibrator_fitted": false
     },
+    "blinded": {
+      "_comment": [
+        "eval_test_blind-anxiety.json, same checkpoint. Anxiety lexicon masked.",
+        "Ship this next to the headline number; it is the honest one."
+      ],
+      "seed42_auroc_blind_anxiety": 0.6284,
+      "seed42_auroc_blind_anxiety_ci95": [0.6045, 0.6519]
+    },
+    "mechanism_finding": {
+      "_comment": [
+        "Phase 4, five seeds, paired against aux_only (0.7371). Neither w^T nor",
+        "w^C shows a detectable effect once the auxiliary CE head is held",
+        "constant. The service may not attribute its score to either mechanism."
+      ],
+      "tcwpn_full_vs_aux_only": { "delta_auroc": 0.0006, "p_value": 0.886 },
+      "temporal_aux_vs_aux_only": { "delta_auroc": 0.0006, "p_value": 0.906 },
+      "pcw_aux_vs_aux_only": { "delta_auroc": -0.008, "p_value": 0.15 }
+    },
     "evaluation_context": "MIMIC-IV, patient-disjoint episodes, index-time protocol, K=5, concurrent detection, prevalence 0.594",
     "caveat": "Research metric. Not validated on NHSL data. Not a prospective claim."
   },
+
   "api": {
-    "_comment": "\u00c2\u00a711 \u00e2\u20ac\u201d the contract the central backend codes against.",
-    "contract_version": "1.0.0",
+    "_comment": [
+      "§11 - the contract the central backend codes against.",
+      "contract_version 1.1.0 adds the R26-DS-012 §1 common envelope",
+      "(subject_id, modality, score, status, captured_at, computed_at,",
+      "latency_ms) and per-note days_before_index."
+    ],
+    "contract_version": "1.1.0",
+    "modality": "c4_clinical_nlp",
     "requires_support_set": true,
     "min_anxiety_support": 1,
     "min_control_support": 1,
+    "evaluated_k": 5,
+    "evaluated_k_note": "The frozen benchmark is K=5 and only K=5. Serving at another K is not wrong, but it is outside what was measured. The backend's support-set selector should default to 5.",
     "allow_default_support_set_in_api": false,
-    "allow_default_support_set_in_demo_ui": true
+    "allow_default_support_set_in_demo_ui": true,
+    "status_vocabulary": ["ok", "error"],
+    "error_codes": [
+      "MISSING_NOTE_TEXT",
+      "MISSING_SUPPORT_SET",
+      "INVALID_SUPPORT_LABEL",
+      "INFERENCE_FAILED",
+      "SERVICE_NOT_READY"
+    ],
+    "statuses_this_service_never_emits": {
+      "_comment": [
+        "warming_up / insufficient_data / poor_signal / not_validated belong to",
+        "C1 and C2.",
+        "no_support_set is NOT implementable: a prototypical network stores no",
+        "prototypes. build_prototype() runs per request; with K=0 there is",
+        "nothing to classify against. 422 MISSING_SUPPORT_SET is returned",
+        "instead. (tcwpn_full does carry an aux_head over the query embedding",
+        "alone, so a support-free score is technically computable - but",
+        "evaluation.py scores the PROTOTYPE path, so the aux head has no",
+        "measured performance and is not served.)"
+      ],
+      "values": [
+        "warming_up",
+        "insufficient_data",
+        "poor_signal",
+        "not_validated",
+        "no_support_set"
+      ]
+    }
   },
+
   "scope": {
-    "_comment": "\u00c2\u00a712 \u00e2\u20ac\u201d this service answers one question only.",
+    "_comment": "§12 - this service answers one question only.",
     "answers": "Given this note text and this support set, what does TC-WPN predict?",
     "does_not_answer": "What is the final multimodal anxiety risk?",
     "fusion_performed_here": false
