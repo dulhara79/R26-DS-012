@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    ClinAnx — app mark.
+
+    The ring is the late-fusion equation. Each arc's sweep is that modality's
+    weight in the composite, exactly as specified in the proposal:
+
+      clinical notes  0.40  →  136°   deep teal
+      physiological   0.25  →   85°   slate blue
+      behavioural     0.20  →   68°   sage
+      intervention    0.15  →   51°   clay
+
+    The centre dot is the single composite score the four arcs resolve into.
+    Nothing here is decorative: the proportions are the product.
+  -->
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#EDF3F5"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" rx="228" fill="url(#ground)"/>
+  <rect x="1" y="1" width="1022" height="1022" rx="227" fill="none" stroke="#DCE7EB" stroke-width="2"/>
+
+  <g transform="rotate(-90 512 512)" fill="none" stroke-width="96" stroke-linecap="butt">
+    <!-- clinical notes · 0.40 -->
+    <circle cx="512" cy="512" r="300" stroke="#0F5B6E" stroke-dasharray="712.09 1172.87" stroke-dashoffset="0"/>
+    <!-- physiological · 0.25 -->
+    <circle cx="512" cy="512" r="300" stroke="#6E7FA8" stroke-dasharray="445.06 1439.90" stroke-dashoffset="-738.27"/>
+    <!-- behavioural · 0.20 -->
+    <circle cx="512" cy="512" r="300" stroke="#7FA88C" stroke-dasharray="356.05 1528.91" stroke-dashoffset="-1209.51"/>
+    <!-- intervention · 0.15 -->
+    <circle cx="512" cy="512" r="300" stroke="#C0956B" stroke-dasharray="267.04 1617.92" stroke-dashoffset="-1591.74"/>
+  </g>
+
+  <circle cx="512" cy="512" r="86" fill="#0D1E26"/>
+</svg>
