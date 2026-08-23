@@ -446,6 +446,11 @@ class ClinicalNote(BaseModel):
     note_type: str = "progress"
     anxiety_support: List[str] = Field(default_factory=list)
     control_support: List[str] = Field(default_factory=list)
+    # Kaushalya's frozen contract (ARCHITECTURE.md): one unified list of
+    # {id, text, label, note_date} objects, richer than the legacy string lists.
+    support_set: List[dict] = Field(default_factory=list)
+    note_date: Optional[str] = None
+    visit_count: Optional[int] = None
     author: Optional[str] = None
 
 
@@ -464,6 +469,9 @@ def ingest_clinical_note(req: ClinicalNote, db: Session = Depends(get_session),
 
     result = mc.call_c3(req.note_text, req.note_type,
                         req.anxiety_support, req.control_support,
+                        support_set=req.support_set,
+                        note_date=req.note_date,
+                        visit_count=req.visit_count,
                         subject_external_id=_external_id(db, subject_id, "c3_clinical_nlp"))
     row = _store(db, subject_id, "c3_clinical_nlp", result)
     db.commit()

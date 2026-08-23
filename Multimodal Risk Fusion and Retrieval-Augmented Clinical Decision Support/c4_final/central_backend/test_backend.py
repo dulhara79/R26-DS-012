@@ -71,7 +71,8 @@ def stub_c1(subject_id, window=None, client=None):
 
 
 def stub_c3(note_text, note_type="progress", anxiety_support=None,
-            control_support=None, subject_external_id=None, client=None):
+            control_support=None, support_set=None, note_date=None,
+            visit_count=None, subject_external_id=None, client=None):
     if not note_text or not note_text.strip():
         return mc.ComponentResult(status="error", note="no clinical note supplied")
     if _C3_SUPPORT_K[0] == 0:
