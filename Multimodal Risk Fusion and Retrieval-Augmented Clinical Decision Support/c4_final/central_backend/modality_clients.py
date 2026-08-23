@@ -69,6 +69,47 @@ C2_TOKEN = os.getenv("C2_TOKEN", "")
 C3_TOKEN = os.getenv("C3_TOKEN", "")
 C4_TOKEN = os.getenv("C4_TOKEN", "")
 
+# ── C3 JWT auto-login ────────────────────────────────────────────────────────
+# Dulhara's Space uses POST /auth/login → JWT (expires_in=43200s / 12h).
+# This function logs in once, caches the token, and refreshes automatically
+# when it's within 5 minutes of expiring. Credentials live in .env, never
+# hardcoded. If C3_TOKEN is already set (e.g. a static key), that is used
+# as-is and this login path is skipped entirely.
+_C3_CLINICIAN_ID = os.getenv("C3_CLINICIAN_ID", "")
+_C3_PASSWORD = os.getenv("C3_PASSWORD", "")
+_c3_jwt_cache: dict = {"token": "", "expires_at": 0.0}
+
+def _get_c3_token() -> str:
+    import time
+    # If a static token was set in .env, use it directly (no login needed)
+    if C3_TOKEN:
+        return C3_TOKEN
+    # If no login credentials configured, return empty (will get 401)
+    if not _C3_CLINICIAN_ID or not _C3_PASSWORD:
+        return ""
+    # Return cached JWT if still valid (with 5-minute buffer)
+    now = time.time()
+    if _c3_jwt_cache["token"] and now < _c3_jwt_cache["expires_at"] - 300:
+        return _c3_jwt_cache["token"]
+    # Log in fresh
+    try:
+        with httpx.Client() as lc:
+            r = lc.post(f"{C3_BASE}/auth/login",
+                        json={"clinician_id": _C3_CLINICIAN_ID,
+                              "password": _C3_PASSWORD},
+                        timeout=30.0)
+            r.raise_for_status()
+            body = r.json()
+            _c3_jwt_cache["token"] = body["access_token"]
+            _c3_jwt_cache["expires_at"] = now + body.get("expires_in", 43200)
+            return _c3_jwt_cache["token"]
+    except Exception as exc:
+        # Login failed — return empty so call_c3 gets a 401 and reports it
+        _c3_jwt_cache["token"] = ""
+        _c3_jwt_cache["expires_at"] = 0.0
+        return ""
+
+
 TIMEOUT_S = float(os.getenv("COMPONENT_TIMEOUT_S", "30"))
 
 VALID_STATUSES = {"ok", "warming_up", "insufficient_data", "poor_signal",
@@ -386,6 +427,9 @@ def call_c2(subject_external_id: str, payload: Optional[dict] = None,
 def call_c3(note_text: str, note_type: str = "progress",
             anxiety_support: Optional[list] = None,
             control_support: Optional[list] = None,
+            support_set: Optional[list] = None,
+            note_date: Optional[str] = None,
+            visit_count: Optional[int] = None,
             subject_external_id: Optional[str] = None,
             client: Optional[httpx.Client] = None) -> ComponentResult:
     """POST /predict {note_text, note_type, support sets}.
@@ -419,12 +463,28 @@ def call_c3(note_text: str, note_type: str = "progress",
     own = client is None
     client = client or httpx.Client()
     try:
+        # Kaushalya's frozen contract uses one unified support_set list, not
+        # two separate arrays. Build it from the legacy anxiety_support /
+        # control_support params when support_set isn't given directly, so
+        # existing callers (and the 145-test suite) keep working unchanged.
+        if support_set is None:
+            support_set = (
+                [{"id": f"legacy-anx-{i}", "text": t, "label": "anxiety"}
+                 for i, t in enumerate(anxiety_support or [])]
+                + [{"id": f"legacy-ctrl-{i}", "text": t, "label": "control"}
+                   for i, t in enumerate(control_support or [])]
+            )
         request_body = {"note_text": note_text, "note_type": note_type,
-                        "anxiety_support": anxiety_support or [],
-                        "control_support": control_support or []}
+                        "support_set": support_set,
+                        "return_attention": True,
+                        "return_support_contributions": True}
+        if note_date:
+            request_body["note_date"] = note_date
+        if visit_count is not None:
+            request_body["visit_count"] = visit_count
         if subject_external_id:
             request_body["subject_id"] = subject_external_id
-        r = client.post(f"{C3_BASE}/predict", headers=_headers(C3_TOKEN),
+        r = client.post(f"{C3_BASE}/predict", headers=_headers(_get_c3_token()),
                         json=request_body, timeout=TIMEOUT_S)
         if r.status_code != 200:
             return ComponentResult(status="error", note=f"HTTP {r.status_code}")
