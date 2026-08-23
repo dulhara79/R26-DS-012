@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/background_service_helper.dart';
+import '../services/component2_data_service.dart';
 import 'digital_phenotyping_page.dart';
 
 class ParticipantBehaviorPage extends StatefulWidget {
@@ -23,8 +24,12 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
   String _participantId = '';
   int _daysEnrolled = 0;
   int _daysWithData = 0;
+  int _baselineCalendarDaysElapsed = 0;
   int _baselineDaysAvailable = 0;
+  int _baselineUsableDays = 0;
   int _baselineDaysRequired = 28;
+  int _baselineMinUsableDays = 14;
+  bool _baselineReadyFromBackend = false;
   int _emaReceived = 0;
   int _emaExpected = 0;
   int _pendingUploads = 0;
@@ -114,11 +119,20 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
       _participantId = id;
       _daysEnrolled = daysEnrolled;
       _daysWithData = (quality['days_with_data'] as num?)?.toInt() ?? 0;
-      _baselineDaysAvailable =
-          (quality['baseline_days_available'] as num?)?.toInt() ??
+      _baselineCalendarDaysElapsed =
+          (quality['baseline_calendar_days_elapsed'] as num?)?.toInt() ??
               daysEnrolled.clamp(0, 28);
+      _baselineDaysAvailable =
+          (quality['baseline_days_with_features'] as num?)?.toInt() ??
+              (quality['baseline_days_available'] as num?)?.toInt() ??
+              0;
+      _baselineUsableDays =
+          (quality['baseline_usable_days'] as num?)?.toInt() ?? 0;
       _baselineDaysRequired =
           (quality['baseline_days_required'] as num?)?.toInt() ?? 28;
+      _baselineMinUsableDays =
+          (quality['baseline_min_usable_days'] as num?)?.toInt() ?? 14;
+      _baselineReadyFromBackend = payload?['baseline_ready'] == true;
       _emaReceived = (quality['ema_received'] as num?)?.toInt() ?? 0;
       _emaExpected = (quality['ema_expected'] as num?)?.toInt() ?? 0;
       _patterns = patterns;
@@ -131,6 +145,14 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
     });
   }
 
+  Future<void> _refreshFromBackend() async {
+    final id = widget.userId ?? await BackgroundServiceHelper.getCachedId();
+    if (id.isNotEmpty && id != 'No_User_ID') {
+      await Component2DataService.sync(id);
+    }
+    await _load();
+  }
+
   static String _friendlyLabel(String key) {
     final spaced = key.replaceAll('_', ' ');
     if (spaced.isEmpty) return key;
@@ -139,7 +161,7 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
 
   int get _usableCoverageDays => _coverage.where((d) => d.usable).length;
 
-  bool get _baselineReady => _baselineDaysAvailable >= _baselineDaysRequired;
+  bool get _baselineReady => _baselineReadyFromBackend;
 
   @override
   Widget build(BuildContext context) {
@@ -160,7 +182,7 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              onRefresh: _load,
+              onRefresh: _refreshFromBackend,
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
                 children: [
@@ -220,8 +242,8 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
 
   Widget _baselineCard() {
     final need = _baselineDaysRequired <= 0 ? 28 : _baselineDaysRequired;
-    final have = _baselineDaysAvailable.clamp(0, need);
-    final fraction = (have / need).clamp(0.0, 1.0);
+    final elapsed = _baselineCalendarDaysElapsed.clamp(0, need);
+    final fraction = (elapsed / need).clamp(0.0, 1.0);
 
     return _card(
       child: Column(
@@ -249,7 +271,7 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
           Text(
             _baselineReady
                 ? 'We can now compare your recent behaviour with your own usual patterns.'
-                : 'We need about 28 days of information before showing personalised comparisons.',
+                : 'The baseline uses the first $need completed calendar days and needs at least $_baselineMinUsableDays days with enough sensing data.',
             style: GoogleFonts.poppins(
               fontSize: 12,
               height: 1.45,
@@ -268,13 +290,31 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            '$have of $need days collected',
+            '$elapsed of $need baseline days completed',
             style: GoogleFonts.poppins(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: const Color(0xFF6D5BD0),
             ),
           ),
+          const SizedBox(height: 4),
+          Text(
+            '$_baselineUsableDays usable sensing day${_baselineUsableDays == 1 ? '' : 's'} · minimum $_baselineMinUsableDays needed',
+            style: GoogleFonts.poppins(
+              fontSize: 11.5,
+              color: const Color(0xFF75798C),
+            ),
+          ),
+          if (_baselineDaysAvailable > _baselineUsableDays) ...[
+            const SizedBox(height: 3),
+            Text(
+              '$_baselineDaysAvailable baseline day${_baselineDaysAvailable == 1 ? '' : 's'} contain some collected data.',
+              style: GoogleFonts.poppins(
+                fontSize: 10.5,
+                color: const Color(0xFF8B8FA3),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -415,14 +455,16 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
 
   Widget _dataQualityCard() {
     final total = _coverage.isEmpty ? 14 : _coverage.length;
-    final usable = _coverage.isEmpty ? _daysWithData.clamp(0, total) : _usableCoverageDays;
+    final usable = _coverage.isEmpty
+        ? _daysWithData.clamp(0, total)
+        : _usableCoverageDays;
 
     return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '$usable of the last $total days had enough data',
+            '$usable of the last $total completed days had enough sensing data',
             style: GoogleFonts.poppins(
               fontSize: 13.5,
               fontWeight: FontWeight.w600,
@@ -481,10 +523,14 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             InkWell(
-              onTap: () => setState(() => _showCollectionDetails = !_showCollectionDetails),
+              onTap: () =>
+                  setState(() => _showCollectionDetails = !_showCollectionDetails),
               child: Row(
                 children: [
-                  const Icon(Icons.settings_input_antenna_rounded, color: Color(0xFF6D5BD0)),
+                  const Icon(
+                    Icons.settings_input_antenna_rounded,
+                    color: Color(0xFF6D5BD0),
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -507,12 +553,21 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
             ),
             if (_showCollectionDetails) ...[
               const Divider(height: 24, color: Color(0xFFE9E7F2)),
-              _detailRow('Participant', _participantId.isEmpty ? 'Unknown' : _participantId),
+              _detailRow(
+                'Participant',
+                _participantId.isEmpty ? 'Unknown' : _participantId,
+              ),
               _detailRow('Days enrolled', '$_daysEnrolled'),
-              _detailRow('Collection service', _serviceRunning ? 'Running' : 'Stopped'),
+              _detailRow(
+                'Collection service',
+                _serviceRunning ? 'Running' : 'Stopped',
+              ),
               _detailRow('Pending uploads', '$_pendingUploads'),
               if (_emaExpected > 0)
-                _detailRow('Check-in coverage', '$_emaReceived / $_emaExpected'),
+                _detailRow(
+                  'Check-in coverage',
+                  '$_emaReceived / $_emaExpected',
+                ),
               const SizedBox(height: 8),
               Align(
                 alignment: Alignment.centerLeft,
@@ -520,7 +575,8 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
                   onPressed: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => DigitalPhenotypingPage(userId: widget.userId),
+                        builder: (_) =>
+                            DigitalPhenotypingPage(userId: widget.userId),
                       ),
                     );
                   },
