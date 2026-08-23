@@ -168,7 +168,8 @@ class _SegmentedControl extends StatelessWidget {
                       labels[i],
                       style: TextStyle(
                         fontSize: 12.5,
-                        fontWeight: index == i ? FontWeight.w600 : FontWeight.w500,
+                        fontWeight:
+                            index == i ? FontWeight.w600 : FontWeight.w500,
                         color: index == i ? Ds.ink : Ds.inkMuted,
                       ),
                     ),
@@ -194,15 +195,21 @@ class _RiskSection extends StatelessWidget {
 
     return RefreshIndicator(
       color: Ds.brand,
-      onRefresh: () => chart.refreshFusion(),
+      // Re-runs fusion server-side, then re-reads. Deliberately a re-RUN rather
+      // than a re-read: the common reason a clinician pulls to refresh is that
+      // a wearable reading arrived after the last composite was computed, and a
+      // plain re-read would return the same stale row.
+      onRefresh: () => chart.rerunFusion(),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(Ds.s4, Ds.s4, Ds.s4, Ds.s10),
         children: [
           if (f == null)
             const Panel(
               child: Text(
-                'No composite risk yet. Analyse a clinical note or record a '
-                'GAD-7 check-in to produce the first score.',
+                'No assessment yet. The composite needs at least two usable '
+                'modalities, and at least one of them time-varying — so a '
+                'clinical note alone will not produce one until the patient app '
+                'has also sent a wearable or intake reading.',
                 style: TextStyle(fontSize: 13, color: Ds.inkMuted, height: 1.5),
               ),
             )
@@ -225,6 +232,7 @@ class _RiskSection extends StatelessWidget {
                     composite: f.compositeScore,
                     band: f.band,
                     renormalised: f.renormalised,
+                    blockedReason: f.reason,
                     segments: [
                       for (final c in f.contributions)
                         FusionSegment(
@@ -233,6 +241,8 @@ class _RiskSection extends StatelessWidget {
                           contribution: c.contribution,
                           weight: c.weight,
                           score: c.score,
+                          excluded: c.excluded,
+                          unavailableReason: c.note,
                           color: FusionBar.palette[c.key] ?? Ds.brand,
                         ),
                     ],
@@ -257,19 +267,36 @@ class _RiskSection extends StatelessWidget {
                 ],
               ),
             ),
-            if (f.computedLocally) ...[
+            if (f.pendingReadings.isNotEmpty) ...[
               const SizedBox(height: Ds.s3),
-              const InlineNotice(
-                icon: Icons.cloud_off_rounded,
+              InlineNotice(
+                icon: Icons.update_rounded,
                 tone: Ds.amber,
                 text:
-                    'Provisional composite, calculated on this device because the '
-                    'fusion service could not be reached. It will be replaced by '
-                    'the framework score when the service responds.',
+                    '${f.pendingReadings.map((c) => c.label).join(', ')} arrived '
+                    'after this composite was computed and are not included in '
+                    'it. Pull down to re-run fusion.',
+              ),
+            ],
+            if (chart.fusionFromCache) ...[
+              const SizedBox(height: Ds.s3),
+              InlineNotice(
+                icon: Icons.history_rounded,
+                tone: Ds.amber,
+                text: 'Last result received from the backend'
+                    '${f.updatedAt == null ? '' : ' on ${DateFormat('d MMM y, HH:mm').format(f.updatedAt!)}'}'
+                    '. Not refreshed this session — pull down to retry.',
+              ),
+            ],
+            if (chart.error != null) ...[
+              const SizedBox(height: Ds.s3),
+              InlineNotice(
+                icon: Icons.cloud_off_rounded,
+                tone: Ds.amber,
+                text: chart.error!,
               ),
             ],
           ],
-
           const SizedBox(height: Ds.s6),
           SectionLabel('Where each signal comes from'),
           if (f == null)
@@ -277,21 +304,44 @@ class _RiskSection extends StatelessWidget {
               child: Text(
                 'Modality status appears once the fusion service has a record '
                 'for this patient.',
-                style: TextStyle(fontSize: 12.5, color: Ds.inkMuted, height: 1.5),
+                style:
+                    TextStyle(fontSize: 12.5, color: Ds.inkMuted, height: 1.5),
               ),
             )
           else
             ...f.contributions.map(_modalityRow),
+          if (f != null && f.rejected.isNotEmpty) ...[
+            const SizedBox(height: Ds.s3),
+            Panel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('WHY MODALITIES WERE NOT USED', style: AppTheme.eyebrow),
+                  const SizedBox(height: Ds.s3),
+                  // The gate's own words. Not paraphrased, because the reason a
+                  // reading was rejected is auditable information.
+                  for (final e in f.rejected.entries)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(
+                        '${Modality.labelFor(e.key)} — ${e.value}',
+                        style: const TextStyle(
+                            fontSize: 12, color: Ds.inkMuted, height: 1.45),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: Ds.s3),
           const InlineNotice(
             icon: Icons.devices_rounded,
             text:
-                'Physiological and behavioural signals are collected by the '
-                'patient-facing app and sent to the fusion service directly. '
-                'ClinAnx contributes the clinical-note score and reads the '
-                'combined result.',
+                'Physiological, behavioural and intake signals are collected by '
+                'the patient-facing app. ClinAnx submits the clinical note to '
+                'the Central Backend, which calls TC-WPN, applies the gate and '
+                'the fusion weighting, and returns the result shown here.',
           ),
-
           const SizedBox(height: Ds.s6),
           const DecisionSupportNotice(),
         ],
@@ -361,7 +411,7 @@ class _RiskSection extends StatelessWidget {
                   Text(
                     c.available
                         ? '${c.origin}${age == null ? '' : ' · $age'}'
-                        : (c.note ?? 'No reading'),
+                        : (c.note ?? 'No reading recorded.'),
                     style: const TextStyle(fontSize: 11.5, color: Ds.inkFaint),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -559,8 +609,7 @@ class _InterventionSection extends StatelessWidget {
         children: [
           const InlineNotice(
             icon: Icons.link_rounded,
-            text:
-                'The intervention engine and its GAD-7 flow are owned by '
+            text: 'The intervention engine and its GAD-7 flow are owned by '
                 'Component 3. This section renders its calibrated tier, conformal '
                 'prediction set, and SHAP attribution once the C3 service address '
                 'is configured in Settings.',
@@ -572,10 +621,12 @@ class _InterventionSection extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _Bullet('Calibrated risk tier with isotonic probabilities'),
-                _Bullet('Adaptive Prediction Set at α = 0.10, with the singleton '
+                _Bullet(
+                    'Adaptive Prediction Set at α = 0.10, with the singleton '
                     'rate surfaced so ambiguous cases are visible'),
                 _Bullet('SHAP attribution over the 13-feature vector'),
-                _Bullet('DiCE counterfactuals and FAISS-retrieved similar cases'),
+                _Bullet(
+                    'DiCE counterfactuals and FAISS-retrieved similar cases'),
                 _Bullet('Session history and the composite reward that drives '
                     'per-patient adaptation'),
               ],

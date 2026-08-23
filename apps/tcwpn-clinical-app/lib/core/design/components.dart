@@ -284,10 +284,21 @@ class ConfidenceDial extends StatelessWidget {
 class FusionSegment {
   final String key;
   final String label;
-  final double contribution; // weight × score
+
+  /// The server's own contribution figure. Null when this modality did not
+  /// contribute — which is not the same as contributing zero.
+  final double? contribution;
   final double weight;
   final double? score;
   final Color color;
+
+  /// Excluded from the composite by pre-registered rule rather than by absence
+  /// (c2_behavioral). Rendered differently from "no reading", because the
+  /// distinction is the whole point of keeping it visible.
+  final bool excluded;
+
+  /// The server's reason this modality is not contributing, shown verbatim.
+  final String? unavailableReason;
 
   const FusionSegment({
     required this.key,
@@ -296,9 +307,11 @@ class FusionSegment {
     required this.weight,
     required this.score,
     required this.color,
+    this.excluded = false,
+    this.unavailableReason,
   });
 
-  bool get available => score != null;
+  bool get available => score != null && contribution != null;
 }
 
 /// The composite anxiety risk score, drawn as the sum of its parts.
@@ -309,16 +322,26 @@ class FusionSegment {
 /// see at a glance that the wearable has not reported.
 class FusionBar extends StatelessWidget {
   final List<FusionSegment> segments;
-  final double composite;
+
+  /// NULLABLE. The backend returns `composite: null` with `band: "GREY"`
+  /// whenever the fusion gate blocks. Rendering that as 0.000 would present an
+  /// assessment the server refused to make as a low-risk result.
+  final double? composite;
   final AlertBand band;
   final bool renormalised;
   final bool compact;
 
+  /// Shown in place of the number when there is no composite — the server's own
+  /// gate reason, e.g. "insufficient evidence: 1 usable modality, need 2".
+  final String? blockedReason;
+
+  /// Backend wire keys. See the mapping table in domain/models.dart: the paper
+  /// numbers TC-WPN as Component 4, the backend keys it as c3_clinical_nlp.
   static const Map<String, Color> palette = {
     'c1_physiological': Ds.c1Physiological,
     'c2_behavioral': Ds.c2Behavioral,
-    'c3_intervention': Ds.c3Intervention,
-    'c4_clinical_nlp': Ds.c4ClinicalNlp,
+    'c3_clinical_nlp': Ds.c3ClinicalNlp,
+    'c4_demographic': Ds.c4Demographic,
   };
 
   const FusionBar({
@@ -328,7 +351,10 @@ class FusionBar extends StatelessWidget {
     required this.band,
     this.renormalised = false,
     this.compact = false,
+    this.blockedReason,
   });
+
+  bool get _hasComposite => composite != null;
 
   @override
   Widget build(BuildContext context) {
@@ -347,7 +373,8 @@ class FusionBar extends StatelessWidget {
                   Text('COMPOSITE RISK', style: AppTheme.eyebrow),
                   const SizedBox(height: 2),
                   Text(
-                    composite.toStringAsFixed(3),
+                    // Em dash, not 0.000. There is no composite to show.
+                    _hasComposite ? composite!.toStringAsFixed(3) : '\u2014',
                     style: AppTheme.data(
                         size: 40, weight: FontWeight.w600, color: band.fg),
                   ),
@@ -376,11 +403,12 @@ class FusionBar extends StatelessWidget {
                     Container(color: Ds.surfaceSunken),
                     Row(
                       children: [
-                        for (final s in present)
-                          SizedBox(
-                            width: (s.contribution.clamp(0.0, 1.0) * w * t),
-                            child: Container(color: s.color),
-                          ),
+                        if (_hasComposite)
+                          for (final s in present)
+                            SizedBox(
+                              width: (s.contribution!.clamp(0.0, 1.0) * w * t),
+                              child: Container(color: s.color),
+                            ),
                       ],
                     ),
                   ],
@@ -391,6 +419,16 @@ class FusionBar extends StatelessWidget {
         }),
 
         if (!compact) ...[
+          if (!_hasComposite) ...[
+            const SizedBox(height: Ds.s3),
+            InlineNotice(
+              icon: Icons.block_flipped,
+              tone: Ds.grey,
+              text: blockedReason ??
+                  'No composite could be computed from the readings available. '
+                      'This is missing evidence, not a low score.',
+            ),
+          ],
           const SizedBox(height: Ds.s4),
           // Legend doubles as the per-modality breakdown.
           ...segments.map((s) => _legendRow(s)),
@@ -418,7 +456,8 @@ class FusionBar extends StatelessWidget {
               height: 10,
               decoration: BoxDecoration(
                 color: s.available ? s.color : Colors.transparent,
-                border: s.available ? null : Border.all(color: Ds.hairlineStrong),
+                border:
+                    s.available ? null : Border.all(color: Ds.hairlineStrong),
                 borderRadius: BorderRadius.circular(3),
               ),
             ),
@@ -443,12 +482,20 @@ class FusionBar extends StatelessWidget {
               SizedBox(
                 width: 46,
                 child: Text(
-                  s.contribution.toStringAsFixed(3),
+                  s.contribution!.toStringAsFixed(3),
                   textAlign: TextAlign.right,
                   style: AppTheme.data(size: 12.5, weight: FontWeight.w600),
                 ),
               ),
-            ] else
+            ] else if (s.excluded)
+              // A pre-registered exclusion is not a missing reading. Saying
+              // "no reading" here would hide the fact that the model reported
+              // and was deliberately not used.
+              Text('excluded', style: AppTheme.data(size: 11, color: Ds.amber))
+            else if (s.score != null)
+              Text('not used',
+                  style: AppTheme.data(size: 11, color: Ds.inkFaint))
+            else
               Text('no reading',
                   style: AppTheme.data(size: 11, color: Ds.inkFaint)),
           ],
@@ -633,8 +680,8 @@ class DecisionSupportNotice extends StatelessWidget {
                   children: const [
                     TextSpan(
                       text: 'Clinical decision support. ',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700, color: Ds.ink),
+                      style:
+                          TextStyle(fontWeight: FontWeight.w700, color: Ds.ink),
                     ),
                     TextSpan(
                       text:

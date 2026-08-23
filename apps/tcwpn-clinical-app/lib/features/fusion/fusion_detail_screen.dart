@@ -1,8 +1,19 @@
 // lib/features/fusion/fusion_detail_screen.dart
 //
-// The late-fusion equation, expanded. Every number on the chart can be traced
-// from here back to the modality that produced it, including the ones that
-// didn't report.
+// The composite, expanded. Every number on this screen came off the wire from
+// the Central Backend; none of it is recomputed here.
+//
+// WHAT CHANGED
+// ------------
+// The old screen printed a four-way band table at 0.25/0.50/0.75 as though it
+// were the framework's. It is not: the fusion service bands into THREE tiers at
+// 0.33/0.66 (fusion_service/fusion.py, BANDS). Printing a different table beside
+// a server-produced tier invited a clinician to check one against the other and
+// find them inconsistent. The table is now driven by the server's own tier.
+//
+// It also carried a "Provisional, calculated on this device" provenance line.
+// There is no on-device fusion path any more, so that line is gone rather than
+// left to describe a branch that cannot execute.
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -36,6 +47,7 @@ class FusionDetailScreen extends StatelessWidget {
                 composite: fusion.compositeScore,
                 band: fusion.band,
                 renormalised: fusion.renormalised,
+                blockedReason: fusion.reason,
                 segments: [
                   for (final c in fusion.contributions)
                     FusionSegment(
@@ -44,6 +56,8 @@ class FusionDetailScreen extends StatelessWidget {
                       contribution: c.contribution,
                       weight: c.weight,
                       score: c.score,
+                      excluded: c.excluded,
+                      unavailableReason: c.note,
                       color: FusionBar.palette[c.key] ?? Ds.brand,
                     ),
                 ],
@@ -57,40 +71,90 @@ class FusionDetailScreen extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.assignment_outlined,
-                      size: 17, color: fusion.band.fg),
+                  Icon(
+                    fusion.hasComposite
+                        ? Icons.assignment_outlined
+                        : Icons.block_flipped,
+                    size: 17,
+                    color: fusion.band.fg,
+                  ),
                   const SizedBox(width: Ds.s3),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('${fusion.band.protocolName} band',
-                            style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: fusion.band.fg)),
+                        Text(
+                          fusion.hasComposite
+                              ? '${fusion.band.protocolName} band'
+                              : 'No composite computed',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: fusion.band.fg),
+                        ),
                         const SizedBox(height: 3),
-                        Text(fusion.band.guidance,
-                            style: const TextStyle(
-                                fontSize: 12.5, color: Ds.inkMuted, height: 1.45)),
+                        Text(
+                          // The server's own words first. Its gate reason is
+                          // more specific than any generic band guidance.
+                          fusion.reason ?? fusion.band.guidance,
+                          style: const TextStyle(
+                              fontSize: 12.5, color: Ds.inkMuted, height: 1.45),
+                        ),
                       ],
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: Ds.s5),
 
-            SectionLabel('Band thresholds'),
+            // ── Gate ───────────────────────────────────────────────────────
+            if (fusion.rejected.isNotEmpty ||
+                fusion.usableModalities.isNotEmpty) ...[
+              const SizedBox(height: Ds.s5),
+              SectionLabel('Fusion gate'),
+              Panel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'A composite is produced only when at least two modalities '
+                      'are usable and at least one of them varies over time. '
+                      'Readings that failed this check are listed with the '
+                      'reason the gate gave.',
+                      style: TextStyle(
+                          fontSize: 12.5, color: Ds.inkMuted, height: 1.5),
+                    ),
+                    const SizedBox(height: Ds.s4),
+                    if (fusion.usableModalities.isNotEmpty)
+                      _kv(
+                        'Used',
+                        fusion.usableModalities
+                            .map(Modality.labelFor)
+                            .join(', '),
+                      ),
+                    for (final e in fusion.rejected.entries)
+                      _kv(Modality.labelFor(e.key), e.value),
+                  ],
+                ),
+              ),
+            ],
+
+            // ── Tier ───────────────────────────────────────────────────────
+            const SizedBox(height: Ds.s5),
+            SectionLabel('Tier'),
             Panel(
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  for (final t in const [
-                    (AlertBand.green, '0.00 – 0.24'),
-                    (AlertBand.amber, '0.25 – 0.49'),
-                    (AlertBand.red, '0.50 – 0.74'),
-                    (AlertBand.darkRed, '0.75 – 1.00'),
-                  ])
+                  const Text(
+                    'The tier below is assigned by the fusion service, not '
+                    'derived on this device. It is shown as the service '
+                    'reported it.',
+                    style: TextStyle(
+                        fontSize: 12.5, color: Ds.inkMuted, height: 1.5),
+                  ),
+                  const SizedBox(height: Ds.s4),
+                  for (final t in const ['Low', 'Medium', 'High'])
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 5),
                       child: Row(
@@ -99,51 +163,90 @@ class FusionDetailScreen extends StatelessWidget {
                             width: 8,
                             height: 8,
                             decoration: BoxDecoration(
-                                color: t.$1.fg, shape: BoxShape.circle),
+                              color: t == fusion.tier
+                                  ? Ds.brand
+                                  : Ds.hairlineStrong,
+                              shape: BoxShape.circle,
+                            ),
                           ),
                           const SizedBox(width: Ds.s3),
                           Expanded(
                             child: Text(
-                              t.$1.protocolName,
+                              t,
                               style: TextStyle(
                                 fontSize: 12.5,
-                                fontWeight: t.$1 == fusion.band
+                                fontWeight: t == fusion.tier
                                     ? FontWeight.w700
                                     : FontWeight.w500,
-                                color:
-                                    t.$1 == fusion.band ? Ds.ink : Ds.inkMuted,
+                                color: t == fusion.tier ? Ds.ink : Ds.inkMuted,
                               ),
                             ),
                           ),
-                          Text(t.$2,
-                              style:
-                                  AppTheme.data(size: 11.5, color: Ds.inkMuted)),
+                          if (t == fusion.tier)
+                            Text('assigned',
+                                style: AppTheme.data(
+                                    size: 11.5, color: Ds.inkMuted)),
                         ],
+                      ),
+                    ),
+                  if (fusion.tier == null)
+                    const Padding(
+                      padding: EdgeInsets.only(top: Ds.s2),
+                      child: Text(
+                        'No tier was assigned, because no composite was computed.',
+                        style: TextStyle(fontSize: 12, color: Ds.inkFaint),
                       ),
                     ),
                 ],
               ),
             ),
-            const SizedBox(height: Ds.s5),
 
+            // ── Conformal ──────────────────────────────────────────────────
+            if (fusion.conformal != null) ...[
+              const SizedBox(height: Ds.s5),
+              SectionLabel('Conformal prediction set'),
+              Panel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final e in fusion.conformal!.entries)
+                      _kv(e.key.replaceAll('_', ' '), '${e.value}'),
+                    const SizedBox(height: Ds.s3),
+                    const Text(
+                      'Record your own tier judgement BEFORE reading this set. '
+                      'A judgement made after seeing it is contaminated by the '
+                      'prediction it exists to calibrate.',
+                      style: TextStyle(
+                          fontSize: 12, color: Ds.inkMuted, height: 1.45),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            // ── Provenance ─────────────────────────────────────────────────
+            const SizedBox(height: Ds.s5),
             SectionLabel('Provenance'),
             Panel(
               child: Column(
                 children: [
-                  _kv('Computed',
-                      DateFormat('d MMM y, HH:mm').format(fusion.computedAt)),
+                  _kv(
+                    'Computed',
+                    fusion.updatedAt == null
+                        ? 'Not yet'
+                        : DateFormat('d MMM y, HH:mm')
+                            .format(fusion.updatedAt!),
+                  ),
                   _kv('Modalities',
-                      '${fusion.modalitiesAvailable} of 4 reporting'),
+                      '${fusion.modalitiesUsed} of ${Modality.all.length} used in the composite'),
                   _kv(
                       'Weights',
                       fusion.renormalised
-                          ? 'Rescaled across reporting modalities'
+                          ? 'Rescaled across the modalities that reported'
                           : 'Framework weights, unmodified'),
-                  _kv(
-                      'Source',
-                      fusion.computedLocally
-                          ? 'Provisional, calculated on this device'
-                          : 'Fusion service'),
+                  _kv('Source', 'R26-DS-012 Central Backend'),
+                  if (fusion.fusionResultId != null)
+                    _kv('Fusion record', '#${fusion.fusionResultId}'),
                   if (fusion.confidence != null)
                     _kv('Fusion confidence',
                         fusion.confidence!.toStringAsFixed(3)),
@@ -151,18 +254,17 @@ class FusionDetailScreen extends StatelessWidget {
               ),
             ),
 
+            // ── Largest contributor ────────────────────────────────────────
             if (latestNote?.result != null) ...[
               const SizedBox(height: Ds.s5),
-              SectionLabel('Largest contributor'),
+              SectionLabel('Most recent clinical note'),
               Panel(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Clinical notes carry the heaviest fusion weight, so this '
-                      'score moves the composite more than any other single '
-                      'modality.',
-                      style: TextStyle(
+                    Text(
+                      _clinicalNoteWeightNote(),
+                      style: const TextStyle(
                           fontSize: 12.5, color: Ds.inkMuted, height: 1.5),
                     ),
                     const SizedBox(height: Ds.s4),
@@ -200,6 +302,22 @@ class FusionDetailScreen extends StatelessWidget {
           ],
         ),
       );
+
+  /// Describes the clinical-note modality's actual share of THIS composite,
+  /// rather than asserting a fixed ranking. The weights are renormalised per
+  /// assessment over whichever modalities reported, so "clinical notes carry the
+  /// heaviest weight" is not reliably true of any given patient.
+  String _clinicalNoteWeightNote() {
+    final c = fusion.contributions
+        .where((x) => x.key == Modality.c3ClinicalNlp)
+        .toList();
+    if (c.isEmpty || !c.first.available) {
+      return 'This note\u2019s score is not currently part of the composite.';
+    }
+    final pct = (c.first.weight * 100).round();
+    return 'This note\u2019s score carries $pct% of the weight in the current '
+        'composite, after rescaling across the modalities that reported.';
+  }
 
   Widget _kv(String k, String v) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 5),

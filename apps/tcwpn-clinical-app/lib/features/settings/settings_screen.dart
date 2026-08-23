@@ -76,28 +76,33 @@ class SettingsScreen extends StatelessWidget {
           Panel(
             child: Column(
               children: [
+                // The Central Backend is listed FIRST because it is the only
+                // service the clinician workflow actually calls. The others are
+                // reached through it.
+                _ServiceRow(
+                  name: 'Central Backend',
+                  url: Env.backendBase,
+                  reachable: roster.backendReachable,
+                  accent: Ds.brand,
+                  role: 'Enrolment, note ingestion, gate, fusion, timeline',
+                ),
+                const Divider(height: Ds.s5),
                 _ServiceRow(
                   name: 'Clinical NLP (TC-WPN)',
                   url: Env.tcwpnBase,
                   reachable: info != null,
-                  accent: Ds.c4ClinicalNlp,
-                  role: 'Analyses clinical notes · Component 4',
-                ),
-                const Divider(height: Ds.s5),
-                _ServiceRow(
-                  name: 'Fusion layer',
-                  url: Env.fusionBase,
-                  reachable: null,
-                  accent: Ds.brand,
-                  role: 'Combines all four components · §5.1',
+                  accent: Ds.c3ClinicalNlp,
+                  role: 'Called by the backend · Component 4 '
+                      '(wire key c3_clinical_nlp)',
                 ),
                 const Divider(height: Ds.s5),
                 _ServiceRow(
                   name: 'Intervention engine',
                   url: Env.c3Base,
                   reachable: null,
-                  accent: Ds.c3Intervention,
-                  role: 'Risk tiering and coping plans · Component 3',
+                  accent: Ds.c4Demographic,
+                  role: 'Risk tiering and coping plans · Component 3. '
+                      'Not part of the composite.',
                 ),
               ],
             ),
@@ -106,11 +111,11 @@ class SettingsScreen extends StatelessWidget {
           const InlineNotice(
             icon: Icons.devices_rounded,
             text:
-                'The wearable and behavioural components are collected by the '
-                'patient-facing app and sent to the fusion service directly. '
-                'ClinAnx never contacts them, and holds no credentials for '
-                'them. Their values reach this app only inside the fused '
-                'composite, keyed by MRN.',
+                'The wearable, behavioural and intake components are collected '
+                'by the patient-facing app and sent to the Central Backend. '
+                'ClinAnx never contacts them and holds no credentials for '
+                'them. Their values reach this app only through the backend\'s '
+                'clinician timeline, keyed by subject_id.',
           ),
           const SizedBox(height: Ds.s5),
           SectionLabel('Model information'),

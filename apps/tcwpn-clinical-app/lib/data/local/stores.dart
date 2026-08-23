@@ -26,7 +26,8 @@ import '../../core/design/tokens.dart';
 class SecureStore {
   static const _s = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
-    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
+    iOptions: IOSOptions(
+        accessibility: KeychainAccessibility.first_unlock_this_device),
   );
 
   static const _kClinicianId = 'clinician_id';
@@ -65,7 +66,30 @@ class RecordStore {
 
   static String _notes(String mrn) => 'notes_v2::$mrn';
   static String _support(String mrn) => 'support_v2::$mrn';
-  static String _fusion(String mrn) => 'fusion_v2::$mrn';
+
+  // v3: the cached fusion payload is now the backend's clinician-timeline shape,
+  // not the old fusion-service shape. The key is bumped so a cache written by a
+  // previous build is ignored rather than misparsed — an old `composite_score`
+  // blob read by the new parser would yield a null composite and look like a
+  // blocked gate, which is a different clinical statement entirely.
+  static String _fusion(String mrn) => 'fusion_v3::$mrn';
+
+  static String _subject(String mrn) => 'subject_id_v1::$mrn';
+
+  // ── Backend subject id (per patient) ──────────────────────────────────────
+  //
+  // The opaque id the Central Backend minted for this patient at enrolment.
+  // Stored so the raw MRN stops travelling once it has been exchanged once.
+  // Namespaced by MRN like every other record, for the same reason: there is no
+  // `activePatient` static anywhere in this class.
+
+  static Future<String?> subjectId(String mrn) async {
+    final v = (await _p).getString(_subject(mrn));
+    return (v == null || v.isEmpty) ? null : v;
+  }
+
+  static Future<void> saveSubjectId(String mrn, String subjectId) async =>
+      (await _p).setString(_subject(mrn), subjectId);
 
   // ── Roster ────────────────────────────────────────────────────────────────
 
@@ -146,18 +170,15 @@ class RecordStore {
 
   // ── Cached fusion result ──────────────────────────────────────────────────
 
+  /// Caches the server's answer verbatim, via FusionResult.toJson, which emits
+  /// exactly the keys FusionResult.fromJson reads.
+  ///
+  /// The previous version hand-built a different, lossy shape here — dropping
+  /// status, freshness, the gate decision and the fusion row id — so the cached
+  /// copy and the network copy were not the same object. Round-tripping through
+  /// one parser means the two paths cannot diverge in how a field is read.
   static Future<void> cacheFusion(String mrn, FusionResult r) async =>
-      (await _p).setString(
-          _fusion(mrn),
-          jsonEncode({
-            'composite_score': r.compositeScore,
-            'alert_level': r.band.protocolName,
-            'computed_at': r.computedAt.toIso8601String(),
-            'weights': {for (final c in r.contributions) c.key: c.weight},
-            'scores': {for (final c in r.contributions) c.key: c.score},
-            'renormalised': r.renormalised,
-            'modalities_available': r.modalitiesAvailable,
-          }));
+      (await _p).setString(_fusion(mrn), jsonEncode(r.toJson()));
 
   static Future<FusionResult?> cachedFusion(String mrn) async {
     final raw = (await _p).getString(_fusion(mrn));
@@ -187,8 +208,8 @@ class RecordStore {
   }
 
   static Future<void> saveAlerts(List<ClinicalAlert> alerts) async =>
-      (await _p).setString(
-          _kAlerts, jsonEncode(alerts.take(200).map((a) => a.toJson()).toList()));
+      (await _p).setString(_kAlerts,
+          jsonEncode(alerts.take(200).map((a) => a.toJson()).toList()));
 
   // ── Deletion ──────────────────────────────────────────────────────────────
 
@@ -200,6 +221,7 @@ class RecordStore {
     await p.remove(_notes(mrn));
     await p.remove(_support(mrn));
     await p.remove(_fusion(mrn));
+    await p.remove(_subject(mrn));
 
     final alerts = await loadAlerts();
     await saveAlerts(alerts.where((a) => a.patientMrn != mrn).toList());

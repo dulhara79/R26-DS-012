@@ -68,7 +68,6 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
         children: [
           _headline(r, band),
           const SizedBox(height: Ds.s4),
-
           if (r.needsManualReview) ...[
             const InlineNotice(
               icon: Icons.pan_tool_outlined,
@@ -89,34 +88,30 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
             ),
             const SizedBox(height: Ds.s4),
           ],
-
           SectionLabel('Decision'),
           _decisionPanel(r),
           const SizedBox(height: Ds.s5),
-
-          SectionLabel(r.hasAttribution ? 'Attention attribution' : 'Key phrases'),
+          SectionLabel(
+              r.hasAttribution ? 'Attention attribution' : 'Key phrases'),
           _attributionPanel(r),
           const SizedBox(height: Ds.s5),
-
           if (r.supportContributions.isNotEmpty) ...[
             SectionLabel('Support set influence'),
             _supportInfluencePanel(r),
             const SizedBox(height: Ds.s5),
           ],
-
           SectionLabel('Clinician review'),
           _verdictPanel(chart, r),
           const SizedBox(height: Ds.s5),
-
           SectionLabel('Submitted note'),
           Panel(
             child: Text(
               _note.text,
-              style: const TextStyle(fontSize: 13.5, height: 1.6, color: Ds.ink),
+              style:
+                  const TextStyle(fontSize: 13.5, height: 1.6, color: Ds.ink),
             ),
           ),
           const SizedBox(height: Ds.s5),
-
           SectionLabel('Model'),
           _modelPanel(r),
           const SizedBox(height: Ds.s5),
@@ -227,12 +222,14 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
               const SizedBox(height: Ds.s2),
               Row(
                 children: [
-                  Text('0.0', style: AppTheme.data(size: 10, color: Ds.inkMuted)),
+                  Text('0.0',
+                      style: AppTheme.data(size: 10, color: Ds.inkMuted)),
                   const Spacer(),
                   Text('threshold ${r.threshold.toStringAsFixed(4)}',
                       style: AppTheme.data(size: 10, color: Ds.ink)),
                   const Spacer(),
-                  Text('1.0', style: AppTheme.data(size: 10, color: Ds.inkMuted)),
+                  Text('1.0',
+                      style: AppTheme.data(size: 10, color: Ds.inkMuted)),
                 ],
               ),
             ],
@@ -367,7 +364,8 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
                 : 'Phrases the service flagged for this note. It did not return '
                     'attention weights, so these are shown unranked — the order '
                     'carries no meaning.',
-            style: const TextStyle(fontSize: 11.5, color: Ds.inkFaint, height: 1.45),
+            style: const TextStyle(
+                fontSize: 11.5, color: Ds.inkFaint, height: 1.45),
           ),
           const SizedBox(height: Ds.s4),
           if (weighted)
@@ -385,7 +383,8 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
                           ),
                           const SizedBox(width: Ds.s3),
                           Text(s.weight.toStringAsFixed(3),
-                              style: AppTheme.data(size: 11, color: Ds.inkMuted)),
+                              style:
+                                  AppTheme.data(size: 11, color: Ds.inkMuted)),
                         ],
                       ),
                       const SizedBox(height: 5),
@@ -401,7 +400,7 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
                             minHeight: 5,
                             backgroundColor: Ds.surfaceSunken,
                             valueColor:
-                                const AlwaysStoppedAnimation(Ds.c4ClinicalNlp),
+                                const AlwaysStoppedAnimation(Ds.c3ClinicalNlp),
                           ),
                         ),
                       ),
@@ -503,7 +502,8 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
                         if (s.noteDate != null) ...[
                           const Spacer(),
                           Text(DateFormat('MMM y').format(s.noteDate!),
-                              style: AppTheme.data(size: 10, color: Ds.inkFaint)),
+                              style:
+                                  AppTheme.data(size: 10, color: Ds.inkFaint)),
                         ],
                       ],
                     ),
@@ -672,14 +672,14 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
                   style: const TextStyle(fontSize: 12.5, color: Ds.inkMuted)),
             ),
             Expanded(
-              child: Text(v,
-                  style: AppTheme.data(size: 11.5, height: 1.5)),
+              child: Text(v, style: AppTheme.data(size: 11.5, height: 1.5)),
             ),
           ],
         ),
       );
 
-  void _export(BuildContext context) => ScaffoldMessenger.of(context).showSnackBar(
+  void _export(BuildContext context) =>
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text('Report export is wired to the PDF service.')),
       );

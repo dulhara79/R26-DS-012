@@ -95,8 +95,11 @@ class _CaseloadTab extends StatelessWidget {
     final review = roster.needingReview;
     final bandCounts = <AlertBand, int>{};
     for (final p in roster.patients) {
-      final b = roster.fusionFor(p.mrn)?.band;
-      if (b != null) bandCounts[b] = (bandCounts[b] ?? 0) + 1;
+      final f = roster.fusionFor(p.mrn);
+      // A GREY result is an assessment the gate BLOCKED. It has no composite,
+      // so it belongs with the unscored patients rather than in a severity bar.
+      if (f == null || !f.hasComposite) continue;
+      bandCounts[f.band] = (bandCounts[f.band] ?? 0) + 1;
     }
     final unscored = roster.patients.length -
         bandCounts.values.fold<int>(0, (a, b) => a + b);
@@ -111,7 +114,8 @@ class _CaseloadTab extends StatelessWidget {
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
-                  builder: (_) => const SupportSetScreen(scope: SupportScope.site)),
+                  builder: (_) =>
+                      const SupportSetScreen(scope: SupportScope.site)),
             ),
           ),
         ],
@@ -123,7 +127,6 @@ class _CaseloadTab extends StatelessWidget {
               children: [
                 _bandStrip(bandCounts, unscored, roster.patients.length),
                 const SizedBox(height: Ds.s6),
-
                 SectionLabel('Needs review'),
                 if (review.isEmpty)
                   Panel(
@@ -153,7 +156,6 @@ class _CaseloadTab extends StatelessWidget {
                           onTap: () => openChart(context, p),
                         ),
                       )),
-
                 const SizedBox(height: Ds.s6),
                 SectionLabel('Framework'),
                 const _FrameworkPanel(),
@@ -207,7 +209,7 @@ class _CaseloadTab extends StatelessWidget {
               borderRadius: BorderRadius.circular(Ds.rSm),
               child: Row(
                 children: [
-                  for (final b in AlertBand.values)
+                  for (final b in AlertBandX.scored)
                     if ((counts[b] ?? 0) > 0)
                       Expanded(
                         flex: counts[b]!,
@@ -215,7 +217,8 @@ class _CaseloadTab extends StatelessWidget {
                       ),
                   if (unscored > 0)
                     Expanded(
-                        flex: unscored, child: Container(color: Ds.surfaceSunken)),
+                        flex: unscored,
+                        child: Container(color: Ds.surfaceSunken)),
                 ],
               ),
             ),
@@ -225,7 +228,7 @@ class _CaseloadTab extends StatelessWidget {
             spacing: Ds.s5,
             runSpacing: Ds.s3,
             children: [
-              for (final b in AlertBand.values)
+              for (final b in AlertBandX.scored)
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -236,9 +239,11 @@ class _CaseloadTab extends StatelessWidget {
                             BoxDecoration(color: b.fg, shape: BoxShape.circle)),
                     const SizedBox(width: 6),
                     Text('${b.protocolName} ',
-                        style: const TextStyle(fontSize: 11.5, color: Ds.inkMuted)),
+                        style: const TextStyle(
+                            fontSize: 11.5, color: Ds.inkMuted)),
                     Text('${counts[b] ?? 0}',
-                        style: AppTheme.data(size: 12, weight: FontWeight.w600)),
+                        style:
+                            AppTheme.data(size: 12, weight: FontWeight.w600)),
                   ],
                 ),
             ],
@@ -252,11 +257,35 @@ class _CaseloadTab extends StatelessWidget {
 class _FrameworkPanel extends StatelessWidget {
   const _FrameworkPanel();
 
+  // Wire keys are the backend's; labels carry the paper's component numbering.
+  // NO WEIGHTS. The weights are derived server-side from each component's
+  // validation AUROC above chance and are renormalised per assessment over the
+  // modalities that actually reported, so no fixed number printed here would be
+  // true of any particular patient. The real weights are shown in the fusion
+  // breakdown, where they arrive from the server alongside the score they
+  // multiplied.
   static const _rows = [
-    ('c1_physiological', 'Physiological', 'Wearable ECG, HRV, respiration, temperature', 0.25),
-    ('c2_behavioral', 'Behavioural', 'Passive smartphone sensing, temporal graph', 0.20),
-    ('c3_intervention', 'Intervention', 'Calibrated risk tiering and adaptive coping', 0.15),
-    ('c4_clinical_nlp', 'Clinical notes', 'TC-WPN few-shot analysis of written notes', 0.40),
+    (
+      'c1_physiological',
+      'Physiological · Component 1',
+      'Wearable ECG, HRV, respiration, temperature'
+    ),
+    (
+      'c2_behavioral',
+      'Behavioural · Component 2',
+      'Passive smartphone sensing. Recorded, and excluded from the composite '
+          'by pre-registered rule.'
+    ),
+    (
+      'c3_clinical_nlp',
+      'Clinical notes · Component 4',
+      'TC-WPN few-shot analysis of written notes'
+    ),
+    (
+      'c4_demographic',
+      'Demographic prior · Component 4 contextual',
+      'DCAR intake demographics and GAD-7'
+    ),
   ];
 
   @override
@@ -266,9 +295,11 @@ class _FrameworkPanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Composite risk combines four independent modalities using fixed '
-              'fusion weights. Clinical notes carry the largest weight as the '
-              'most authoritative signal.',
+              'Composite risk is computed by the Central Backend, which weights '
+              'each modality by its validation performance above chance, decays '
+              'it by age, and renormalises across the modalities that actually '
+              'reported. At least two usable modalities are required, one of '
+              'them time-varying, or no composite is produced.',
               style: TextStyle(fontSize: 12.5, color: Ds.inkMuted, height: 1.5),
             ),
             const SizedBox(height: Ds.s4),
@@ -296,12 +327,12 @@ class _FrameworkPanel extends StatelessWidget {
                                   fontSize: 13, fontWeight: FontWeight.w600)),
                           Text(r.$3,
                               style: const TextStyle(
-                                  fontSize: 11.5, color: Ds.inkFaint, height: 1.3)),
+                                  fontSize: 11.5,
+                                  color: Ds.inkFaint,
+                                  height: 1.3)),
                         ],
                       ),
                     ),
-                    Text(r.$4.toStringAsFixed(2),
-                        style: AppTheme.data(size: 13, weight: FontWeight.w600)),
                   ],
                 ),
               ),
@@ -377,9 +408,13 @@ class _PatientsTabState extends State<_PatientsTab> {
                     children: [
                       _filter('All', _band == null, null,
                           () => setState(() => _band = null)),
-                      for (final b in AlertBand.values.reversed)
-                        _filter(b.protocolName, _band == b, b.fg,
-                            () => setState(() => _band = _band == b ? null : b)),
+                      for (final b in AlertBandX.scored.reversed)
+                        _filter(
+                            b.protocolName,
+                            _band == b,
+                            b.fg,
+                            () =>
+                                setState(() => _band = _band == b ? null : b)),
                     ],
                   ),
                 ),
@@ -417,7 +452,8 @@ class _PatientsTabState extends State<_PatientsTab> {
     );
   }
 
-  Widget _filter(String label, bool selected, Color? tone, VoidCallback onTap) =>
+  Widget _filter(
+          String label, bool selected, Color? tone, VoidCallback onTap) =>
       Padding(
         padding: const EdgeInsets.only(right: Ds.s2),
         child: GestureDetector(
@@ -453,8 +489,7 @@ class _PatientsTabState extends State<_PatientsTab> {
     if (p == null || !context.mounted) return;
     final err = await roster.addPatient(p);
     if (err != null && context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(err)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
     }
   }
 }
@@ -480,7 +515,9 @@ class PatientRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final band = fusion?.band;
+    // Only a scored assessment gets a band chip. A GREY row is "no assessment",
+    // and dressing it as a band would put it on the severity scale.
+    final band = (fusion != null && fusion!.hasComposite) ? fusion!.band : null;
     return Panel(
       onTap: onTap,
       padding: const EdgeInsets.all(Ds.s4),
@@ -544,6 +581,8 @@ class PatientRow extends StatelessWidget {
                     contribution: c.contribution,
                     weight: c.weight,
                     score: c.score,
+                    excluded: c.excluded,
+                    unavailableReason: c.note,
                     color: FusionBar.palette[c.key] ?? Ds.brand,
                   ),
               ],
@@ -551,14 +590,18 @@ class PatientRow extends StatelessWidget {
             const SizedBox(height: Ds.s2),
             Row(
               children: [
-                Text(fusion!.compositeScore.toStringAsFixed(3),
+                // compositeLabel, not toStringAsFixed: a blocked assessment
+                // shows an em dash here, never 0.000.
+                Text(fusion!.compositeLabel,
                     style: AppTheme.data(size: 11.5, weight: FontWeight.w600)),
                 const SizedBox(width: Ds.s2),
-                Text('${fusion!.modalitiesAvailable} of 4 modalities',
+                Text(
+                    '${fusion!.modalitiesUsed} of ${Modality.all.length} modalities',
                     style: const TextStyle(fontSize: 11, color: Ds.inkFaint)),
                 const Spacer(),
-                Text(DateFormat('d MMM, HH:mm').format(fusion!.computedAt),
-                    style: const TextStyle(fontSize: 11, color: Ds.inkFaint)),
+                if (fusion!.updatedAt != null)
+                  Text(DateFormat('d MMM, HH:mm').format(fusion!.updatedAt!),
+                      style: const TextStyle(fontSize: 11, color: Ds.inkFaint)),
               ],
             ),
           ],
@@ -647,7 +690,8 @@ class _AddPatientSheetState extends State<AddPatientSheet> {
                   'Scan the QR shown in the patient\'s Aura app. This copies '
                   'their Participant ID so all four components use the same '
                   'record.',
-                  style: TextStyle(fontSize: 12.5, color: Ds.inkMuted, height: 1.45),
+                  style: TextStyle(
+                      fontSize: 12.5, color: Ds.inkMuted, height: 1.45),
                 ),
                 const SizedBox(height: Ds.s4),
                 OutlinedButton.icon(
@@ -734,17 +778,30 @@ class _AddPatientSheetState extends State<AddPatientSheet> {
                 DropdownButtonFormField<String>(
                   initialValue: _marital,
                   isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Marital status'),
+                  decoration:
+                      const InputDecoration(labelText: 'Marital status'),
                   items: const ['Never', 'Married', 'Separated']
                       .map((m) => DropdownMenuItem(value: m, child: Text(m)))
                       .toList(),
                   onChanged: (v) => setState(() => _marital = v!),
                 ),
                 const SizedBox(height: Ds.s3),
-                _slider('Education level', _education.toDouble(), 1, 5, 4,
-                    '$_education', (v) => setState(() => _education = v.round())),
-                _slider('Income (PIR)', _income, 0, 5, 20,
-                    _income.toStringAsFixed(1), (v) => setState(() => _income = v)),
+                _slider(
+                    'Education level',
+                    _education.toDouble(),
+                    1,
+                    5,
+                    4,
+                    '$_education',
+                    (v) => setState(() => _education = v.round())),
+                _slider(
+                    'Income (PIR)',
+                    _income,
+                    0,
+                    5,
+                    20,
+                    _income.toStringAsFixed(1),
+                    (v) => setState(() => _income = v)),
                 const SizedBox(height: Ds.s5),
                 ElevatedButton(
                   onPressed: () {

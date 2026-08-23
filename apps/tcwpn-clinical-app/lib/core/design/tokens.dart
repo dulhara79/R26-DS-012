@@ -43,13 +43,25 @@ class Ds {
   static const Color darkRed = Color(0xFF98301C);
   static const Color darkRedSoft = Color(0xFFF4E0DC);
 
+  // GREY is not a severity. It is the absence of an assessment — the backend
+  // emits it when the fusion gate blocks, and it must never be coloured or
+  // worded as though it were the low-risk end of the scale.
+  static const Color grey = Color(0xFF6B7C85);
+  static const Color greySoft = Color(0xFFEDF1F3);
+
   // ── Component identity colours (used only in fusion breakdowns) ──────────
   // Each modality keeps one colour everywhere it appears, so a clinician learns
   // "the sand band is the wearable" once and it holds across every screen.
+  //
+  // NAMING: these follow the CENTRAL BACKEND's wire vocabulary, where
+  // c3_clinical_nlp is TC-WPN and c4_demographic is the DCAR prior. The paper
+  // numbers those components the other way round (Component 4 = TC-WPN); the
+  // human-readable labels in Modality.labels preserve the paper's numbering.
+  // See the mapping table at the top of domain/models.dart.
   static const Color c1Physiological = Color(0xFF6E7FA8); // wearable
   static const Color c2Behavioral = Color(0xFF7FA88C); // phone sensing
-  static const Color c3Intervention = Color(0xFFC0956B); // intervention engine
-  static const Color c4ClinicalNlp = Color(0xFF0F5B6E); // TC-WPN — the brand hue
+  static const Color c3ClinicalNlp = Color(0xFF0F5B6E); // TC-WPN — the brand hue
+  static const Color c4Demographic = Color(0xFFC0956B); // DCAR demographic prior
 
   // ── Radii ────────────────────────────────────────────────────────────────
   static const double rSm = 8;
@@ -78,11 +90,38 @@ class Ds {
   static Duration get med => const Duration(milliseconds: 280);
 }
 
-/// Alert bands from proposal §5.1. Thresholds live here alone so the app and
-/// the fusion service can be reconciled in one place.
-enum AlertBand { green, amber, red, darkRed }
+/// Alert bands.
+///
+/// GREY IS NOT A BAND ON THE SEVERITY SCALE. The Central Backend returns
+/// `band: "GREY"` with `composite: null` whenever the fusion gate blocks —
+/// fewer than two usable modalities, no time-varying modality, or every reading
+/// carrying a non-`ok` status. That is *missing evidence*, not low risk.
+///
+/// The previous `fromWire` had no GREY case and fell through to `green`, and
+/// `composite_score` defaulted to 0, so a blocked assessment rendered as
+/// "Stable · 0.000". Both defaults are fixed here and in FusionResult.fromJson.
+enum AlertBand { grey, green, amber, red, darkRed }
 
 extension AlertBandX on AlertBand {
+  /// The four bands that actually express severity. Use this — not
+  /// `AlertBand.values` — for legends, filters and caseload histograms, so
+  /// "no assessment" is never offered as a risk level to filter by.
+  static const List<AlertBand> scored = [
+    AlertBand.green,
+    AlertBand.amber,
+    AlertBand.red,
+    AlertBand.darkRed,
+  ];
+
+  bool get isScored => this != AlertBand.grey;
+
+  /// Local banding from a score.
+  ///
+  /// Kept ONLY for numbers that never passed through the fusion service (e.g. a
+  /// single modality's own score shown in isolation). It must NOT be used to
+  /// re-derive the composite's band: the server bands at 0.33/0.66 into three
+  /// tiers (fusion_service/fusion.py, BANDS) whereas this splits four ways at
+  /// 0.25/0.50/0.75. Display the server's `tier`/`band` for the composite.
   static AlertBand fromScore(double s) {
     if (s >= 0.75) return AlertBand.darkRed;
     if (s >= 0.50) return AlertBand.red;
@@ -90,6 +129,9 @@ extension AlertBandX on AlertBand {
     return AlertBand.green;
   }
 
+  /// Parses the backend's band vocabulary. An unrecognised value maps to GREY,
+  /// not to GREEN: if we cannot tell what the server meant, the honest answer
+  /// is "no assessment", never "stable".
   static AlertBand fromWire(String? s) {
     switch ((s ?? '').toUpperCase().replaceAll(' ', '_')) {
       case 'DARK_RED':
@@ -100,12 +142,17 @@ extension AlertBandX on AlertBand {
       case 'AMBER':
       case 'YELLOW':
         return AlertBand.amber;
-      default:
+      case 'GREEN':
         return AlertBand.green;
+      case 'GREY':
+      case 'GRAY':
+      default:
+        return AlertBand.grey;
     }
   }
 
   String get label => switch (this) {
+        AlertBand.grey => 'No assessment',
         AlertBand.green => 'Stable',
         AlertBand.amber => 'Monitor',
         AlertBand.red => 'Review',
@@ -115,6 +162,7 @@ extension AlertBandX on AlertBand {
   /// The band name as the proposal writes it — used in exports and PDFs where
   /// the protocol vocabulary matters more than the friendly label.
   String get protocolName => switch (this) {
+        AlertBand.grey => 'GREY',
         AlertBand.green => 'GREEN',
         AlertBand.amber => 'AMBER',
         AlertBand.red => 'RED',
@@ -122,6 +170,7 @@ extension AlertBandX on AlertBand {
       };
 
   Color get fg => switch (this) {
+        AlertBand.grey => Ds.grey,
         AlertBand.green => Ds.green,
         AlertBand.amber => Ds.amber,
         AlertBand.red => Ds.red,
@@ -129,6 +178,7 @@ extension AlertBandX on AlertBand {
       };
 
   Color get bg => switch (this) {
+        AlertBand.grey => Ds.greySoft,
         AlertBand.green => Ds.greenSoft,
         AlertBand.amber => Ds.amberSoft,
         AlertBand.red => Ds.redSoft,
@@ -138,6 +188,10 @@ extension AlertBandX on AlertBand {
   /// Guidance shown beside the band. Written from the clinician's side of the
   /// screen: what to do, not what the model computed.
   String get guidance => switch (this) {
+        AlertBand.grey =>
+          'No composite could be computed. This is missing evidence, not a low '
+              'score — read the per-modality panel below to see which signals '
+              'are absent or unusable.',
         AlertBand.green =>
           'No action indicated by the model. Continue the existing review interval.',
         AlertBand.amber =>
