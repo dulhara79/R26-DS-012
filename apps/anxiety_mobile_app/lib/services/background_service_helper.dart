@@ -15,6 +15,12 @@ class BackgroundServiceHelper {
   static Timer? _timer;
   static final Random _random = Random.secure();
 
+  // Chest-strap vitals belong to the physiological component and must not be
+  // stored in the Component 2 / general Supabase sensor_events stream.
+  static const Set<String> _blockedResearchEventTypes = {
+    'ChestStrap_Vitals',
+  };
+
   /// true  → main UI isolate  → writes to 'offline_queue_main'
   /// false → background isolate → writes to 'offline_queue_bg'
   static bool isMainIsolate = true;
@@ -34,6 +40,11 @@ class BackgroundServiceHelper {
     bool immediate = false,
     DateTime? eventTime,
   }) async {
+    if (_blockedResearchEventTypes.contains(type)) {
+      debugPrint('Research event blocked from Supabase: $type');
+      return;
+    }
+
     final dataMap = <String, dynamic>{
       'eventId': _newEventId(),
       'userId': userId,
@@ -142,8 +153,16 @@ class BackgroundServiceHelper {
 
     // Normalize legacy rows once and persist generated event IDs before any
     // network call. Retries then remain idempotent.
-    queue = queue.map(_normalizeQueuedString).toList();
+    queue = queue
+        .map(_normalizeQueuedString)
+        .where((encoded) => !_isBlockedQueuedEvent(encoded))
+        .toList();
     await prefs.setStringList(queueKey, queue);
+
+    if (queue.isEmpty) {
+      debugPrint('✅ Queue [$queueKey] contains no uploadable events.');
+      return;
+    }
 
     debugPrint('🔄 Supabase sync [$queueKey]: ${queue.length} events');
     var completed = 0;
@@ -191,7 +210,12 @@ class BackgroundServiceHelper {
       remaining.addAll(queue.sublist(completed));
     }
     if (latest.length > queue.length) {
-      remaining.addAll(latest.sublist(queue.length));
+      remaining.addAll(
+        latest
+            .sublist(queue.length)
+            .map(_normalizeQueuedString)
+            .where((encoded) => !_isBlockedQueuedEvent(encoded)),
+      );
     }
 
     await prefs.setStringList(queueKey, remaining);
@@ -200,6 +224,20 @@ class BackgroundServiceHelper {
     } else {
       debugPrint('⚠️ ${remaining.length} events remain in [$queueKey].');
     }
+  }
+
+  static bool _isBlockedQueuedEvent(String encoded) {
+    try {
+      final event = Map<String, dynamic>.from(jsonDecode(encoded) as Map);
+      final type = (event['dataType'] ?? '').toString();
+      if (_blockedResearchEventTypes.contains(type)) {
+        debugPrint('Removed blocked queued research event: $type');
+        return true;
+      }
+    } catch (e) {
+      debugPrint('Could not inspect queued event type: $e');
+    }
+    return false;
   }
 
   static String _normalizeQueuedString(String encoded) {
