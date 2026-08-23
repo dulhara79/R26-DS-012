@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "tcwpn_app" "\0"
+            VALUE "FileDescription", "r26_ds012_app" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "tcwpn_app" "\0"
+            VALUE "InternalName", "r26_ds012_app" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "tcwpn_app.exe" "\0"
-            VALUE "ProductName", "tcwpn_app" "\0"
+            VALUE "OriginalFilename", "r26_ds012_app.exe" "\0"
+            VALUE "ProductName", "r26_ds012_app" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
