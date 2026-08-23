@@ -39,6 +39,58 @@ CHANGED (§15):
   Per §7: AUROC (threshold-free discrimination) and the operating threshold
   (selected on validation) are reported as separate, differently-named things.
 
+CONTRACT v1.1.0 — ALIGNMENT WITH R26-DS-012_service_contracts.md
+================================================================
+v1.0.0 answered the model question correctly but did not speak the central
+backend's envelope. v1.1.0 adds it, and corrects one genuine inference bug.
+
+ADDED (contract §1 common envelope — every model service returns these):
+  subject_id, modality, score, status, captured_at, computed_at, latency_ms.
+  `score` and `probability` are deliberately the same float. `score` is the
+  envelope field fusion reads; `probability` is C4's native name. Duplicating
+  one float is cheaper than an argument about which field was meant.
+
+ADDED (auditability):
+  prototype_distance_anxiety / prototype_distance_control — restored. The
+  squashed [0,1] number alone makes a stored reading unauditable later. These
+  are REPORT-ONLY: they are recomputed from the same normalised embeddings for
+  display and take no part in producing `score`, which still comes from
+  model.classify(). Phase 7 parity is therefore unaffected.
+  support_set_version — echoed. Change the site's support bank and yesterday's
+  scores are no longer reproducible, so the version must reach the audit log.
+  Support note `id` is echoed in support_contributions.
+
+FIXED — the temporal axis (this was a real bug, not a naming issue):
+  v1.0.0 computed one shared reference point, max(support dates + query date),
+  and measured every support note against it. That is not the training
+  quantity. scripts/apply_index_time.py sets
+      days_before_patient_last_note := days_before_index = (t_index − charttime)
+  where t_index is the index time of THAT NOTE'S OWN PATIENT. Support notes
+  come from K different patients (sampler.py guarantees it), so there are K
+  reference points, not one — and under the old code a support note more
+  recent than the query silently inflated every other note's delta.
+  Only the backend knows each support note's patient anchor, so the backend
+  now supplies `days_before_index` per note. `temporal_axis` on the response
+  states which path was taken; nothing is silently approximated.
+
+REMOVED FROM THE CONTRACT DOC (not implementable / not true):
+  status "no_support_set" — a prototypical network has no stored prototypes.
+    build_prototype() runs per request; the checkpoint holds no centroid. With
+    K=0 there is nothing to classify against. 422 MISSING_SUPPORT_SET stands.
+    (tcwpn_full does carry an aux_head over the query embedding alone, so a
+    support-free score is technically computable — but evaluation.py scores
+    out["p_anxiety"], the PROTOTYPE path. Every metric you have describes that
+    path. The aux head is an unmeasured code path and is not served.)
+  calibrated_probability — no calibrator is fitted anywhere in this pipeline
+    (deployment_config: calibrator_fitted false; seed-42 ECE 0.0849, Brier
+    0.209). The field is replaced by `probability` + calibration_status.
+  ece in a /predict response — a research metric measured over 813 episodes.
+    It does not describe one note. /health only (§15.7).
+  temporal_weight / confidence_weight split in support_contributions —
+    build_prototype returns ONE normalised weight vector; w^T and w^C are
+    multiplied inside the loop and never surfaced separately. Splitting them
+    would require changing the model's public API and would break Phase 7.
+
 MODEL SOURCE (Phase 1 / Phase 3)
 ================================
 This wrapper imports `tc_wpn.model` — the VENDORED copy of
@@ -63,6 +115,7 @@ import json
 import math
 import os
 import sys
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -274,44 +327,79 @@ def _parse_iso(value: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def compute_days_before_last(support_dates: List[Optional[datetime]],
-                             query_date: Optional[datetime]):
+def resolve_temporal_deltas(support_notes: List["SupportNote"],
+                            query_date: Optional[datetime]):
     """
-    The model's temporal input is `days_before_patient_last_note`
-    (src/tcwpn/collate.py) — how far a note sits before the LAST note observed
-    for that SAME patient. It is a within-patient quantity, not "days before
-    today".
+    Produce the [K] vector that TemporalRecencyWeight consumes, and say
+    honestly which of three paths produced it.
 
-    Reference point = the most recent date among the support notes and the
-    query note. A note with no date cannot be placed on that axis; rather than
-    inventing a position for it, it takes the median of the dated notes and is
-    counted in `undated_support_notes` on the response, so the caller can see
-    the input was incomplete.
+    WHAT THE MODEL WAS TRAINED ON
+    -----------------------------
+    src/tcwpn/collate.py reads `days_before_patient_last_note` off each record.
+    scripts/apply_index_time.py overwrites that column:
 
-    Returns (days [K] float list, n_undated int, reference ISO string or None).
+        days_before_patient_last_note := days_before_index
+        days_before_index              = (t_index − charttime), clipped at 0
+
+    t_index is the index time of the patient THAT NOTE belongs to. Because
+    sampler.py guarantees one support slot = one distinct patient, a K-shot
+    support set carries K independent reference points. There is no single
+    shared "most recent note" axis, and constructing one — as contract v1.0.0
+    did with max(support ∪ query) — is not the training quantity. It also
+    misbehaves: a support note more recent than the query moved the reference
+    forward and inflated every other note's delta.
+
+    (The docstring on TemporalRecencyWeight in the vendored model.py still
+    describes the pre-index-time semantics. It is stale; indexing.py §TEMPORAL
+    FEATURE is authoritative. See NOTES_FOR_SRC_TCWPN_MODEL.md.)
+
+    THE THREE PATHS
+    ---------------
+    "backend_supplied"  — every note carried days_before_index. Correct, and
+                          the only path that reproduces training semantics.
+                          Only the backend can compute it: it is the one party
+                          that knows each support note's patient anchor.
+    "approximated"      — at least one note fell back to (query_date − note_date).
+                          This treats the QUERY note as the index time, which is
+                          right for the prediction point but wrong for the
+                          support note's own patient. Reported so a caller can
+                          see the reading is approximate rather than assume it.
+    "unavailable"       — no usable dates at all. All deltas are 0.0, which
+                          makes w^T = exp(0) = 1 for every note, i.e. temporal
+                          weighting is inert. Reported rather than hidden,
+                          because "all weights equal" and "recency applied" are
+                          very different claims to put in a clinician's record.
+
+    Returns (days [K] float, n_supplied int, n_approximated int,
+             n_undated int, axis str, reference ISO str or None).
     """
-    dated = [d for d in support_dates if d is not None]
-    if query_date is not None:
-        dated_with_query = dated + [query_date]
-    else:
-        dated_with_query = dated
+    days: List[float] = []
+    n_supplied = n_approximated = n_undated = 0
 
-    if not dated_with_query:
-        return [0.0] * len(support_dates), len(support_dates), None
+    for n in support_notes:
+        if n.days_before_index is not None:
+            days.append(max(0.0, float(n.days_before_index)))
+            n_supplied += 1
+            continue
 
-    reference = max(dated_with_query)
-    known = [max(0.0, (reference - d).total_seconds() / 86400.0)
-             for d in support_dates if d is not None]
-    fill = sorted(known)[len(known) // 2] if known else 0.0
-
-    days, n_undated = [], 0
-    for d in support_dates:
-        if d is None:
-            days.append(fill)
-            n_undated += 1
+        d = _parse_iso(n.note_date)
+        if d is not None and query_date is not None:
+            days.append(max(0.0, (query_date - d).total_seconds() / 86400.0))
+            n_approximated += 1
         else:
-            days.append(max(0.0, (reference - d).total_seconds() / 86400.0))
-    return days, n_undated, reference.isoformat()
+            # No inventing a position on an axis we cannot place the note on.
+            days.append(0.0)
+            n_undated += 1
+
+    if n_approximated == 0 and n_undated == 0 and days:
+        axis = "backend_supplied"
+    elif n_supplied == 0 and n_approximated == 0:
+        axis = "unavailable"
+    else:
+        axis = "approximated"
+
+    reference = query_date.isoformat() if query_date is not None else None
+    return days, n_supplied, n_approximated, n_undated, axis, reference
 
 
 # =============================================================================
@@ -322,12 +410,20 @@ def run_inference(note_text: str,
                   support_texts: List[str],
                   support_labels: List[int],
                   support_days: List[float],
-                  n_undated: int,
-                  reference_date: Optional[str],
                   used_default_support_set: bool,
+                  support_ids: Optional[List[Optional[str]]] = None,
+                  temporal: Optional[dict] = None,
+                  support_set_version: Optional[str] = None,
                   return_attention: bool = False,
                   return_support_contributions: bool = False) -> dict:
+    t0 = time.perf_counter()
     model, tok = load_model()
+
+    temporal = temporal or {
+        "axis": "unavailable", "reference": None,
+        "n_supplied": 0, "n_approximated": 0, "n_undated": len(support_texts),
+    }
+    support_ids = support_ids or [None] * len(support_texts)
 
     sup_ids, sup_mask, sup_idx = pack_notes(
         support_texts, tok, PRE["max_len"], PRE["max_chunks"], PRE["stride"], DEVICE)
@@ -356,6 +452,15 @@ def run_inference(note_text: str,
     positive_col = {c: i for i, c in enumerate(classes)}.get(1, logits.size(1) - 1)
     probability = float(probs[0, positive_col].item())
 
+    # REPORT-ONLY. Recomputed here purely so a stored reading stays auditable —
+    # the squashed [0,1] number alone cannot be checked later. `probability`
+    # above already came from model.classify(); nothing below feeds back into
+    # it, so Phase 7 parity is untouched. Squared euclidean on the unit sphere
+    # is 2 − 2·cos, which is exactly what classify() takes cdist of.
+    _q = F.normalize(qry_emb, dim=-1)[0]
+    _dist = {c: float(((_q - prototypes[i]) ** 2).sum().item())
+             for i, c in enumerate(classes)}
+
     threshold = float(OP["threshold"])
     prediction = "ANXIETY" if probability >= threshold else "NO ANXIETY"
     confidence = probability if probability >= threshold else 1.0 - probability
@@ -379,17 +484,60 @@ def run_inference(note_text: str,
     n_ctrl = sum(1 for l in support_labels if l == 0)
 
     resp = {
-        # ---- §11 contract ----------------------------------------------------
+        # ---- contract §1 common envelope -------------------------------------
+        # subject_id, modality, score, status, captured_at and computed_at are
+        # filled by the /predict handler, which is the layer that has the
+        # request. `score` is set there to exactly `probability`.
         "model": "TC-WPN",
         "model_version": MODEL_VERSION,                       # §15.2
+
+        # ---- the prediction --------------------------------------------------
         "prediction": prediction,
         "probability": round(probability, 6),
         "threshold": threshold,
         "confidence": round(float(confidence), 6),
         "entropy": round(entropy, 6),
-        "support_count": {"anxiety": n_anx, "control": n_ctrl},
-        "temporal_weighting_used": bool(model.use_temporal_weight),
+
+        # Uncalibrated, and named so. deployment_config: calibrator_fitted
+        # false; the seed-42 clean benchmark measures ECE 0.0849, Brier 0.209.
+        # Fusion averages this with C1 and C2 as if the three were comparable
+        # probabilities — that is a modelling assumption, and this field is
+        # where C4 declares its side of it.
+        "calibration_status": "uncalibrated",
+        "probability_semantics": (
+            "softmax over cosine-distance prototype logits. Uncalibrated: no "
+            "calibrator is fitted in this deployment."
+        ),
+
+        # ---- auditability ----------------------------------------------------
+        "prototype_distance_anxiety": round(_dist.get(1, float("nan")), 6),
+        "prototype_distance_control": round(_dist.get(0, float("nan")), 6),
+        "temperature": round(float(torch.exp(model.log_temperature).item()), 4),
+
+        # ---- the support set that built the prototypes ------------------------
+        "support_count": {"anxiety": n_anx, "control": n_ctrl,
+                          "k": n_anx + n_ctrl},
+        "support_set_version": support_set_version,
+        "evaluated_k": API.get("evaluated_k"),
+        "temporal_axis": temporal["axis"],
+        "temporal_reference": temporal["reference"],
+        "support_notes_with_supplied_delta": temporal["n_supplied"],
+        "support_notes_with_approximated_delta": temporal["n_approximated"],
+        "undated_support_notes": temporal["n_undated"],
         "used_default_support_set": bool(used_default_support_set),
+
+        # ---- mechanisms — switched on, not shown to work ----------------------
+        "temporal_weighting_used": bool(model.use_temporal_weight),
+        "prototype_consistency_weighting_used": bool(model.use_pcw),
+        "mechanism_note": (
+            "temporal_weighting_used and prototype_consistency_weighting_used "
+            "report which mechanisms are ENABLED in this build. Neither shows a "
+            "statistically detectable effect on AUROC once the auxiliary CE "
+            "head is held constant (paired over 5 seeds against aux_only: "
+            "tcwpn_full +0.0006, p=0.886; temporal_aux +0.0006, p=0.906; "
+            "pcw_aux -0.0080, p=0.150). Do not attribute this score to either "
+            "mechanism."
+        ),
 
         # ---- §15.3 / §15.4 ---------------------------------------------------
         "preprocessing_version": PREPROCESSING_VERSION,
@@ -403,14 +551,6 @@ def run_inference(note_text: str,
         # ---- provenance & interpretation ------------------------------------
         "contract_version": CONTRACT_VERSION,
         "tcwpn_git_commit": PROV["tcwpn_git_commit"],
-        "prototype_consistency_weighting_used": bool(model.use_pcw),
-        "temperature": round(float(torch.exp(model.log_temperature).item()), 4),
-        "undated_support_notes": n_undated,
-        "temporal_reference_note_date": reference_date,
-        "probability_semantics": (
-            "softmax over cosine-distance prototype logits. Uncalibrated: no "
-            "calibrator is fitted in this deployment."
-        ),
         # §8 — named as application layer, not a validated model output.
         "application_risk_band": band,
         "application_risk_band_note": (
@@ -418,19 +558,26 @@ def run_inference(note_text: str,
             "was evaluated as a binary classifier; LOW/MODERATE/HIGH/VERY HIGH "
             "were not validated as clinical classes."
         ),
+
+        "latency_ms": None,   # set at the end of this function
     }
 
     if return_support_contributions:
+        # ONE weight per note, not a w^T / w^C split. build_prototype()
+        # multiplies the two inside its loop and returns only the final
+        # normalised vector; separating them would mean changing the model's
+        # public API, which is exactly what Phase 7 parity forbids.
         contribs = []
         for c in classes:
             idx = [i for i, l in enumerate(support_labels) if l == c]
             for i, w in zip(idx, weights[c].tolist()):
                 contribs.append({
+                    "id": support_ids[i],
                     "support_index": i,
                     "label": "anxiety" if c == 1 else "control",
                     "excerpt": support_texts[i][:120],
                     "weight": round(float(w), 6),
-                    "days_before_last_note": round(support_days[i], 3),
+                    "days_before_index": round(support_days[i], 3),
                 })
         resp["support_contributions"] = contribs
 
@@ -445,6 +592,7 @@ def run_inference(note_text: str,
             "responsible for the prediction."
         )
 
+    resp["latency_ms"] = int((time.perf_counter() - t0) * 1000)
     return resp
 
 
@@ -524,26 +672,66 @@ def auth(authorization: str = Header(default=None)) -> dict:
 
 # ---- §11 request contract ---------------------------------------------------
 class SupportNote(BaseModel):
+    """One entry in the site's labelled reference bank.
+
+    NOT a previous note of the patient being scored. sampler.py guarantees
+    support ∩ query patients = ∅ in every training episode, and collate.py
+    raises on overlap. Nothing raises at serving time, so the BACKEND must
+    enforce the same exclusion when it selects these notes — otherwise it
+    reproduces the exact leakage the clean pipeline was rebuilt to remove.
+    """
     id: Optional[str] = None
     text: str
-    label: str                      # "anxiety" | "control"
-    note_date: Optional[str] = None
+    label: str                              # "anxiety" | "control"
+    note_date: Optional[str] = None         # ISO-8601, fallback only
+    days_before_index: Optional[float] = None
+    """(t_index − charttime) in days for THIS note's own patient, >= 0.
+
+    Preferred. This is the exact quantity the model was trained on
+    (scripts/apply_index_time.py). Only the backend can compute it, because
+    only the backend knows each support note's patient anchor. Omit it and the
+    service falls back to note_date and reports temporal_axis "approximated".
+    """
 
 
 class PredictRequest(BaseModel):
+    # subject_id is the canonical backend ID (contract §1). patient_id is
+    # accepted as a deprecated alias so the existing ClinAnx Flutter build
+    # keeps working through the migration; the response always returns
+    # subject_id.
+    subject_id: Optional[str] = None
     patient_id: Optional[str] = None
+
     note_text: str
     note_type: Optional[str] = Field(default="Discharge summary")
     note_date: Optional[str] = None
     visit_count: Optional[int] = 1
+
     support_set: Optional[List[SupportNote]] = None
+    support_set_version: Optional[str] = None
+    """Identifier of the site reference bank these notes came from. Stamped on
+    the response and required in the audit log: change the bank and yesterday's
+    scores are no longer reproducible."""
+
     return_attention: Optional[bool] = False
     return_support_contributions: Optional[bool] = False
 
+    def resolved_subject_id(self) -> Optional[str]:
+        return self.subject_id or self.patient_id
+
 
 def _error(code: str, message: str, status: int = 400, **extra):
-    """§6 error envelope, used unchanged everywhere."""
-    body = {"status": "error", "error_code": code, "message": message}
+    """§6 error envelope.
+
+    `modality` and `score: null` are carried so the backend can store the
+    failure as a typed reading and show the clinician a gap, rather than
+    silently dropping a modality that was due (contract §8).
+    """
+    body = {"status": "error", "error_code": code, "message": message,
+            "modality": "c4_clinical_nlp", "score": None,
+            "model_version": MODEL_VERSION,
+            "computed_at": datetime.now(timezone.utc)
+                                   .isoformat().replace("+00:00", "Z")}
     body.update(extra)
     return JSONResponse(status_code=status, content=body)
 
@@ -576,6 +764,21 @@ async def health():
             "space_commit": os.environ.get("SPACE_COMMIT", "unknown"),
         },
         "inference_configuration": INF,
+        "support_set_contract": {
+            "required": API["requires_support_set"],
+            "min_anxiety": API["min_anxiety_support"],
+            "min_control": API["min_control_support"],
+            "evaluated_k": API.get("evaluated_k"),
+            "note": ("The support set is a bank of labelled notes from OTHER "
+                     "patients — it is the classifier, not the subject's own "
+                     "history. Prototypes are built per request and discarded; "
+                     "no prototype is stored in the checkpoint. The backend "
+                     "must exclude the queried subject_id from the bank."),
+            "temporal_field": ("days_before_index per note, = (t_index - "
+                               "charttime) for that note's own patient. Supply "
+                               "it; note_date is an approximation."),
+        },
+        "calibration_status": "uncalibrated",
         "operating_point": {
             "threshold": OP["threshold"],
             "threshold_source": OP["threshold_source"],
@@ -590,6 +793,11 @@ async def health():
             "discrimination": RESEARCH["discrimination"],
             "at_locked_threshold": RESEARCH["at_locked_threshold"],
             "calibration": RESEARCH["calibration"],
+            # Published beside the headline number, not behind it. The blinded
+            # result is the honest one and the mechanism finding is what the
+            # service must never claim credit for.
+            "blinded": RESEARCH.get("blinded"),
+            "mechanism_finding": RESEARCH.get("mechanism_finding"),
             "evaluation_context": RESEARCH["evaluation_context"],
             "caveat": RESEARCH["caveat"],
             "note": ("Discrimination (AUROC/PR-AUC) is threshold-free. The "
@@ -608,23 +816,31 @@ async def health():
 
 @app.post("/predict")
 async def predict(req: PredictRequest, claims: dict = Depends(auth)):
+    subject_id = req.resolved_subject_id()
+
     if not _startup["ready"]:
         return _error("SERVICE_NOT_READY",
-                      "Model is not loaded. See /health startup_errors.", 503)
+                      "Model is not loaded. See /health startup_errors.", 503,
+                      subject_id=subject_id)
 
     if not req.note_text or not req.note_text.strip():
-        return _error("MISSING_NOTE_TEXT", "note_text is required and must be non-empty.")
+        return _error("MISSING_NOTE_TEXT",
+                      "note_text is required and must be non-empty.",
+                      subject_id=subject_id)
 
     if not req.support_set:
         # §6 / §15.1 — no silent fallback to demo notes in the API.
+        # And no "no_support_set" status: there is nothing to run. Prototypes
+        # are built per request from these notes; the checkpoint holds none.
         return _error(
             "MISSING_SUPPORT_SET",
             "Both anxiety and control support examples are required for TC-WPN inference.",
-            422, required={"anxiety": API["min_anxiety_support"],
-                           "control": API["min_control_support"]},
+            422, subject_id=subject_id,
+            required={"anxiety": API["min_anxiety_support"],
+                      "control": API["min_control_support"]},
         )
 
-    texts, labels, dates = [], [], []
+    notes, texts, labels, ids = [], [], [], []
     for n in req.support_set:
         if not n.text or not n.text.strip():
             continue
@@ -635,9 +851,10 @@ async def predict(req: PredictRequest, claims: dict = Depends(auth)):
         else:
             return _error("INVALID_SUPPORT_LABEL",
                           f"support_set label must be 'anxiety' or 'control', got {n.label!r}.",
-                          422)
+                          422, subject_id=subject_id)
+        notes.append(n)
         texts.append(n.text.strip())
-        dates.append(_parse_iso(n.note_date))
+        ids.append(n.id)
 
     # §15.5 — validate composition.
     n_anx, n_ctrl = labels.count(1), labels.count(0)
@@ -645,26 +862,42 @@ async def predict(req: PredictRequest, claims: dict = Depends(auth)):
         return _error(
             "MISSING_SUPPORT_SET",
             "Both anxiety and control support examples are required for TC-WPN inference.",
-            422,
+            422, subject_id=subject_id,
             provided={"anxiety": n_anx, "control": n_ctrl},
             required={"anxiety": API["min_anxiety_support"],
                       "control": API["min_control_support"]},
         )
 
-    days, n_undated, reference = compute_days_before_last(dates, _parse_iso(req.note_date))
+    days, n_sup, n_approx, n_undated, axis, reference = resolve_temporal_deltas(
+        notes, _parse_iso(req.note_date))
 
     try:
         result = run_inference(
-            req.note_text, texts, labels, days, n_undated, reference,
+            req.note_text, texts, labels, days,
             used_default_support_set=False,
+            support_ids=ids,
+            temporal={"axis": axis, "reference": reference,
+                      "n_supplied": n_sup, "n_approximated": n_approx,
+                      "n_undated": n_undated},
+            support_set_version=req.support_set_version,
             return_attention=bool(req.return_attention),
             return_support_contributions=bool(req.return_support_contributions),
         )
     except Exception as e:
-        return _error("INFERENCE_FAILED", str(e), 500)
+        # Stored as a gap in the clinician timeline rather than dropped —
+        # contract §8, "the modality was due and did not arrive".
+        return _error("INFERENCE_FAILED", str(e), 500, subject_id=subject_id)
 
+    # ---- contract §1 common envelope, applied last so it cannot be shadowed --
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    result["subject_id"] = subject_id
+    result["modality"] = "c4_clinical_nlp"
+    # Same float as `probability`, under the name fusion reads. Higher always
+    # means more risk, for every modality (contract §1).
+    result["score"] = result["probability"]
     result["status"] = "ok"
-    result["patient_id"] = req.patient_id
+    result["captured_at"] = req.note_date or now   # when the note was written
+    result["computed_at"] = now                    # when inference ran
     result["analysed_by"] = claims.get("sub")
     return result
 
@@ -706,8 +939,15 @@ def g_predict(note_text, anx_blob, ctrl_blob):
     labels = [1] * len(anx) + [0] * len(ctrl)
     days = [0.0] * len(texts)
 
-    r = run_inference(note_text, texts, labels, days, len(texts), None,
-                      used_default_support_set=used_default)
+    # The UI has no index times, so every delta is 0 and w^T = exp(0) = 1 for
+    # every note. temporal_axis says "unavailable" rather than letting the
+    # screen imply recency weighting ran.
+    r = run_inference(
+        note_text, texts, labels, days,
+        used_default_support_set=used_default,
+        temporal={"axis": "unavailable", "reference": None,
+                  "n_supplied": 0, "n_approximated": 0, "n_undated": len(texts)},
+    )
     warn = ("\n[DEMO SUPPORT SET IN USE — the model is unadapted. The API "
             "refuses this input; only this UI permits it.]\n" if used_default else "\n")
     out = (
@@ -719,6 +959,8 @@ def g_predict(note_text, anx_blob, ctrl_blob):
         f"ENTROPY               : {r['entropy']:.4f}\n"
         f"APPLICATION RISK BAND : {r['application_risk_band']}  "
         f"(UI band, not a validated model output)\n"
+        f"TEMPORAL AXIS         : {r['temporal_axis']}\n"
+        f"CALIBRATION           : {r['calibration_status']}\n"
         f"{'='*58}\n"
         f"model_version         : {r['model_version']}\n"
         f"preprocessing_version : {r['preprocessing_version']}\n"
