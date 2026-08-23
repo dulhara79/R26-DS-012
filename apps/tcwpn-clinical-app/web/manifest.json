@@ -1,6 +1,6 @@
 {
-    "name": "tcwpn_app",
-    "short_name": "tcwpn_app",
+    "name": "r26_ds012_app",
+    "short_name": "r26_ds012_app",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

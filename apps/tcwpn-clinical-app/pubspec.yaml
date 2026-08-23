@@ -1,45 +1,71 @@
-name: tc_wpn_doctor
-description: TC-WPN Clinical Anxiety Detection — Doctor Dashboard
-publish_to: none
+name: r26_ds012_app
+description: "ClinAnx — multimodal anxiety risk console for psychiatry teams. R26-DS-012."
+publish_to: "none"
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: ">=3.5.0 <4.0.0"
+  flutter: ">=3.27.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  http: ^1.2.0
-  shared_preferences: ^2.2.2
-  intl: ^0.19.0
-  fl_chart: ^0.68.0
+  cupertino_icons: ^1.0.8
+
+  # ── State ─────────────────────────────────────────────────────────────────
   provider: ^6.1.2
-  shimmer: ^3.0.0
+
+  # ── Persistence ───────────────────────────────────────────────────────────
+  shared_preferences: ^2.3.2
+  # ADDED: credentials and session tokens must not sit in SharedPreferences.
+  flutter_secure_storage: ^9.2.2
+
+  # ── Networking ────────────────────────────────────────────────────────────
+  http: ^1.2.2
+  connectivity_plus: ^6.0.5
+  mobile_scanner: ^6.0.11
+
+  # ── Typography ────────────────────────────────────────────────────────────
+  # ADDED: Inter Tight / Inter / IBM Plex Mono, the three type roles.
   google_fonts: ^6.2.1
-  flutter_animate: ^4.5.0
-  lottie: ^3.1.0
-  flutter_local_notifications: ^17.1.2
-  share_plus: ^13.1.0
-  pdf: ^3.12.0
-  printing: ^5.14.3
-  path_provider: ^2.1.5
-  open_filex: ^4.7.0
-  connectivity_plus: ^7.1.1
+
+  # ── Reporting ─────────────────────────────────────────────────────────────
+  pdf: ^3.11.1
+  printing: ^5.13.2
+  share_plus: ^10.0.2
+
+  # ── Notifications ─────────────────────────────────────────────────────────
+  flutter_local_notifications: ^17.2.3
+
+  # ── Charts, ids, dates ────────────────────────────────────────────────────
+  fl_chart: ^0.69.0
+  uuid: ^4.5.1
+  intl: ^0.19.0
+  
+  crypto: ^3.0.7
+
+  # NOTE: flutter_animate and flutter_rating_bar were only used by the previous
+  # build's screens. Re-add them if you keep any of those files; otherwise
+  # leaving them out keeps the dependency surface honest.
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
-  flutter_launcher_icons: ^0.13.1
-
-flutter_launcher_icons:
-  android: "launcher_icon"
-  ios: true
-  image_path: "assets/images/app_icon.png"
-  min_sdk_android: 21
+  flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.1
 
 flutter:
   uses-material-design: true
   assets:
-    - assets/images/
-    - assets/lottie/
+    - assets/brand/
+
+# Run once after `flutter pub get`:
+#   dart run flutter_launcher_icons
+flutter_launcher_icons:
+  image_path: "assets/brand/icon_1024.png"
+  android: "launcher_icon"
+  adaptive_icon_background: "#F7F9FA"
+  adaptive_icon_foreground: "assets/brand/icon_foreground_1024.png"
+  ios: true
+  remove_alpha_ios: true
+  min_sdk_android: 23
