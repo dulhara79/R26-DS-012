@@ -12,6 +12,7 @@ class ParticipantIdentityService {
   static const String participantIdKey = 'participant_id';
   static const String displayNameKey = 'display_name';
   static const String legacyUserIdKey = 'legacy_user_id';
+  static const String centralSubjectIdKey = 'central_subject_id';
 
   static final RegExp _participantPattern = RegExp(r'^P_[A-F0-9]{16}$');
 
@@ -103,11 +104,26 @@ class ParticipantIdentityService {
     return true;
   }
 
+  static Future<void> saveCentralSubjectId(String subjectId) async {
+    final trimmed = subjectId.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError('Central subject ID cannot be empty.');
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(centralSubjectIdKey, trimmed);
+  }
+
+  static Future<String?> getCentralSubjectId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(centralSubjectIdKey);
+  }
+
   static Future<void> clearLocalIdentity() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(participantIdKey);
     await prefs.remove(displayNameKey);
     await prefs.remove(legacyUserIdKey);
+    await prefs.remove(centralSubjectIdKey);
     await prefs.remove('user_id');
   }
 }
