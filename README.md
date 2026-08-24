@@ -3,7 +3,6 @@
 <img src="https://img.shields.io/badge/SLIIT-Research%20Project-0057A8?style=for-the-badge&logoColor=white" />
 <img src="https://img.shields.io/badge/Project%20ID-R26--DS--012-2E75B6?style=for-the-badge" />
 
-
 <br/>
 
 # A Multimodal Digital Biomarker Framework for Personalized Vulnerability Mapping and Acute Escalation Forecasting in Young Adults with Anxiety Disorders
@@ -15,11 +14,10 @@
 <br/>
 
 <p align="center">
-  <img src="full.png" alt="image" width="500"/>
+  <img src="full.png" alt="Project framework" width="500"/>
 </p>
 
-
-*Four tightly integrated components. One unified framework. Zero reliance on labeled anxiety episodes.*
+*Four integrated research components. One multimodal framework. Validation-aware outputs with explicit safety and fusion gates.*
 
 <br/>
 
@@ -27,7 +25,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=flat-square&logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![Flutter](https://img.shields.io/badge/Flutter-Cross--Platform-02569B?style=flat-square&logo=flutter&logoColor=white)](https://flutter.dev/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Firebase](https://img.shields.io/badge/Firebase-Realtime-FFCA28?style=flat-square&logo=firebase&logoColor=black)](https://firebase.google.com/)
+[![Supabase](https://img.shields.io/badge/Supabase-Research%20Storage-3ECF8E?style=flat-square&logo=supabase&logoColor=white)](https://supabase.com/)
 [![License](https://img.shields.io/badge/License-Academic%20Research-lightgrey?style=flat-square)](./LICENSE)
 
 </div>
@@ -39,28 +37,34 @@
 - [Overview](#-overview)
 - [The Problem](#-the-problem)
 - [Components](#-components)
-  - [Component 1 - Wearable Biosensor Forecasting](#-component-1--wearable-biosensor-forecasting-sendanayake-hd)
-  - [Component 2 - Temporal Behavioral Graph Framework](#-component-2--temporal-behavioral-graph-framework-layathma-bmas)
-  - [Component 3 - Personalized Intervention Framework](#-component-3--personalized-intervention-framework-seneviratne-kaua)
-  - [Component 4 - Clinical NLP (TC-WPN)](#-component-4--clinical-nlp--tc-wpn-kaushalya-igd)
+  - [Component 1 - Wearable Biosensor Forecasting](#-component-1---wearable-biosensor-forecasting-sendanayake-hd)
+  - [Component 2 - Spatio-Temporal Graph Learning](#-component-2---spatio-temporal-graph-learning-layathma-bmas)
+  - [Component 3 - Clinical NLP / TC-WPN](#-component-3---clinical-nlp--tc-wpn-kaushalya-igd)
+  - [Component 4 - Multimodal Risk Fusion and RAG Decision Support](#-component-4---multimodal-risk-fusion-and-rag-decision-support-seneviratne-kaua)
 - [Research Team](#-research-team)
 - [Supervisors](#-supervisors)
 - [Tech Stack](#-tech-stack)
-- [SDG Alignment](#-sdg-alignment)
+- [Privacy and Research-Safety Commitments](#-privacy-and-research-safety-commitments)
 - [Citation](#-citation)
 
 ---
 
 ## 🌐 Overview
 
-Anxiety disorders affect an estimated 301 million people globally, yet the median delay between onset and first treatment contact exceeds **a decade**. In Sri Lanka, around 100 psychiatrists serve a population of 22 million, with only 10% of affected individuals ever accessing specialist services.
+Anxiety disorders affect millions of people worldwide, while access to continuous and personalized mental-health monitoring remains limited. Clinical appointments provide important but episodic snapshots, and anxiety-related changes can also appear in physiology, everyday behaviour, and clinical documentation at different timescales.
 
-Existing tools are either too expensive, too reactive, or too general. Clinical appointments are episodic. Consumer wearables use population-level heuristics. AI systems require thousands of labeled examples that simply don't exist in most clinical settings.
+**This research investigates a multimodal alternative.**
 
-**This research builds something different.**
+The project combines four complementary research components:
 
-This is a four-component unified framework that monitors anxiety continuously, predicts escalation before it happens, recommends personalized interventions, and adapts to each individual- all without requiring a single labeled anxiety episode for training.
-The system spans the full clinical pipeline: from a custom-built chest-strap wearable and passive smartphone sensing, through a continuously learning intervention engine, to a few-shot clinical NLP model that works with just 10–20 labeled clinical notes.
+1. **Wearable physiological sensing** for self-supervised anomaly detection and short-horizon escalation forecasting.
+2. **Passive smartphone sensing** represented as spatio-temporal graphs and evaluated under strict participant-grouped, cross-cohort validation.
+3. **Few-shot clinical NLP** using TC-WPN to classify anxiety-related clinical notes while explicitly controlling patient leakage and benchmark contamination.
+4. **Contextual risk modelling, reliability-weighted multimodal fusion, and retrieval-augmented decision support** with evidence-quality and abstention safeguards.
+
+The components do **not** all use the same learning paradigm. Component 1 is primarily self-supervised; Components 2 and 3 use labelled benchmark data for evaluation/training; Component 4 combines eligible component outputs with contextual information and evidence retrieval.
+
+> **Research use only:** The framework is designed for research and clinical decision support. It is not a diagnostic device and its outputs must not be interpreted as a diagnosis of an anxiety disorder.
 
 ---
 
@@ -68,12 +72,12 @@ The system spans the full clinical pipeline: from a custom-built chest-strap wea
 
 | Challenge | Why It Matters |
 |-----------|---------------|
-| Anxiety is continuous, not episodic | Clinical appointments capture snapshots, not the full picture |
-| Supervised models need labeled data | Anxiety episodes are rare, hard to annotate, and highly individual |
-| Wrist-based PPG is unreliable under stress | Motion artifacts corrupt signals precisely when they're most needed |
-| Clinical NLP requires 1,000+ labeled examples | Most hospitals can annotate only 10–20 records per condition |
-| Interventions are one-size-fits-all | What works for one person fails for another |
-
+| Anxiety-related change is continuous and multimodal | Clinical appointments capture only part of the person's changing state |
+| Physiological baselines differ across people | A population threshold may not represent an individual's normal physiology |
+| Passive behavioural signals are noisy and cohort-dependent | Apparent performance can disappear under leakage-free external evaluation |
+| Clinical NLP has limited labelled data | Patient-level leakage and text-derived labels can strongly inflate results |
+| Modalities operate on different timescales | A minute-level physiological signal, multi-week behaviour, and a clinical note cannot be treated as identical evidence |
+| Missing or weak modalities are common | A safe system must be able to withhold a decision rather than inventing a score |
 
 ---
 
@@ -81,187 +85,281 @@ The system spans the full clinical pipeline: from a custom-built chest-strap wea
 
 ### 🫀 Component 1 - Wearable Biosensor Forecasting *(Sendanayake H.D.)*
 
-> *Self-supervised anomaly detection and 5-10 minute early warning forecasting using a custom chest-strap wearable.*
+> *Personalized self-supervised physiological anomaly detection and short-horizon escalation forecasting using a custom chest-strap wearable.*
 
-**The core idea:** Train a model only on what "normal" looks like for each person. Then, when their physiology starts deviating from that normal, flag it before a full anxiety escalation occurs. No labeled anxiety episodes needed.
+**The core idea:** Learn each person's baseline physiology rather than requiring large numbers of labelled anxiety episodes. Deviations from the learned physiological baseline produce an anomaly signal that can be used by a short-horizon forecasting stage.
 
 #### 🔧 Hardware
 
 | Sensor | Component | Measures |
 |--------|-----------|----------|
-| ECG / HRV | AD8232 | Cardiac rhythm, R-R intervals |
-| Respiration | BF350-3AA Strain Gauge | Thoracic expansion / breathing rate |
+| ECG / HRV | AD8232 | Cardiac rhythm and R-R intervals |
+| Respiration | BF350-3AA strain gauge | Thoracic expansion / breathing rate |
 | Inertial Motion | BMI160 IMU | 3-axis acceleration |
 | Skin Temperature | DS18B20 | Peripheral temperature |
-| Microcontroller | ESP32-C3 | Data acquisition + MQTT pipeline |
+| Microcontroller | ESP32-C3 | Data acquisition and wearable communication |
 
-> Chest-strap configuration selected over wrist-based PPG for significantly improved ECG signal quality and respiration stability under movement.
+The mobile integration uses the chest strap as the physiological source while the server-side model performs calibration, feature ingestion, anomaly processing, and forecasting.
 
-#### 🤖 Model Architecture
+#### 🤖 Physiological Feature Contract
 
+The current paper-aligned physiological window contains **10 features**:
+
+- mean heart rate
+- mean R-R interval
+- SDNN
+- RMSSD
+- mean breathing rate
+- breathing-rate variability
+- mean temperature
+- temperature variability
+- mean acceleration magnitude
+- acceleration variability
+
+#### 🧠 Model Flow
+
+```text
+60-second physiological feature window
+            │
+            ▼
+      LSTM Autoencoder
+            │
+            ▼
+   Reconstruction Error
+            │
+            ▼
+      Anomaly Signal
+            │
+            ▼
+ Short-horizon forecasting
+            │
+            ▼
+ Physiological risk trajectory / index
 ```
-Input: 60-second multivariate window (11 features, 50% overlap)
-         │
-         ▼
-   ┌─────────────┐
-   │  Encoder    │  ← LSTM layers
-   │  (LSTM)     │
-   └──────┬──────┘
-          │  Bottleneck representation
-   ┌──────▼──────┐
-   │  Decoder    │  ← LSTM layers
-   │  (LSTM)     │
-   └──────┬──────┘
-          │
-          ▼
-   Reconstruction Error  →  Anomaly Score  →  Adaptive Threshold
-                                                      │
-                                                      ▼
-                                            Risk Probability [0, 1]
-```
+
+The component repository evaluates the approach across benchmark datasets including WESAD, AffectiveROAD, PPG-DaLiA, and EmoWear, using subject-level evaluation and personalization experiments.
 
 ---
 
-### 📱 Component 2 - Temporal Behavioral Graph Framework *(Layathma B.M.A.S.)*
+### 📱 Component 2 - Spatio-Temporal Graph Learning *(Layathma B.M.A.S.)*
 
-> *Passive smartphone sensing modeled as temporal graphs, with GATv2 learning anxiety-predictive behavioral patterns.*
+> *Leakage-free spatio-temporal graph learning for anxiety vulnerability mapping from passive smartphone sensing.*
 
-**The core idea:** Your phone already knows when you stop going places, when you stop sleeping properly, when you stop talking to people. Model those behavioral fingerprints as a graph over time- then let a graph neural network learn which patterns predict rising anxiety.
+**The core idea:** Evaluate whether temporal relationships in passive behavioural data provide generalizable anxiety-vulnerability information beyond simpler flat feature models.
 
-#### 📡 Passive Sensing Streams
+> **Final source of truth:** `graph-behavioral-phenotyping-FULL-v8/` replaces the earlier StudentLife, GPS/DBSCAN, hourly-risk, and phenotype-deployment pipeline for the final dissertation/paper.
 
-| Stream | Method | Privacy Handling |
-|--------|--------|-----------------|
-| GPS / Mobility | FusedLocationProvider (15–30 min) | Stored as DBSCAN cluster IDs only |
-| Physical Activity | ActivityRecognitionClient (5 min) | Aggregated activity types |
-| Screen & App Usage | UsageStatsManager | Duration only, no app names |
-| Communication | CallLog | Aggregate counts only |
-| EMA | GAD-7 weekly, mood daily, PSS-4 bi-weekly | Self-reported |
+#### 📚 Dataset and Target
 
-#### 🕸 Graph Construction
+**GLOBEM multi-year dataset**
 
+| Cohort | Year | Role |
+|--------|------|------|
+| INS-W_1 | 2018 | Model / hyperparameter selection only |
+| INS-W_2 | 2019 | Held-out evaluation |
+| INS-W_3 | 2020 | Held-out evaluation |
+| INS-W_4 | 2021 | Held-out evaluation |
+
+The target is the released binary `anx_weekly_subscale`, corresponding to the PHQ-4 anxiety subscale / GAD-2-derived label in GLOBEM.
+
+#### 🕸 Final Graph Construction
+
+For each labelled week:
+
+```text
+Previous 28 days of passive sensing
+            │
+            ▼
+4 daily segments
+Morning / Afternoon / Evening / Night
+            │
+            ▼
+Node = available day × time-segment cell
+            │
+            ├── within-day edges:
+            │   adjacent time segments
+            │
+            └── across-day edges:
+                same time segment on consecutive days
 ```
-Each day → 4 nodes (Morning / Afternoon / Evening / Night)
-Each node → 10-dimensional behavioral feature vector
 
-Edge Types:
-  Type 1: Sequential (Morning → Afternoon → Evening → Night)  weight = 1.0
-  Type 2: Cross-day  (same window, consecutive days)           weight = exp(−|d_i − d_j|)
-  Type 3: Similarity (cosine similarity > 0.85)                weight = cosine score
+The executed final pipeline selected **40 behavioural feature bases**. Each graph node contains:
 
-42 days × 4 windows = 168 nodes per participant graph
+```text
+40 behavioural values
++
+40 explicit missingness indicators
+=
+80 raw node features
 ```
 
-#### 🧠 GATv2 Architecture
+The evaluation compares **GATv2** with Logistic Regression, Random Forest, and Gradient Boosting baselines under participant-grouped evaluation.
 
+#### 📊 Final Leakage-Free Result
+
+| Model | AUROC |
+|------|------:|
+| Logistic Regression | 0.5458 |
+| Random Forest | 0.5617 |
+| Gradient Boosting | **0.5681** |
+| GATv2 | 0.5205 |
+
+For GATv2:
+
+- Held-out AUROC: **0.5205**
+- 95% participant-clustered CI: **0.485–0.560**
+- AUPRC: **0.2270**
+- 50-permutation null mean: **0.4991**
+- Empirical permutation p-value: **0.255**
+
+The final held-out GATv2 result was **not distinguishable from chance**, and the graph representation did not outperform the simpler flat behavioural baselines.
+
+#### 🛡 Deployment Decision
+
+The earlier vulnerability score, hourly high-risk window, and phenotype outputs are retained only as historical exploratory work. They are **not validated clinical outputs of the final v8 study**.
+
+```text
+Component 2 active fusion weight = 0.0
 ```
-GATv2Conv (heads=4)  →  GATv2Conv (heads=2)  →  Global Attention Pooling  →  MLP  →  Vulnerability Score [0,1]
-```
 
-Behavioral phenotypes identified via K-Means (k=3):
-- **Phenotype A** — Social-Spatial Withdrawal
-- **Phenotype B** — Circadian Disruption
-- **Phenotype C** — Hypervigilant Mobility
-
-**Validation:** Dual-dataset strategy — primary app data + StudentLife benchmark (external, no retraining).
+Component 2 may still support research logging, descriptive behavioural observations, data-quality monitoring, and future model development, but its current model output should not be presented as a calibrated clinical anxiety probability.
 
 ---
 
-### 💊 Component 3 - Personalized Intervention Framework *(Seneviratne K.A.U.A.)*
+### 🏥 Component 3 - Clinical NLP / TC-WPN *(Kaushalya I.G.D.)*
 
-> *A continuously learning KNN-CBR engine that recommends personalized anxiety interventions and adapts from physiological feedback.*
+> *Patient-disjoint few-shot clinical NLP for anxiety detection using Temporal-Consistency Weighted Prototypical Networks.*
 
-**The core idea:** When the system detects elevated risk, it doesn't just alert you- it recommends a specific intervention (breathing exercise, grounding technique, CBT prompt) based on what has actually worked for similar people before. And it keeps learning from whether the intervention helped.
+**The core idea:** Build a few-shot clinical NLP system that can learn from small labelled support sets without allowing the same patient to appear in both support and query data and without deriving labels from the note text itself.
 
-#### 🔁 System Flow
+#### 📚 Publication-Clean Benchmark
 
+The current benchmark uses a clean MIMIC-IV pipeline with:
+
+- patient-disjoint support and query episodes
+- structured cohort construction
+- fixed index-time policies
+- explicit leakage certificates
+- frozen episode plans
+- shallow baselines before neural comparison
+- blinded robustness arms
+- MIMIC-III reserved for cross-dataset transfer rather than mixed into training
+
+The benchmark distinguishes:
+
+| Index policy | Research task |
+|-------------|---------------|
+| `at_or_before` | Concurrent anxiety detection |
+| `strictly_before` | Prospective detection |
+| `none` | Retrospective association only |
+
+#### 🧬 TC-WPN Architecture
+
+The full configured model uses:
+
+```text
+Bio_ClinicalBERT
+      │
+      ▼
+256-dimensional projection
+      │
+      ▼
+Prototypical few-shot classifier
+      │
+      ├── Temporal weight (wT)
+      ├── Prototype-consistency weight (wC)
+      ├── Learned temperature (τ)
+      └── Auxiliary cross-entropy head
 ```
-Tri-modal Risk Vector (23 features)
-  ├── Physiological: 8 features  (weight: 40%)
-  ├── Behavioral:    9 features  (weight: 35%)
-  └── Textual:       6 features  (weight: 25%)
-          │
-          ▼
-  Gradient Boosting Classifier
-          │
-          ▼
-  4-Tier Risk Label: LOW / MEDIUM / HIGH / CRITICAL
-          │
-          ▼
-  KNN-CBR Engine (k=5, cosine similarity, BallTree indexing)
-          │
-          ▼
-  Ranked Intervention Plan + XAI Justification
-          │
-          ▼
-  Delivered via Flutter App
-          │
-          ▼
-  Composite Reward: R = 0.35·ΔHR + 0.30·rating + 0.20·completion + 0.15·Δrisk
-          │
-          ▼
-  BallTree Refit (every 10 feedback events)
-```
 
-**Escalation trigger:** Composite risk ≥ 0.85 sustained for ≥ 3 minutes → Firebase push notification to emergency contacts + clinician dashboard alert.
+The `wC` term is **prototype consistency**, not calibrated confidence. It measures how typical a support note is relative to its class prototype.
+
+The repository's paper-aligned result reports a clinical-note AUROC of approximately **0.738** in the deployment-relevant held-out setting used by the fusion design.
 
 ---
 
-### 🏥 Component 4 - Clinical NLP / TC-WPN *(Kaushalya I.G.D.)*
+### 🧠 Component 4 - Multimodal Risk Fusion and RAG Decision Support *(Seneviratne K.A.U.A.)*
 
-> *A few-shot meta-learning model for clinical anxiety detection from sparse longitudinal clinical notes designed for deployment at Hospitals.*
+> *Contextual risk modelling, reliability-weighted multimodal fusion, and evidence-aware retrieval-augmented decision support.*
 
-**The core idea:** A hospital psychiatrist can realistically annotate maybe 15 notes. Standard NLP models need 5,000. TC-WPN bridges that gap by meta-training on a large external corpus and adapting to the local clinical context with just 10-20 labeled examples, while accounting for the fact that a note from last week matters more than one from three years ago.
+The current repository architecture defines Component 4 as:
 
-#### 🧬 TC-WPN Algorithm
-
-**Standard Prototypical Networks + two innovations:**
-
-**1. Temporal Weighting**
-```
-w_temporal(x_i) = w_recency(t_i) × w_regularity(patient_i)
-
-w_recency      = exp(−λ × (t_current − t_i) / 365)    λ = 0.5
-w_regularity   = 1.0  if visits ≥ 3
-               = 0.8 + 0.1 × num_visits  otherwise
-```
-
-**2. Confidence Weighting**
-```
-w_confidence(x_i) = 1 / (1 + β × H(x_i))
-
-H(x_i) = Shannon entropy of class probability distribution
-β = 1.0  (down-weights uncertain notes during prototype formation)
+```text
+DCAR contextual / demographic prior
+            +
+eligible component outputs
+            ↓
+Reliability-weighted fusion
+            ↓
+Low / Medium / High tier
+            ↓
+Retrieval-augmented decision support
 ```
 
-**TC-Weighted Prototype:**
+It is **not** the older GBDT → KNN-CBR intervention engine previously described in the root README.
+
+#### ⚖️ Reliability-Weighted Fusion
+
+The current reference fusion uses a specified, interpretable weighting rule:
+
+```text
+w_m(t) = ω_m × ρ_m(Δt) × c_m
+
+α_m = w_m / Σw
+
+S(t) = Σ α_m × p_m
 ```
-p_c^TC = Σ(w_temporal × w_confidence × f_φ(x_i)) / Σ(w_temporal × w_confidence)
+
+where:
+
+- `ω` represents deployment-relevant informativeness above chance
+- `ρ` applies modality-specific recency decay
+- `c` scales the contribution using reliability / coverage information
+- unavailable modalities are masked rather than interpreted as zero risk
+
+A component that fails its own permutation-null criterion receives zero base weight. Under the current evidence, **Component 2 is therefore excluded from active fusion**.
+
+The fusion output uses **three decision tiers**:
+
+```text
+Low
+Medium
+High
 ```
 
-#### 📚 Data
+The UI may map these states plus unavailable/insufficient evidence to different display colours, but this does not create a fourth clinical tier.
 
-| Source | Description | Volume |
-|--------|-------------|--------|
-| MIMIC-IV (PhysioNet) | Meta-training corpus | ~8,500 anxiety-positive + 15,000 non-anxiety psychiatric notes |
-| NHSL Clinical Notes | Few-shot adaptation | 15–25 de-identified notes (binary annotated by psychiatrist) |
+A demographic/contextual prior is deliberately prevented from producing a tier by itself; the system can return **insufficient evidence** instead of manufacturing a low-risk result.
 
-ICD-10 codes used: F41.0, F41.1, F41.3, F41.9, F40.00, F40.10
+#### 📖 CARE-AnxRAG
 
-**Backbone:** Bio_ClinicalBERT → 768-dim → 256-dim projection (L2-normalized)  
-**Training:** 10,000 meta-episodes, AdamW (lr=1e-5)  
-**Adaptation:** Forward-pass only — no gradient computation needed at NHSL
+The repository also contains **CARE-AnxRAG**: a contradiction-, authority-, reliability-, and evidence-aware RAG system for anxiety information research.
+
+Implemented safeguards include:
+
+- hybrid dense + lexical retrieval
+- Reciprocal Rank Fusion
+- CrossEncoder reranking
+- evidence authority and freshness scoring
+- provenance and source versioning
+- contradiction detection
+- calibrated abstention when evidence is weak or conflicting
+- citation validation
+- crisis / urgent-message routing before ordinary retrieval
+- FastAPI service and evaluation harness
+
+CARE-AnxRAG is a **research and engineering system, not a clinical device**.
 
 ---
 
 ## 👥 Research Team
 
-| Student ID | Name | Component |
-|-----------|------|-----------|
-| IT22107596 | Sendanayake H.D. | 🫀 Wearable Biosensor Forecasting |
-| IT22171542 | Layathma B.M.A.S. | 📱 Temporal Behavioral Graph Framework |
-| IT22093950 | Seneviratne K.A.U.A. | 💊 Personalized Intervention Framework |
-| IT22130648 | Kaushalya I.G.D. | 🏥 Clinical NLP - TC-WPN |
+| Student ID | Name | Current Component |
+|-----------|------|-------------------|
+| IT22107596 | Sendanayake H.D. | 🫀 C1 — Wearable Biosensor Forecasting |
+| IT22171542 | Layathma B.M.A.S. | 📱 C2 — Spatio-Temporal Behavioural Graph Learning |
+| IT22130648 | Kaushalya I.G.D. | 🏥 C3 — Clinical NLP / TC-WPN |
+| IT22093950 | Seneviratne K.A.U.A. | 🧠 C4 — Contextual Modelling, Multimodal Fusion & RAG Decision Support |
 
 ---
 
@@ -275,51 +373,57 @@ ICD-10 codes used: F41.0, F41.1, F41.3, F41.9, F40.00, F40.10
 
 ---
 
-
 ## 🛠 Tech Stack
 
-### Component 1: Wearable & ML
+### Component 1: Wearable & Physiological ML
 ![Python](https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=flat-square&logo=pytorch&logoColor=white)
 ![NeuroKit2](https://img.shields.io/badge/NeuroKit2-Signal%20Processing-blue?style=flat-square)
 ![NumPy](https://img.shields.io/badge/NumPy-013243?style=flat-square&logo=numpy&logoColor=white)
-![Google Colab](https://img.shields.io/badge/Colab-T4%20GPU-F9AB00?style=flat-square&logo=googlecolab&logoColor=black)
-![ESP32-C3](https://img.shields.io/badge/ESP32--C3-Firmware-E7352C?style=flat-square)
+![ESP32-C3](https://img.shields.io/badge/ESP32--C3-Wearable-E7352C?style=flat-square)
 
-### Component 2: Graph ML
-![PyTorch Geometric](https://img.shields.io/badge/PyG-Graph%20Neural%20Net-orange?style=flat-square)
-![Android](https://img.shields.io/badge/Android-Passive%20Sensing-3DDC84?style=flat-square&logo=android&logoColor=white)
-![Firebase](https://img.shields.io/badge/Firebase-FFCA28?style=flat-square&logo=firebase&logoColor=black)
+### Component 2: Behavioural Graph ML
+![PyTorch Geometric](https://img.shields.io/badge/PyG-Graph%20Neural%20Networks-orange?style=flat-square)
+![scikit-learn](https://img.shields.io/badge/scikit--learn-Baselines-F7931E?style=flat-square&logo=scikit-learn&logoColor=white)
+![Pandas](https://img.shields.io/badge/Pandas-Data%20Processing-150458?style=flat-square&logo=pandas&logoColor=white)
+![GLOBEM](https://img.shields.io/badge/GLOBEM-Multi--year%20Benchmark-4C78A8?style=flat-square)
 
-### Component 3: Intervention Engine
-![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
-![Flutter](https://img.shields.io/badge/Flutter-02569B?style=flat-square&logo=flutter&logoColor=white)
-![scikit-learn](https://img.shields.io/badge/scikit--learn-F7931E?style=flat-square&logo=scikit-learn&logoColor=white)
-![Firebase](https://img.shields.io/badge/Firebase-FCM-FFCA28?style=flat-square&logo=firebase&logoColor=black)
-
-### Component 4: Clinical NLP
-![HuggingFace](https://img.shields.io/badge/HuggingFace-ClinicalBERT-FFD21E?style=flat-square&logo=huggingface&logoColor=black)
-![FastAPI](https://img.shields.io/badge/FastAPI-Inference%20API-009688?style=flat-square&logo=fastapi&logoColor=white)
+### Component 3: Clinical NLP
+![PyTorch](https://img.shields.io/badge/PyTorch-Meta--Learning-EE4C2C?style=flat-square&logo=pytorch&logoColor=white)
+![HuggingFace](https://img.shields.io/badge/HuggingFace-Bio__ClinicalBERT-FFD21E?style=flat-square&logo=huggingface&logoColor=black)
 ![MIMIC-IV](https://img.shields.io/badge/MIMIC--IV-PhysioNet-1A73E8?style=flat-square)
 
-### Infrastructure
+### Component 4: Fusion & RAG
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
+![scikit-learn](https://img.shields.io/badge/scikit--learn-Fusion-F7931E?style=flat-square&logo=scikit-learn&logoColor=white)
+![Chroma](https://img.shields.io/badge/Chroma-Vector%20Search-6C5CE7?style=flat-square)
+![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?style=flat-square&logo=sqlite&logoColor=white)
+![Ollama](https://img.shields.io/badge/Ollama-Local%20Generation-black?style=flat-square)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
-![AES-256](https://img.shields.io/badge/Encryption-AES--256-green?style=flat-square)
-![TLS](https://img.shields.io/badge/HTTPS-TLS%201.3-green?style=flat-square)
-![JWT](https://img.shields.io/badge/Auth-JWT-black?style=flat-square)
 
-
-
-**Core commitments across all components:**
-- 🔐 No raw sensor data transmitted beyond component boundaries — only risk scores
-- 📍 GPS stored as DBSCAN cluster IDs only (never raw coordinates)
-- 📞 Communication data as aggregate counts only (never content)
-- 🏷 All clinical notes de-identified before processing
-- 🚫 System explicitly framed as research / clinical decision support — not a diagnostic device
-- ↩️ Right to withdraw at any time, for all participants
+### Mobile & Research Infrastructure
+![Flutter](https://img.shields.io/badge/Flutter-Mobile-02569B?style=flat-square&logo=flutter&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-Research%20Storage-3ECF8E?style=flat-square&logo=supabase&logoColor=white)
+![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-Automation-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 
 ---
 
+## 🔐 Privacy and Research-Safety Commitments
+
+**Core commitments across the integrated system:**
+
+- 🔐 Fusion consumes **component-level outputs and status metadata**, not raw modality streams as interchangeable features.
+- 📍 Mobile location is **coarsened on-device** before research upload; the current Android collector rounds latitude/longitude to three decimal places.
+- 📱 App identities are pseudonymous participant codes rather than participant names.
+- 📞 Communication sensing stores **aggregate call/SMS counts**, not message bodies, phone numbers, contact names, or call content.
+- 🏷 Clinical data used for research must be appropriately de-identified and governed by the applicable dataset / institutional access requirements.
+- 🚫 Weak, unavailable, stale, or unvalidated modalities can be withheld from fusion rather than being treated as zero risk.
+- 🧪 Component 2's final v8 output is explicitly **not** a validated clinical anxiety probability and currently receives zero active fusion weight.
+- 📖 RAG outputs are evidence-gated and may abstain when relevance, quality, diversity, or conflict checks fail.
+- 🩺 The integrated framework is explicitly framed as **research / clinical decision support, not a diagnostic medical device**.
+- ↩️ Participants retain the right to withdraw in accordance with the approved study protocol.
+
+---
 
 ## 📝 Citation
 
@@ -340,5 +444,7 @@ If you use any part of this work, please cite:
 ---
 
 <div align="center">
+
+**R26-DS-012 · SLIIT · 2026**
 
 </div>
