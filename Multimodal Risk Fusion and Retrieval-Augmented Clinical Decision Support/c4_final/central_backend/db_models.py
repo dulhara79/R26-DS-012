@@ -32,7 +32,7 @@ import os
 from typing import Optional
 
 from sqlalchemy import (JSON, DateTime, Float, ForeignKey, Index, Integer,
-                        String, UniqueConstraint, create_engine)
+                        String, UniqueConstraint, create_engine, Text)
 from sqlalchemy.orm import (DeclarativeBase, Mapped, mapped_column, relationship,
                             sessionmaker)
 
@@ -48,6 +48,26 @@ class Base(DeclarativeBase):
 
 
 # ── identity ─────────────────────────────────────────────────────────────────
+# ── TC-WPN support bank ──────────────────────────────────────────────────────
+class SupportBankNote(Base):
+    """One labelled reference note used to build TC-WPN's class prototypes."""
+    __tablename__ = "support_bank_notes"
+    __table_args__ = (
+        UniqueConstraint("bank_version", "note_id", name="uq_support_note"),
+        Index("ix_support_bank_lookup", "bank_version", "label", "active"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bank_version: Mapped[str] = mapped_column(String(32), index=True)
+    note_id: Mapped[str] = mapped_column(String(48))
+    label: Mapped[str] = mapped_column(String(16))
+    note_text: Mapped[str] = mapped_column(Text)
+    days_before_index: Mapped[float] = mapped_column(Float, default=0.0)
+    source_subject_id: Mapped[Optional[str]] = mapped_column(String(64))
+    provenance: Mapped[str] = mapped_column(String(255))
+    active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Subject(Base):
     """One enrolled patient. Carries no identifying information whatsoever."""
     __tablename__ = "subjects"

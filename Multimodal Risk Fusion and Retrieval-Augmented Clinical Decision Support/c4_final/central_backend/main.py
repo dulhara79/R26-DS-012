@@ -20,6 +20,13 @@ from contextlib import asynccontextmanager
 import os
 from typing import Any, Dict, List, Optional
 
+# Must run BEFORE any module-level os.getenv() calls elsewhere in this file
+# or in modules it imports (e.g. modality_clients.py reads C1_URL, C3_TOKEN,
+# etc. at import time). Loading .env here, first, ensures those reads see
+# real values instead of empty-string defaults.
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -33,7 +40,7 @@ import identity
 import modality_clients as mc
 import rag_client
 from db_models import (AuditLog, FusionResult, ModalityReading, PairingCode,
-                       Subject, SubjectAlias, Verdict, get_session, init_db, utcnow)
+                       Subject, SubjectAlias, Verdict, get_session, init_db, utcnow, SupportBankNote, SessionLocal)
 
 API_TOKEN = os.getenv("BACKEND_API_TOKEN", "")
 ALL_MODALITIES = ["c1_physiological", "c2_behavioral", "c3_clinical_nlp", "c4_demographic"]
@@ -41,7 +48,22 @@ ALL_MODALITIES = ["c1_physiological", "c2_behavioral", "c3_clinical_nlp", "c4_de
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    try:
+        _sb_db = SessionLocal()
+        _sb_n = seed_support_bank(_sb_db)
+        if _sb_n: print(f"[startup] seeded support bank ({_sb_n} notes)")
+    except Exception as _sb_exc:
+        print(f"[startup] support bank seed skipped: {_sb_exc}")
+    finally:
+        try: _sb_db.close()
+        except Exception: pass
     yield
+
+
+
+from support_bank import (SupportBankUnavailable, describe_bank,
+                          seed_support_bank, select_support_set)
+SUPPORT_BANK_VERSION = __import__("os").getenv("SUPPORT_BANK_VERSION", "synthetic-v1")
 
 
 app = FastAPI(title="Central Backend — R26-DS-012", version="cb-v1.0", lifespan=lifespan)
@@ -52,6 +74,15 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"],
 # but a bare TestClient(app) never triggers lifespan, and a missing-table error at
 # that point is confusing to debug. create_all is idempotent, so doing both is safe.
 init_db()
+try:
+    _sb_db = SessionLocal()
+    _sb_n = seed_support_bank(_sb_db)
+    if _sb_n: print(f"[startup] seeded support bank ({_sb_n} notes)")
+except Exception as _sb_exc:
+    print(f"[startup] support bank seed skipped: {_sb_exc}")
+finally:
+    try: _sb_db.close()
+    except Exception: pass
 
 
 def _auth(authorization: Optional[str]):
@@ -467,9 +498,25 @@ def ingest_clinical_note(req: ClinicalNote, db: Session = Depends(get_session),
     subject_id = req.subject_id or _resolve(db, "mrn_hash", identity.hash_mrn(req.mrn or ""))
     _require_subject(db, subject_id)
 
+    support_set = req.support_set or None
+    support_set_version = None
+    if not support_set:
+        try:
+            support_set = select_support_set(
+                db, subject_id=subject_id, bank_version=SUPPORT_BANK_VERSION)
+            support_set_version = SUPPORT_BANK_VERSION
+        except SupportBankUnavailable as exc:
+            result = mc.ComponentResult(
+                status="error", note=f"support bank unusable: {exc}"[:120])
+            row = _store(db, subject_id, "c3_clinical_nlp", result)
+            db.commit()
+            return {"subject_id": subject_id, "reading_id": row.id,
+                    "status": "error", "score": None, "note": result.note}
+
     result = mc.call_c3(req.note_text, req.note_type,
                         req.anxiety_support, req.control_support,
-                        support_set=req.support_set,
+                        support_set=support_set,
+                        support_set_version=support_set_version,
                         note_date=req.note_date,
                         visit_count=req.visit_count,
                         subject_external_id=_external_id(db, subject_id, "c3_clinical_nlp"))

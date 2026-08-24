@@ -69,6 +69,24 @@ C2_TOKEN = os.getenv("C2_TOKEN", "")
 C3_TOKEN = os.getenv("C3_TOKEN", "")
 C4_TOKEN = os.getenv("C4_TOKEN", "")
 
+# Dulhara's live deployment (unlike the frozen contract) REJECTS an empty
+# support_set with HTTP 422 MISSING_SUPPORT_SET instead of falling back to
+# status="no_support_set". This generic, fixed default is a stand-in used
+# ONLY when the caller supplies none. It is never built from the patient
+# being scored (SupportNote's own docstring forbids that — leakage), so it
+# is safe to reuse across every request. Flagged to Dulhara/Kaushalya as a
+# live-vs-contract drift; not a permanent substitute for real site examples.
+_C3_DEFAULT_SUPPORT_SET = [
+    {"id": "default-anx-1", "label": "anxiety",
+     "text": "Patient exhibits generalized anxiety with sleep disturbance, "
+             "excessive worry, and restlessness over the past two weeks.",
+     "note_date": "2026-01-15"},
+    {"id": "default-ctrl-1", "label": "control",
+     "text": "Patient presents for routine follow-up. No psychiatric "
+             "complaints reported. Mood and affect stable.",
+     "note_date": "2026-01-15"},
+]
+
 # ── C3 JWT auto-login ────────────────────────────────────────────────────────
 # Dulhara's Space uses POST /auth/login → JWT (expires_in=43200s / 12h).
 # This function logs in once, caches the token, and refreshes automatically
@@ -428,6 +446,7 @@ def call_c3(note_text: str, note_type: str = "progress",
             anxiety_support: Optional[list] = None,
             control_support: Optional[list] = None,
             support_set: Optional[list] = None,
+            support_set_version: Optional[str] = None,
             note_date: Optional[str] = None,
             visit_count: Optional[int] = None,
             subject_external_id: Optional[str] = None,
@@ -482,8 +501,14 @@ def call_c3(note_text: str, note_type: str = "progress",
             request_body["note_date"] = note_date
         if visit_count is not None:
             request_body["visit_count"] = visit_count
+        if support_set_version:
+            request_body["support_set_version"] = support_set_version
         if subject_external_id:
             request_body["subject_id"] = subject_external_id
+        used_default_support = False
+        if not request_body["support_set"]:
+            request_body["support_set"] = _C3_DEFAULT_SUPPORT_SET
+            used_default_support = True
         r = client.post(f"{C3_BASE}/predict", headers=_headers(_get_c3_token()),
                         json=request_body, timeout=TIMEOUT_S)
         if r.status_code != 200:
@@ -492,6 +517,13 @@ def call_c3(note_text: str, note_type: str = "progress",
 
         score = body.get("calibrated_probability")
         score_source = "calibrated_probability"
+        if score is None:
+            # Dulhara's live deployment names this field "probability" and
+            # reports calibration_status="uncalibrated" alongside it — a
+            # real field, but not the calibrated one the contract promises.
+            score = body.get("probability")
+            cal_status = body.get("calibration_status", "unknown")
+            score_source = f"probability (calibration_status={cal_status})"
         if score is None:
             score = body.get("risk_score")
             score_source = "risk_score (calibrated_probability not sent — ask C3 to add it)"
@@ -513,8 +545,10 @@ def call_c3(note_text: str, note_type: str = "progress",
         note = None
         if status != "ok":
             note = f"{status}" + (f" (support_k={support_k})" if support_k is not None else "")
-        if "risk_score" in score_source:
+        if "risk_score" in score_source or "probability" in score_source:
             note = (note + "; " if note else "") + score_source
+        if used_default_support:
+            note = (note + "; " if note else "") + "used generic default support set (no site-specific examples supplied)"
 
         mismatch = verify_subject_echo(subject_external_id, body.get("subject_id"), "C3")
         if mismatch:
