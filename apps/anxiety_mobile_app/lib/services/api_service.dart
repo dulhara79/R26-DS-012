@@ -6,6 +6,13 @@ class ApiService {
   static const String baseUrl =
       'https://dewdu-physiological-anxiety-escalation.hf.space';
 
+  // The shared R26-DS-012 central backend used by both patient and clinician
+  // apps. BACKEND_BASE can override this default when the deployment changes.
+  static const String centralBackendBaseUrl = String.fromEnvironment(
+    'BACKEND_BASE',
+    defaultValue: 'https://finalize-humbly-monastery.ngrok-free.dev',
+  );
+
   // INGEST ENDPOINT: Sends averaged features directly to the server
   static Future<bool> sendFeatureData({
     required String userId,
@@ -61,6 +68,64 @@ class ApiService {
     }
   }
 
+  /// Links this app's pseudonymous participant ID to the subject created by
+  /// the clinician. The central backend intentionally exposes this pairing route
+  /// without the clinician bearer token because the short-lived code is the
+  /// credential being redeemed by the patient.
+  static Future<Map<String, dynamic>> pairWithCentralBackend({
+    required String participantId,
+    required String pairingCode,
+  }) async {
+    final backendBase = centralBackendBaseUrl.trim().replaceFirst(
+      RegExp(r'/$'),
+      '',
+    );
+    if (backendBase.isEmpty) {
+      return {
+        'success': false,
+        'message': 'The central backend is not configured in this app build.',
+      };
+    }
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$backendBase/v1/subjects/pair'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'pairing_code': pairingCode.trim().toUpperCase(),
+              'app_user_id': participantId,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      Map<String, dynamic> decoded = <String, dynamic>{};
+      if (response.body.isNotEmpty) {
+        final body = jsonDecode(response.body);
+        if (body is Map) {
+          decoded = Map<String, dynamic>.from(body);
+        }
+      }
+
+      final subjectId = decoded['subject_id']?.toString() ?? '';
+      if (response.statusCode == 200 && subjectId.isNotEmpty) {
+        return {'success': true, 'subject_id': subjectId};
+      }
+
+      return {
+        'success': false,
+        'message':
+            decoded['detail']?.toString() ??
+            'The central backend rejected the pairing request.',
+      };
+    } catch (_) {
+      return {
+        'success': false,
+        'message': 'Could not connect to the central backend.',
+      };
+    }
+  }
+
   // CALIBRATION ENDPOINT: Caches per-user baseline stats for live Z-score scaling
   static Future<bool> setNormalizationParams({
     required String userId,
@@ -109,7 +174,10 @@ class ApiService {
         return jsonDecode(response.body);
       } else {
         print('Prediction pipeline failed: ${response.body}');
-        return {'status': 'error', 'message': 'Forecast unavailable right now.'};
+        return {
+          'status': 'error',
+          'message': 'Forecast unavailable right now.',
+        };
       }
     } catch (e) {
       print('Network exception during prediction: $e');
