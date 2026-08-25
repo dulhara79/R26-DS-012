@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'self_report_history_service.dart';
 import 'supabase_research_service.dart';
 
 class BackgroundServiceHelper {
@@ -45,14 +46,25 @@ class BackgroundServiceHelper {
       return;
     }
 
+    final capturedAt = eventTime ?? DateTime.now();
     final dataMap = <String, dynamic>{
       'eventId': _newEventId(),
       'userId': userId,
       'dataType': type,
       'value': value is String ? value : jsonEncode(value),
-      'timestamp': (eventTime ?? DateTime.now()).toUtc().toIso8601String(),
+      'timestamp': capturedAt.toUtc().toIso8601String(),
       'source': kIsWeb ? 'web' : 'android',
     };
+
+    // Keep a small, privacy-safe local trend history for EMA/GAD-7/PSS-10.
+    // This does not replace the normal research event upload; it only retains
+    // aggregate values needed for participant history and clinician context.
+    await SelfReportHistoryService.captureResearchEvent(
+      userId: userId,
+      type: type,
+      value: value,
+      recordedAt: capturedAt,
+    );
 
     await _saveToOfflineQueue([dataMap]);
 
