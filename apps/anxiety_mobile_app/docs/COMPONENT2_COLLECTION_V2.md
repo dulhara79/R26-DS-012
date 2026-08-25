@@ -1,16 +1,20 @@
 # Component 2 Behavioural Collection v2
 
-This branch uses a privacy-preserving, storage-neutral behavioural event pipeline. Google Sheets remains the current transport target, but sensor producers no longer depend on Sheets-specific method names so the uploader can later be replaced with Supabase/PostgreSQL.
+This implementation uses a privacy-preserving, storage-neutral behavioural
+event pipeline. The current research transport is Supabase/PostgreSQL. Google
+Apps Script/Sheets is legacy compatibility code and is not the Component 2
+production research path.
 
 ## Event schema
 
 Every queued event contains:
 
+- `eventId`
 - `userId`
 - `dataType`
 - `value` (JSON serialized by the queue)
 - `timestamp`
-- transport authentication metadata while Google Apps Script remains active
+- `source`
 
 ## Current behavioural events
 
@@ -33,7 +37,10 @@ EMA, GAD-7, PSS-10, consent and physiological records continue through their exi
 
 The exact GPS fix is not uploaded. Latitude/longitude are rounded on the participant device to three decimal places before queueing. This is approximately neighbourhood-scale resolution rather than the former server-side ~1 km grid. The event is named `Location_Grid_100m` so the legacy Apps Script does not apply the old `Location` sanitizer a second time.
 
-The future Component 2 backend should derive mobility features such as distance travelled, time at primary location, significant-place count and location regularity. Long-term retention of coordinates should be minimized once those features are available.
+The Component 2 backend derives mobility features such as distance travelled,
+time at the primary location, significant-place count and location entropy from
+these privacy-coarsened events. Long-term retention of location events should
+still be governed by the approved research retention policy.
 
 ### App usage
 
@@ -60,25 +67,21 @@ The participant-facing product should not label this as clinical physical activi
 
 Current transport:
 
-`sensor -> offline queue -> Google Apps Script -> participant spreadsheet`
+`sensor -> offline queue -> authenticated Supabase session -> sensor_events -> daily_behavior_features -> behavioral_observations`
 
-Planned transport:
+## Current Supabase mapping
 
-`sensor -> offline queue -> authenticated ingest API/Supabase -> PostgreSQL`
+Raw event table:
 
-## Recommended Supabase mapping
+`sensor_events(event_id, auth_user_id, participant_code, event_time, event_type, value_json, source, received_at)`
 
-Raw/short-retention table:
+Processed table:
 
-`behavioral_sensor_events(id, participant_id, event_time, event_type, value_json, received_at)`
-
-Processed long-retention table:
-
-`daily_behavior_features(participant_id, feature_date, screen_minutes, unlock_count, distance_km, primary_location_minutes, significant_places, app_category_minutes, movement_index, call_counts, sms_counts, routine_regularity, usable_day, quality_json)`
+`daily_behavior_features(...)`
 
 Participant-facing output table:
 
-`behavioral_observations(participant_id, window_start, window_end, baseline_ready, reportable, observations_json, data_quality_json, change_detection_json, created_at)`
+`behavioral_observations(...)`
 
 ## Component 2 inference policy
 

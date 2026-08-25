@@ -169,10 +169,14 @@ class Component2DataService {
   }) {
     return {
       'component': 'behavioral',
+      'modality': 'c2_behavioral',
       'participant_id': participantId,
       'model_status': 'withheld_pending_validation',
+      'status': 'not_validated',
       'fusion_eligible': false,
+      'score': null,
       'behavioral_score': null,
+      'behavioral_weight': 0.0,
       'recommended_weight': 0.0,
       'display_permitted': false,
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -213,7 +217,10 @@ class Component2DataService {
   static Future<void> _seedSyntheticWebDemo(String participantId) async {
     final prefs = await SharedPreferences.getInstance();
     final now = DateTime.now();
-    final start = now.subtract(const Duration(days: 27));
+    // PP2 fallback fixture: 60 days so the Day-57+ change-detection UI can be
+    // demonstrated without pretending synthetic data are research data.
+    // This path remains debug + Chrome only and is impossible in a release APK.
+    final start = now.subtract(const Duration(days: 59));
 
     final observationPayload = <String, dynamic>{
       'participant_id': participantId,
@@ -227,9 +234,9 @@ class Component2DataService {
       'observations': {
         'screen_activity': {
           'label': 'Screen activity',
-          'value': 6.1,
+          'value': 6.4,
           'unit': 'hours/day',
-          'z': 1.2,
+          'z': 2.3,
           'direction': 'above',
           'confidence': 'demo',
         },
@@ -258,10 +265,24 @@ class Component2DataService {
           'confidence': 'demo',
         },
       },
+      'change_detection': {
+        'detected': true,
+        'feature': 'screen activity',
+        'direction': 'above',
+        'ewma_z': 2.18,
+        'message':
+            'A sustained change in screen activity compared with your usual pattern was detected.',
+      },
       'data_quality': {
-        'days_with_data': 13,
+        'days_enrolled': 60,
+        'days_with_data': 12,
+        'baseline_calendar_days_elapsed': 28,
+        'baseline_days_with_features': 28,
         'baseline_days_available': 28,
         'baseline_days_required': 28,
+        'baseline_usable_days': 26,
+        'baseline_min_usable_days': 14,
+        'recent_usable_days': 7,
         'ema_received': 18,
         'ema_expected': 21,
       },
