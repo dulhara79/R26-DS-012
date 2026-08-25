@@ -117,7 +117,10 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
     if (!mounted) return;
     setState(() {
       _participantId = id;
-      _daysEnrolled = daysEnrolled;
+      // Prefer backend study-enrollment age when available. Reinstalling the
+      // app can reset local SharedPreferences while backend history survives.
+      _daysEnrolled =
+          (quality['days_enrolled'] as num?)?.toInt() ?? daysEnrolled;
       _daysWithData = (quality['days_with_data'] as num?)?.toInt() ?? 0;
       _baselineCalendarDaysElapsed =
           (quality['baseline_calendar_days_elapsed'] as num?)?.toInt() ??
@@ -406,7 +409,9 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
   }
 
   bool _shouldShowChangeDetection() {
-    return _daysEnrolled >= 57 && (_changeDetection?.detected ?? false);
+    // The backend already enforces CHANGE_DETECTION_START_DAY = 57.
+    // Re-checking local install age can hide a valid result after reinstall.
+    return _changeDetection?.detected ?? false;
   }
 
   Widget _changeCard() => _card(

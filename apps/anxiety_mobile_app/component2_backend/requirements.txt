@@ -5,4 +5,4 @@ supabase
 pandas
 numpy
 scikit-learn==1.6.1
-joblib
+joblibhttpx

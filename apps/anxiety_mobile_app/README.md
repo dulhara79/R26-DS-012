@@ -1,51 +1,120 @@
-# 🌿 Aura - Mindfulness Tracker
+# 🌿 Aura — Anxiety Research Mobile App
 
-A premium, Flutter-based **Digital Phenotyping & Physiological Monitoring** application designed for longitudinal anxiety research and personal wellness tracking. Aura collects high-frequency physiological data, behavioral signals, and Ecological Momentary Assessment (EMA) ratings while maintaining strict privacy and presenting insights in a beautifully designed, calming interface.
+Flutter Android application used by **R26-DS-012** for longitudinal anxiety
+research. The app integrates wearable physiological monitoring, passive
+smartphone sensing, study questionnaires, offline-first collection, and
+participant-facing behavioural context.
 
-## ✨ Key Features
+> **Research use only.** Participant-facing behavioural observations are not an
+> anxiety diagnosis or a calibrated clinical risk probability.
 
-*   **Real-time Physiological Dashboard**: 
-    *   Simulated live monitoring of Heart Rate, Breathing Rate, Body Temperature, and Motion (g-force).
-    *   **Anxiety Risk Score**: Dynamically calculated on a 0-100 scale using clinical thresholds.
-    *   **Personalized Advice**: Actionable wellness recommendations generated based on the user's real-time anxiety risk score.
-    *   **30-Day Trend Charts**: Visualized historical data to help users understand their physiological cycles and stress patterns.
-*   **Digital Phenotyping**: Non-intrusively monitors behavioral patterns, app usage categories, and screen time to correlate digital habits with mental wellbeing.
-*   **Offline-First Resilience**: Implements a robust local queue. Data is stored safely and synced to the cloud when internet connectivity is restored.
-*   **Background Monitoring**: Utilizes a highly optimized Android Foreground Service to ensure continuous, battery-efficient data collection.
-*   **Privacy-Hardened Engine**:
-    *   **GPS Fuzzing**: Location data is obfuscated to protect user privacy.
-    *   **App Categorization**: Specific app names are masked into broad categories (e.g., "Social Media").
-*   **Clinical Assessments**: Integrated weekly GAD-7, monthly PSS-10 assessments, and daily EMA check-ins with reliable local push notifications.
+## Current architecture
 
-## 🛠 Architecture & Tech Stack
+```text
+ESP32-C3 chest strap
+        ↓
+Flutter physiological dashboard
+        ↓
+Component 1 physiological service
 
-*   **Framework**: Flutter (Dart)
-*   **State Management & UI**: Responsive, beautifully animated components using Google Fonts (Poppins), `fl_chart` for data visualization, and a premium glassmorphism aesthetic.
-*   **Background Execution**: `flutter_background_service`, `connectivity_plus`, `sensors_plus`, and `battery_plus`.
-*   **Backend Sync**: Synchronizes via `http` to a private, multi-sheet Google Apps Script backend.
-
-## 📦 Getting Started
-
-### 1. Prerequisites
-*   Flutter SDK (Stable)
-*   Android SDK (API 34+)
-*   Google Account (for the backend data sink)
-
-### 2. Setup
-1.  Fetch dependencies: `flutter pub get`
-2.  Deploy the Google Apps Script found in `google_apps_script/doPost.gs`.
-3.  Set the `AUTH_TOKEN` in your script using the provided setup instructions.
-
-### 3. Build & Deploy
-For secure deployment, build using the following command (injecting your secrets securely at build time):
-
-```bash
-flutter build apk --obfuscate --split-debug-info=./debug-info \
-  --dart-define=SCRIPT_URL="YOUR_GOOGLE_SCRIPT_URL" \
-  --dart-define=AUTH_TOKEN="YOUR_SECRET_TOKEN"
+Android passive sensing
+        ↓
+local offline queue
+        ↓
+Supabase sensor_events
+        ↓
+Component 2 daily processor
+        ↓
+daily_behavior_features
+        ↓
+behavioral_observations
+        ↓
+Component 2 API
+        ↓
+Behavioural Context UI
 ```
 
-## 🔒 Privacy & Security
-All API keys and authentication tokens are injected dynamically at build-time using `--dart-define`. The application is built with an absolute priority on user anonymity and data encryption.
+## Component 2 collection
 
-Developed for clinical research and personal mindfulness tracking. All data collection follows ethical guidelines for user privacy and anonymity.
+| Event | Collection pattern |
+|---|---|
+| `Screen_Event` | Event-driven screen on / unlock / off transitions |
+| `Location_Grid_100m` | Approximately every 15 minutes; coordinates rounded to 3 decimals on-device |
+| `App_Usage_Category_15m` | Approximately every 15 minutes; category totals only |
+| `Movement_Window_5m` | Five-minute accelerometer summary |
+| `Call_Stats_Daily` | Previous-day aggregate counts |
+| `SMS_Activity_Daily` | Previous-day aggregate counts |
+| `Battery_Status` | Hourly |
+| `Service_Heartbeat` | Hourly |
+
+Screen events are event-driven. They may reach Supabase later in a batch, but
+their original `event_time` is preserved and is what the Component 2 processor
+uses.
+
+## Privacy
+
+- Pseudonymous participant codes are used instead of names.
+- Location is coarsened on-device before queueing.
+- App package names are converted to broad categories on-device.
+- Call/SMS content, phone numbers and contact names are not uploaded by the
+  Component 2 collector.
+- Mobile Supabase access uses a publishable key and anonymous authenticated
+  participant session. **Never place a Supabase service-role/secret key in the
+  APK.**
+- `ChestStrap_Vitals` is blocked from the Component 2/general
+  `sensor_events` stream because it belongs to the physiological component.
+
+## Component 2 inference policy
+
+The final v8 behavioural GATv2 study did not demonstrate a validated clinical
+risk signal. Therefore the mobile handoff is explicit:
+
+```json
+{
+  "modality": "c2_behavioral",
+  "score": null,
+  "status": "not_validated",
+  "fusion_eligible": false,
+  "behavioral_score": null,
+  "behavioral_weight": 0.0,
+  "recommended_weight": 0.0
+}
+```
+
+Descriptive personal-baseline observations and data-quality information may be
+shown to participants. The experimental behavioural model probability is not
+presented as a clinical anxiety probability.
+
+## Build
+
+```powershell
+flutter pub get
+
+flutter build apk --release `
+  --obfuscate `
+  --split-debug-info=./debug-info `
+  --dart-define=SUPABASE_URL="YOUR_SUPABASE_URL" `
+  --dart-define=SUPABASE_PUBLISHABLE_KEY="YOUR_PUBLISHABLE_KEY" `
+  --dart-define=COMPONENT2_API_URL="https://YOUR_COMPONENT2_BACKEND/api"
+```
+
+## Component 2 daily processing
+
+The scheduled backend workflow processes completed behavioural days and writes
+the derived tables used by the app. For a manual backfill/test, run the
+**Component 2 Daily Processing** GitHub Action against `main`.
+
+## PP2 demo fallback
+
+The Component 2 web preview contains an explicitly labelled **synthetic,
+development-only** 60-day fixture so the Day-57+ EWMA change-detection UI can
+be demonstrated without contaminating research results. It is unavailable in a
+release APK.
+
+```bash
+flutter config --enable-web
+flutter run -d chrome -t lib/pages/c2_preview_main.dart
+```
+
+Synthetic/demo values must never be presented as participant data or model
+validation evidence.

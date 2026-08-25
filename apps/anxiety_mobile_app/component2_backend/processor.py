@@ -717,6 +717,22 @@ class Component2Processor:
         recent_14 = rows[-14:]
         usable_last_14 = sum(1 for row in recent_14 if row.get("usable_day") is True)
         baseline_days_available = min(BASELINE_DAYS, days_enrolled)
+        baseline_period_rows = [
+            row
+            for row in rows
+            if enrolled_date
+            <= date.fromisoformat(str(row["feature_date"]))
+            <= baseline_end
+        ]
+        baseline_days_with_features = sum(
+            1
+            for row in baseline_period_rows
+            if (
+                _as_float(row.get("location_coverage")) > 0
+                or _as_float(row.get("screen_coverage")) > 0
+                or _as_float(row.get("movement_coverage")) > 0
+            )
+        )
 
         if recent:
             window_start = str(recent[0]["feature_date"])
@@ -737,7 +753,13 @@ class Component2Processor:
             "reportable": reportable,
             "observations": observations,
             "data_quality": {
+                "days_enrolled": days_enrolled,
                 "days_with_data": usable_last_14,
+                "baseline_calendar_days_elapsed": min(
+                    BASELINE_DAYS,
+                    days_enrolled,
+                ),
+                "baseline_days_with_features": baseline_days_with_features,
                 "baseline_days_available": baseline_days_available,
                 "baseline_days_required": BASELINE_DAYS,
                 "baseline_usable_days": len(baseline),

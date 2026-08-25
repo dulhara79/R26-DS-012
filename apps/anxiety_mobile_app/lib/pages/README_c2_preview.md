@@ -8,7 +8,8 @@ The current deployment contract is:
 - participant-facing app: behavioural descriptives, personal-baseline
   deviations and data-quality information only;
 - GATv2 probability: research-only and never displayed in the participant UI;
-- multimodal fusion: `behavioral_score: null`, `recommended_weight: 0.0`,
+- multimodal fusion: `score: null`, `behavioral_score: null`,
+  `behavioral_weight: 0.0`, `recommended_weight: 0.0`,
   `fusion_eligible: false` until incremental fusion value is validated.
 
 A numeric score of `0` is deliberately avoided because it would mean "very low
@@ -106,21 +107,30 @@ Every successful Component 2 sync also stores an explicit fusion contract in
 ```json
 {
   "component": "behavioral",
+  "modality": "c2_behavioral",
   "participant_id": "613",
   "model_status": "withheld_pending_validation",
+  "status": "not_validated",
   "fusion_eligible": false,
+  "score": null,
   "behavioral_score": null,
+  "behavioral_weight": 0.0,
   "recommended_weight": 0.0,
   "display_permitted": false
 }
 ```
 
-This preserves the interface needed by Component 3 without allowing the current
-GATv2 probability to influence the production fusion result.
+This preserves explicit evidence for the Component 4 fusion/orchestration layer
+without allowing the current GATv2 probability to influence the production
+fusion result. The central backend independently enforces the same exclusion.
 
 ## Chrome preview
 
-The original preview assets can still be used for UI development where present:
+The preview fixture is development-only and intentionally provides a 60-day
+synthetic history with a labelled Day-57+ change-detection example. It is a
+fallback for demonstrating the UI when a live participant has not accumulated
+enough study history. It is not evidence of model accuracy and cannot activate
+inside a release APK.
 
 ```bash
 flutter config --enable-web
@@ -130,11 +140,12 @@ flutter run -d chrome -t lib/pages/c2_preview_main.dart
 Preview/synthetic fixtures must remain development-only and must not be used as
 research results or participant data.
 
-## Remaining backend work
+## Current backend status
 
-The Flutter side is now wired for production transport, but the research
-pipeline/backend still has to expose the `/behavioral/{participant_id}` endpoint
-and generate the descriptive fields above from real participant data.
+The Flutter side and Component 2 backend are wired for production transport.
+The backend exposes the behavioural endpoint used by `Component2DataService`,
+derives `daily_behavior_features`, writes `behavioral_observations`, and returns
+descriptive observations, coverage, and change-detection data.
 
 The app should only surface EWMA/change-detection messages when the backend has
 actually computed and validated that signal. A baseline z-score by itself must
