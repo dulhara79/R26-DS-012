@@ -5,6 +5,7 @@ import '../profile_page.dart';
 import 'home_page.dart';
 import 'dashboard_page.dart';
 import 'component2_bootstrap_page.dart';
+import 'longitudinal_context_page.dart';
 
 class MainNavigationPage extends StatefulWidget {
   final String? userId;
@@ -22,10 +23,12 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   @override
   void initState() {
     super.initState();
+    final userId = widget.userId ?? '';
     _pages = [
       HomePage(userId: widget.userId),
       DashboardPage(userId: widget.userId),
       Component2BootstrapPage(userId: widget.userId),
+      LongitudinalContextPage(userId: userId),
       ProfilePage(isTab: true),
     ];
   }
@@ -47,7 +50,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -71,6 +74,12 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
                 ),
                 _buildNavItem(
                   3,
+                  Icons.fact_check_rounded,
+                  Icons.fact_check_outlined,
+                  'Check-ins',
+                ),
+                _buildNavItem(
+                  4,
                   Icons.person_rounded,
                   Icons.person_outline_rounded,
                   'Profile',
@@ -91,11 +100,11 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   ) {
     final bool isActive = _currentIndex == index;
 
-    // Define gradient colors for each tab
     final List<Color> gradients = [
       const Color(0xFF667eea), // Home
       const Color(0xFF764ba2), // Physio
       const Color(0xFF5E60CE), // Phenotype
+      const Color(0xFF2D9C79), // Check-ins
       const Color(0xFF5E60CE), // Profile
     ];
 
@@ -106,7 +115,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOutCubic,
         padding: EdgeInsets.symmetric(
-          horizontal: isActive ? 16 : 12,
+          horizontal: isActive ? 11 : 9,
           vertical: 8,
         ),
         decoration: BoxDecoration(
@@ -124,15 +133,15 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
                 isActive ? activeIcon : inactiveIcon,
                 key: ValueKey(isActive),
                 color: isActive ? gradients[index] : Colors.grey.shade400,
-                size: 24,
+                size: 23,
               ),
             ),
             if (isActive) ...[
-              const SizedBox(width: 6),
+              const SizedBox(width: 5),
               Text(
                 label,
                 style: GoogleFonts.poppins(
-                  fontSize: 12,
+                  fontSize: 10.5,
                   fontWeight: FontWeight.w600,
                   color: gradients[index],
                 ),
