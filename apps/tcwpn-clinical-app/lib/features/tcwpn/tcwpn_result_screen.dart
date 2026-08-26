@@ -23,6 +23,7 @@ import '../../core/design/theme.dart';
 import '../../core/design/tokens.dart';
 import '../../domain/models.dart';
 import '../../state/controllers.dart';
+import 'note_analysis_screen.dart';
 
 class TcwpnResultScreen extends StatefulWidget {
   final ClinicalNote note;
@@ -56,6 +57,24 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
       appBar: AppBar(
         title: const Text('Note analysis'),
         actions: [
+          // Closes the lifecycle: an analysed note can be corrected and sent
+          // again. Without this, "re-analyse" had no entry point anywhere in the
+          // app. Replaces this screen rather than stacking, so backing out of
+          // the editor returns to the chart, not to an assessment that describes
+          // text the clinician has just changed.
+          IconButton(
+            tooltip: 'Edit note',
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: () => Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ChangeNotifierProvider.value(
+                  value: context.read<ChartController>(),
+                  child: NoteAnalysisScreen(existing: _note),
+                ),
+              ),
+            ),
+          ),
           IconButton(
             tooltip: 'Export report',
             icon: const Icon(Icons.ios_share_rounded),

@@ -1,7 +1,23 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
     <!-- The INTERNET permission is required for development. Specifically,
          the Flutter tool needs it to communicate with the running application
          to allow setting breakpoints, to provide hot reload, etc.
     -->
-    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- DEBUG ONLY. Android 9+ blocks cleartext HTTP outright, which makes a
+         local backend at http://10.0.2.2:8000 fail in a way that is
+         indistinguishable from the server being down.
+
+         This overlay applies to debug builds only, so the release APK keeps
+         cleartext blocked. `tools:replace` is needed because the main manifest
+         does not declare networkSecurityConfig — without it the merger errors
+         on a conflicting attribute.
+
+         The referenced XML permits cleartext ONLY for the emulator host and
+         localhost, not globally. `android:usesCleartextTraffic="true"` would
+         also work but opens every host, including a mistyped production URL. -->
+    <application android:networkSecurityConfig="@xml/network_security_config" tools:replace="android:networkSecurityConfig" />
 </manifest>

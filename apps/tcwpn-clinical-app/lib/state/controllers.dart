@@ -317,6 +317,7 @@ class ChartController extends ChangeNotifier {
     final resolved = await _backend.resolveMrn(mrn);
     if (resolved != null) {
       _subjectId = resolved;
+      await _linkBehaviouralId(resolved);
       await RecordStore.saveSubjectId(mrn, resolved);
       notifyListeners();
       return resolved;
@@ -324,10 +325,45 @@ class ChartController extends ChangeNotifier {
 
     final enrolment = await _backend.enrol(mrn: mrn, enrolledBy: clinicianId);
     _subjectId = enrolment.subjectId;
+    await _linkBehaviouralId(enrolment.subjectId);
     _pendingPairing = enrolment;
     await RecordStore.saveSubjectId(mrn, enrolment.subjectId);
     notifyListeners();
     return enrolment.subjectId;
+  }
+
+  /// The identifier the patient app (Aura) shows as a QR is a C2 PARTICIPANT ID,
+  /// in the form `P_` followed by 16 hex digits — the same shape as
+  /// `C2_TEST_SUBJECT=P_65DC4002E7863773` in the backend's env.example.
+  ///
+  /// This app uses that value as its patient key, which is fine on its own: the
+  /// backend treats whatever it receives as an opaque MRN, hashes it under the
+  /// pepper, and mints its own `subject_id`. But the backend then knows this
+  /// patient ONLY by that UUID, and `_external_id(db, subject_id,
+  /// 'c2_behavioral')` falls back to it when no alias is registered — so the
+  /// backend ends up asking C2 about an id C2 has never seen, and the
+  /// behavioural reading comes back empty for a patient whose real C2 id we
+  /// were holding the whole time.
+  ///
+  /// Registering the alias is idempotent per modality. A 409 means this
+  /// participant id is already mapped to a DIFFERENT subject, which is a real
+  /// cross-patient error and is deliberately allowed to surface.
+  static final RegExp _participantIdPattern = RegExp(r'^P_[A-F0-9]{16}$');
+
+  Future<void> _linkBehaviouralId(String subjectId) async {
+    final candidate = mrn.trim().toUpperCase();
+    if (!_participantIdPattern.hasMatch(candidate)) return;
+    try {
+      await _backend.registerExternalId(
+        subjectId: subjectId,
+        modality: Modality.c2Behavioral,
+        externalId: candidate,
+      );
+    } on ApiException catch (e) {
+      // Surfaced, not swallowed — see the 409 case above.
+      _error = 'Could not link the Aura Participant ID to this patient on the '
+          'backend: ${e.message}';
+    }
   }
 
   /// Registers the id another component knows this patient by, so the backend
@@ -446,7 +482,8 @@ class ChartController extends ChangeNotifier {
     // A blocked fusion is GREY and has no composite. It is not an escalation,
     // and it must not be silently treated as one in either direction.
     if (!result.hasComposite) return;
-    if (result.band != AlertBand.red && result.band != AlertBand.darkRed) return;
+    if (result.band != AlertBand.red && result.band != AlertBand.darkRed)
+      return;
 
     await roster.raiseAlert(ClinicalAlert(
       id: _uuid.v4(),
@@ -463,18 +500,36 @@ class ChartController extends ChangeNotifier {
 
   // ── TC-WPN analysis ───────────────────────────────────────────────────────
 
-  /// Saves the note first, then analyses. If analysis fails the note survives as
-  /// a draft — a clinician's typing is never lost to a sleeping Space.
-  Future<ClinicalNote> analyseNote({
+  // ── Note lifecycle ────────────────────────────────────────────────────────
+  //
+  //   draft ──edit──► draft ──analyse──► analysed ──edit──► analysed (stale)
+  //     │                       │                                  │
+  //     └──delete               └──failure──► analysisFailed        └──re-analyse
+  //
+  // Every path writes to local storage BEFORE any network call, and no path
+  // removes a note because a network call failed. Persistence is LOCAL ONLY —
+  // the Central Backend has no draft CRUD contract, and none was invented.
+
+  ClinicalNote? noteById(String id) {
+    for (final n in _notes) {
+      if (n.id == id) return n;
+    }
+    return null;
+  }
+
+  List<ClinicalNote> get drafts => _notes.where((n) => n.isDraft).toList();
+
+  Future<void> _persist() async {
+    await RecordStore.saveNotes(mrn, _notes);
+    notifyListeners();
+  }
+
+  /// Creates a new draft and returns it. No network call.
+  Future<ClinicalNote> saveDraft({
     required String text,
     required String noteType,
     required String clinicianId,
-    bool skipAnalysis = false,
   }) async {
-    _error = null;
-    _status = ChartStatus.working;
-    notifyListeners();
-
     final note = ClinicalNote(
       id: _uuid.v4(),
       patientMrn: mrn,
@@ -482,50 +537,124 @@ class ChartController extends ChangeNotifier {
       text: text,
       noteType: noteType,
       clinicianId: clinicianId,
+      status: ClinicalNoteStatus.draft,
     );
     _notes = [note, ..._notes];
-    await RecordStore.saveNotes(mrn, _notes);
-    notifyListeners();
+    await _persist();
+    return note;
+  }
 
-    if (skipAnalysis) {
-      _status = ChartStatus.ready;
-      notifyListeners();
-      return note;
+  /// Edits an EXISTING note in place. The previous build had no way to do this,
+  /// so every edit minted a second note and the original stayed behind.
+  ///
+  /// Editing a note that already carries an assessment does not delete the
+  /// assessment — it stamps `updatedAt`, which makes `resultIsStale` true, and
+  /// the UI says the assessment describes an earlier version of the text.
+  Future<ClinicalNote?> updateNote(
+    String noteId, {
+    String? text,
+    String? noteType,
+  }) async {
+    final existing = noteById(noteId);
+    if (existing == null) return null;
+
+    final edited = existing.copyWith(
+      text: text,
+      noteType: noteType,
+      updatedAt: DateTime.now(),
+      // An edit clears a stale failure banner; the new text has not failed yet.
+      clearAnalysisError: true,
+      status: existing.hasBeenAnalysed
+          ? ClinicalNoteStatus.analysed
+          : ClinicalNoteStatus.draft,
+    );
+    _notes = _notes.map((n) => n.id == noteId ? edited : n).toList();
+    await _persist();
+    return edited;
+  }
+
+  /// Deletes a note. Local only, irreversible, and the caller is responsible for
+  /// having confirmed with the clinician first.
+  ///
+  /// Returns false when the note was already gone, so a double-tap does not
+  /// report a success that did not happen.
+  Future<bool> deleteNote(String noteId) async {
+    final before = _notes.length;
+    _notes = _notes.where((n) => n.id != noteId).toList();
+    if (_notes.length == before) return false;
+    await _persist();
+    return true;
+  }
+
+  /// Analyses a note that is ALREADY STORED. Used for first analysis and for
+  /// re-analysis alike — the note is never re-created, so its id, its clinical
+  /// date and its clinician attribution survive.
+  ///
+  /// On success the previous assessment is REPLACED. The local store keeps one
+  /// assessment per note because the backend's own record is the history: every
+  /// submission is a new `ModalityReading` row and appears on the timeline. A
+  /// second local copy would be a second version of the truth.
+  ///
+  /// On failure the note stays exactly where it was, with its text intact, and
+  /// moves to `analysisFailed` so the UI can offer Retry rather than pretending
+  /// nothing was attempted. The exception is rethrown for the caller to render.
+  Future<ClinicalNote> analyseStoredNote(String noteId) async {
+    final note = noteById(noteId);
+    if (note == null) {
+      throw StateError('No note $noteId on this chart.');
     }
 
+    _error = null;
+    _status = ChartStatus.working;
+    notifyListeners();
+
     try {
-      final subject = await ensureEnrolled(clinicianId: clinicianId);
+      final subject = await ensureEnrolled(clinicianId: note.clinicianId);
       final support = await effectiveSupport();
 
-      // ONE call. Server-side this runs TC-WPN, stores the reading, and
-      // triggers fusion. The app does not call the Space, does not decide
-      // whether the reading is usable, and does not fuse anything.
+      // ONE call. Server-side this runs the clinical model, stores the reading,
+      // and triggers fusion. The app does not call the model service, does not
+      // decide whether the reading is usable, and does not fuse anything.
       final ingest = await _backend.submitNote(
         subjectId: subject,
-        noteText: text,
-        noteType: noteType,
+        noteText: note.text,
+        noteType: note.noteType,
+        // The clinical event date, not the retry date. Re-analysing a note must
+        // not make it look newer than the encounter it documents — the backend
+        // weights notes by recency.
         noteDate: note.recordedAt,
         supportSet: support,
         visitCount: visitCount,
-        author: clinicianId,
+        author: note.clinicianId,
       );
 
       _lastIngest = ingest;
 
       // `result` stays null when the component returned no detail. That renders
-      // as "no analysis available", which is the truth — it must never render
+      // as "no assessment available", which is the truth — it must never render
       // as a model that looked and found nothing.
-      final analysed = note.copyWith(result: ingest.result);
-      _notes = _notes.map((n) => n.id == note.id ? analysed : n).toList();
+      final analysed = note.copyWith(
+        result: ingest.result,
+        clearResult: ingest.result == null,
+        analysedAt: DateTime.now(),
+        status: ingest.result == null
+            ? ClinicalNoteStatus.analysisFailed
+            : ClinicalNoteStatus.analysed,
+        clearAnalysisError: ingest.result != null,
+        lastAnalysisError: ingest.result == null
+            ? 'The note was submitted, but no assessment was returned.'
+            : null,
+      );
+      _notes = _notes.map((n) => n.id == noteId ? analysed : n).toList();
       await RecordStore.saveNotes(mrn, _notes);
 
       // Carry the component's own explanation of a non-ok status through to the
       // UI rather than reporting a generic failure.
       if (!ingest.scored) {
         _error = ingest.needsSupportSet
-            ? 'The note was stored, but no labelled support notes exist for this '
-                'patient, so no prototype could be formed. Add support notes to '
-                'enable few-shot analysis.'
+            ? 'The note was stored, but no labelled examples exist for this '
+                'patient, so no comparison could be made. Add labelled notes to '
+                'enable analysis.'
             : 'The note was stored, but the clinical model did not return a '
                 'usable score (${ingest.status})'
                 '${ingest.scoreProvenance == null ? '' : ': ${ingest.scoreProvenance}'}.';
@@ -539,6 +668,14 @@ class ChartController extends ChangeNotifier {
       await refreshFusion();
       return analysed;
     } on ApiException catch (e) {
+      // The note is NOT touched beyond its status. This is the whole point.
+      final failed = note.copyWith(
+        status: ClinicalNoteStatus.analysisFailed,
+        lastAnalysisError: e.message,
+      );
+      _notes = _notes.map((n) => n.id == noteId ? failed : n).toList();
+      await RecordStore.saveNotes(mrn, _notes);
+
       _error = e.message;
       _status = ChartStatus.ready;
       notifyListeners();
@@ -546,10 +683,31 @@ class ChartController extends ChangeNotifier {
     }
   }
 
+  /// Compose-and-analyse, for the "write a new note and analyse it now" path.
+  ///
+  /// Saves first, always. If analysis fails the draft is already on disk and the
+  /// exception is rethrown for the caller to render — a clinician's typing is
+  /// never lost to an unreachable service.
+  Future<ClinicalNote> analyseNote({
+    required String text,
+    required String noteType,
+    required String clinicianId,
+    bool skipAnalysis = false,
+  }) async {
+    final draft = await saveDraft(
+      text: text,
+      noteType: noteType,
+      clinicianId: clinicianId,
+    );
+    if (skipAnalysis) return draft;
+    return analyseStoredNote(draft.id);
+  }
+
   /// Records the clinician's agreement or disagreement with a prediction. This
   /// is the human-in-the-loop audit trail; it is stored with the note and
   /// exported in the PDF.
-  Future<void> recordVerdict(String noteId, String verdict, String? comment) async {
+  Future<void> recordVerdict(
+      String noteId, String verdict, String? comment) async {
     _notes = _notes
         .map((n) => n.id == noteId
             ? n.copyWith(clinicianVerdict: verdict, clinicianComment: comment)

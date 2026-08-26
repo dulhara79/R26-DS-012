@@ -517,17 +517,22 @@ class _NoteTile extends StatelessWidget {
     final r = note.result;
     return Panel(
       padding: const EdgeInsets.all(Ds.s4),
-      onTap: r == null
-          ? null
-          : () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ChangeNotifierProvider.value(
-                    value: chart,
-                    child: TcwpnResultScreen(note: note),
-                  ),
-                ),
-              ),
+      // Every note is reachable. The previous build made a draft's tile inert
+      // (`onTap: null` whenever there was no result), which is why a saved draft
+      // could not be edited, deleted or analysed — there was no way back into it
+      // at all. A note without an assessment opens the editor; a note with one
+      // opens the assessment, which itself offers Edit.
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChangeNotifierProvider.value(
+            value: chart,
+            child: note.hasBeenAnalysed
+                ? TcwpnResultScreen(note: note)
+                : NoteAnalysisScreen(existing: note),
+          ),
+        ),
+      ),
       child: Row(
         children: [
           SizedBox(

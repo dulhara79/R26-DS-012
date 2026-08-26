@@ -19,18 +19,29 @@ import '../../core/design/theme.dart';
 import '../../core/design/tokens.dart';
 import '../../data/api/api_client.dart';
 import '../../data/local/stores.dart';
+import '../../domain/models.dart';
 import '../../state/controllers.dart';
 import 'tcwpn_result_screen.dart';
 
 class NoteAnalysisScreen extends StatefulWidget {
-  const NoteAnalysisScreen({super.key});
+  /// The note being edited. Null for a new note.
+  ///
+  /// When this is set the screen UPDATES that note. It does not create a second
+  /// one — which is what the previous build did on every edit, leaving the
+  /// original behind as an orphan the clinician could not reach.
+  final ClinicalNote? existing;
+
+  const NoteAnalysisScreen({super.key, this.existing});
+
   @override
   State<NoteAnalysisScreen> createState() => _NoteAnalysisScreenState();
 }
 
 class _NoteAnalysisScreenState extends State<NoteAnalysisScreen> {
-  final _note = TextEditingController();
-  String _type = 'Psychiatry note';
+  late final TextEditingController _note;
+  late String _type;
+  late final String _originalText;
+  late final String _originalType;
   bool _busy = false;
 
   static const _types = [
@@ -41,14 +52,30 @@ class _NoteAnalysisScreenState extends State<NoteAnalysisScreen> {
     'Physician note',
   ];
 
+  bool get _isEditing => widget.existing != null;
+
+  bool get _dirty =>
+      _note.text.trim() != _originalText.trim() || _type != _originalType;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.existing;
+    _originalText = e?.text ?? '';
+    _originalType = e?.noteType ?? 'Psychiatry note';
+    _note = TextEditingController(text: _originalText);
+    _type = _originalType;
+  }
+
   @override
   void dispose() {
     _note.dispose();
     super.dispose();
   }
 
-  int get _words =>
-      _note.text.trim().isEmpty ? 0 : _note.text.trim().split(RegExp(r'\s+')).length;
+  int get _words => _note.text.trim().isEmpty
+      ? 0
+      : _note.text.trim().split(RegExp(r'\s+')).length;
 
   @override
   Widget build(BuildContext context) {
@@ -64,14 +91,14 @@ class _NoteAnalysisScreenState extends State<NoteAnalysisScreen> {
             icon: const Icon(Icons.close_rounded),
             onPressed: () => Navigator.pop(context),
           ),
-          title: const Text('Analyse clinical note'),
+          title:
+              Text(_isEditing ? 'Edit clinical note' : 'Analyse clinical note'),
         ),
         body: ListView(
           padding: const EdgeInsets.fromLTRB(Ds.s4, Ds.s4, Ds.s4, Ds.s10),
           children: [
             _SupportReadiness(k: k),
             const SizedBox(height: Ds.s4),
-
             DropdownButtonFormField<String>(
               initialValue: _type,
               isExpanded: true,
@@ -82,7 +109,6 @@ class _NoteAnalysisScreenState extends State<NoteAnalysisScreen> {
               onChanged: (v) => setState(() => _type = v!),
             ),
             const SizedBox(height: Ds.s3),
-
             TextField(
               controller: _note,
               maxLines: 12,
@@ -109,7 +135,6 @@ class _NoteAnalysisScreenState extends State<NoteAnalysisScreen> {
                       style: TextStyle(fontSize: 11, color: Ds.amber)),
               ],
             ),
-
             if (Env.demoData) ...[
               const SizedBox(height: Ds.s5),
               Text('EXAMPLE NOTES', style: AppTheme.eyebrow),
@@ -134,7 +159,6 @@ class _NoteAnalysisScreenState extends State<NoteAnalysisScreen> {
                     .toList(),
               ),
             ],
-
             const SizedBox(height: Ds.s5),
             const InlineNotice(
               icon: Icons.privacy_tip_outlined,
@@ -144,43 +168,81 @@ class _NoteAnalysisScreenState extends State<NoteAnalysisScreen> {
                   'the device and is processed by the model service.',
             ),
             const SizedBox(height: Ds.s5),
-
             ElevatedButton.icon(
-              onPressed: (_words == 0 || _busy) ? null : () => _run(chart),
+              onPressed: (_words == 0 || _busy) ? null : () => _analyse(chart),
               icon: const Icon(Icons.analytics_rounded, size: 19),
-              label: const Text('Analyse note'),
+              label: Text(widget.existing?.hasBeenAnalysed == true
+                  ? 'Save and re-analyse'
+                  : 'Analyse note'),
             ),
             const SizedBox(height: Ds.s3),
             OutlinedButton.icon(
-              onPressed:
-                  (_words == 0 || _busy) ? null : () => _run(chart, draft: true),
+              onPressed: (_words == 0 || _busy) ? null : () => _save(chart),
               icon: const Icon(Icons.save_outlined, size: 19),
-              label: const Text('Save as draft, analyse later'),
+              label: Text(
+                  _isEditing ? 'Save changes' : 'Save as draft, analyse later'),
             ),
+            if (_isEditing) ...[
+              const SizedBox(height: Ds.s3),
+              TextButton.icon(
+                onPressed: _busy ? null : () => _delete(chart),
+                icon: const Icon(Icons.delete_outline_rounded, size: 19),
+                style: TextButton.styleFrom(foregroundColor: Ds.red),
+                label: const Text('Delete note'),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Future<void> _run(ChartController chart, {bool draft = false}) async {
-    setState(() => _busy = true);
-    final clinician = await SecureStore.clinicianId() ?? 'unknown';
-    try {
-      final note = await chart.analyseNote(
-        text: _note.text.trim(),
+  /// Writes the editor's contents to storage and returns the stored note.
+  /// Creates on first save, updates in place thereafter. No network call.
+  Future<ClinicalNote?> _persist(ChartController chart) async {
+    final text = _note.text.trim();
+    final existing = widget.existing;
+    if (existing == null) {
+      final clinician = await SecureStore.clinicianId() ?? 'unknown';
+      return chart.saveDraft(
+        text: text,
         noteType: _type,
         clinicianId: clinician,
-        skipAnalysis: draft,
       );
+    }
+    if (!_dirty) return existing;
+    return chart.updateNote(existing.id, text: text, noteType: _type);
+  }
+
+  Future<void> _save(ChartController chart) async {
+    setState(() => _busy = true);
+    final saved = await _persist(chart);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (saved == null) return;
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(_isEditing
+          ? 'Changes saved.'
+          : 'Saved as a draft. Analyse it from the note history.'),
+    ));
+  }
+
+  Future<void> _analyse(ChartController chart) async {
+    setState(() => _busy = true);
+
+    // Save FIRST, always. Everything after this point can fail without costing
+    // the clinician a word of what they typed.
+    final saved = await _persist(chart);
+    if (!mounted || saved == null) {
+      if (mounted) setState(() => _busy = false);
+      return;
+    }
+
+    try {
+      final note = await chart.analyseStoredNote(saved.id);
       if (!mounted) return;
-      if (draft) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Saved as a draft. Analyse it from the note history.'),
-        ));
-        return;
-      }
+      setState(() => _busy = false);
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -193,23 +255,112 @@ class _NoteAnalysisScreenState extends State<NoteAnalysisScreen> {
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(e.message),
-        duration: const Duration(seconds: 8),
-        action: SnackBarAction(
-          label: 'Keep draft',
-          textColor: Colors.white,
-          onPressed: () => Navigator.pop(context),
-        ),
-      ));
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      await _showAnalysisUnavailable(chart, saved, e);
     }
   }
 
+  /// Separates the two facts a clinician needs to keep apart: the note is safe,
+  /// and the analysis did not run. A snackbar could not carry both, and the old
+  /// one led with the failure.
+  Future<void> _showAnalysisUnavailable(
+    ChartController chart,
+    ClinicalNote saved,
+    ApiException e,
+  ) async {
+    if (!mounted) return;
+    final action = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Analysis unavailable'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Your note has been saved. It is safe on this device and nothing '
+              'you wrote has been lost.',
+              style: TextStyle(fontSize: 13.5, height: 1.5),
+            ),
+            const SizedBox(height: Ds.s3),
+            Text(
+              e.message,
+              style: const TextStyle(
+                  fontSize: 12.5, color: Ds.inkMuted, height: 1.45),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, 'close'),
+            child: const Text('Close'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, 'edit'),
+            child: const Text('Edit note'),
+          ),
+          if (e.isRetryable)
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, 'retry'),
+              child: const Text('Try again'),
+            ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    switch (action) {
+      case 'retry':
+        await _analyse(chart);
+      case 'close':
+        Navigator.pop(context);
+      default:
+        break; // 'edit' — stay on the editor with the text still in it.
+    }
+  }
+
+  Future<void> _delete(ChartController chart) async {
+    final existing = widget.existing;
+    if (existing == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(existing.hasBeenAnalysed
+            ? 'Delete this note?'
+            : 'Delete this draft?'),
+        content: const Text(
+          'This action cannot be undone.',
+          style: TextStyle(fontSize: 13.5, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: TextButton.styleFrom(foregroundColor: Ds.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    setState(() => _busy = true);
+    final removed = await chart.deleteNote(existing.id);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content:
+          Text(removed ? 'Note deleted.' : 'That note was already removed.'),
+    ));
+  }
+
   static const _examples = {
-    'GAD, active':
-        'Patient presents with persistent and excessive worry about work, health, '
+    'GAD, active': 'Patient presents with persistent and excessive worry about work, health, '
         'and finances over the past eight months. Reports difficulty controlling '
         'the worry, present most days. Associated fatigue, impaired concentration, '
         'irritability, muscle tension, and disturbed sleep. GAD-7 14, PHQ-9 16. '
@@ -217,13 +368,13 @@ class _NoteAnalysisScreenState extends State<NoteAnalysisScreen> {
         'generalised anxiety disorder.',
     'Panic disorder':
         'Recurrent unexpected panic attacks over six months, characterised by '
-        'palpitations, chest tightness, sweating, tremor, and intense fear lasting '
-        'ten to twenty minutes. Persistent anticipatory worry with avoidance of '
-        'public transport. Commenced escitalopram 10mg.',
+            'palpitations, chest tightness, sweating, tremor, and intense fear lasting '
+            'ten to twenty minutes. Persistent anticipatory worry with avoidance of '
+            'public transport. Commenced escitalopram 10mg.',
     'Stable follow-up':
         'Stable on sertraline 100mg. Marked reduction in anxiety symptoms. GAD-7 '
-        'improved from 16 to 8. Sleep and concentration improved. Continuing CBT. '
-        'No adverse effects. Plan: continue current management, review in six weeks.',
+            'improved from 16 to 8. Sleep and concentration improved. Continuing CBT. '
+            'No adverse effects. Plan: continue current management, review in six weeks.',
   };
 }
 
@@ -269,7 +420,9 @@ class _SupportReadiness extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            k >= 10 ? Icons.check_circle_outline_rounded : Icons.info_outline_rounded,
+            k >= 10
+                ? Icons.check_circle_outline_rounded
+                : Icons.info_outline_rounded,
             size: 17,
             color: tone,
           ),
@@ -280,7 +433,9 @@ class _SupportReadiness extends StatelessWidget {
               children: [
                 Text(headline,
                     style: TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w600, color: tone)),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: tone)),
                 const SizedBox(height: 2),
                 Text(detail,
                     style: const TextStyle(
