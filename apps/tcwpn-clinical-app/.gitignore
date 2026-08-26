@@ -79,3 +79,5 @@ app.*.map.json
 *.mobileprovision
 
 lib/core/config/env.dart
+BUILD.md
+.env

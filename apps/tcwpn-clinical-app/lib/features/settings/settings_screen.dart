@@ -95,15 +95,6 @@ class SettingsScreen extends StatelessWidget {
                   role: 'Called by the backend · Component 4 '
                       '(wire key c3_clinical_nlp)',
                 ),
-                const Divider(height: Ds.s5),
-                _ServiceRow(
-                  name: 'Intervention engine',
-                  url: Env.c3Base,
-                  reachable: null,
-                  accent: Ds.c4Demographic,
-                  role: 'Risk tiering and coping plans · Component 3. '
-                      'Not part of the composite.',
-                ),
               ],
             ),
           ),

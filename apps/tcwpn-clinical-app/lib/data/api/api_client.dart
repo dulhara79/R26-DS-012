@@ -30,6 +30,12 @@ enum ApiFailure {
   server,
   malformed,
 
+  /// No base URL was compiled into this build. Distinct from [notFound]: the
+  /// service was never addressed, so nothing was reached and nothing 404'd.
+  /// Reporting this as "endpoint not found" sends the clinician to a Settings
+  /// screen that cannot fix it — the fix is a rebuild with --dart-define.
+  notConfigured,
+
   /// The server's certificate was not signed by a pinned authority.
   /// Almost always an intercepting proxy, occasionally a rotated CA.
   insecureConnection,
@@ -62,11 +68,24 @@ class ApiException implements Exception {
         ApiFailure.unauthorized =>
           'Your session has expired. Sign out and sign in again. If that does '
               'not help, contact the study team.',
+        // A 404 here is an APP-SIDE or DEPLOYMENT fault: the route this build
+        // asks for is not the route the running service serves. A clinician can
+        // do nothing about that, and telling them to "check the service address
+        // in Settings" invites them to edit a value that is compiled in. Say
+        // what is true — it is broken, it is not their doing, and their work is
+        // intact — and give the study team the one word they need.
         ApiFailure.notFound =>
-          'The model endpoint could not be found. Check the service address in Settings.',
+          'The clinical service could not be reached at the address this app was '
+              'built with. Nothing you entered has been lost. Please report this '
+              'to the study team (routing error).',
+        ApiFailure.notConfigured =>
+          'This build has no clinical service configured, so nothing can be '
+              'analysed. Your work is saved on this device. The study team needs '
+              'to reinstall a configured build.',
         ApiFailure.validation => 'The service rejected this request. $detail',
         ApiFailure.server =>
-          'The model service reported an internal error. Nothing was saved on the server.',
+          'The clinical service reported an internal error. Nothing was saved on '
+              'the server; your note is still safe on this device.',
         ApiFailure.malformed =>
           'The service returned a response this app could not read. Report this with the time it happened.',
         // Deliberately specific. "Check your connection" would send a clinician
@@ -104,10 +123,10 @@ class ApiClient {
   ///   Central Backend — a single shared app token (main.py::_auth compares the
   ///                     header against one static BACKEND_API_TOKEN). The
   ///                     clinician's JWT is NOT what it checks.
-  ///   C3 / auth       — the clinician's session JWT.
-  ///   TC-WPN /health  — the build-time HF token, for a private Space.
+  ///   auth service    — the clinician's session JWT.
+  ///   TC-WPN /health  — no credential; /health is unauthenticated.
   ///
-  /// Defaults to the previous behaviour: session JWT when signed in, HF token
+  /// Defaults to the session JWT when signed in, and to no Authorization header
   /// otherwise.
   final String Function() _bearer;
 
@@ -121,20 +140,16 @@ class ApiClient {
       : _http = client ?? SecureHttp.clientFor(baseUrl),
         _bearer = bearer ?? _defaultBearer;
 
-  static String _defaultBearer() =>
-      Session.isActive ? Session.token! : Env.hfToken;
+  /// No privileged service token ships in the APK. Anything inside an APK is
+  /// extractable, and the only call this app makes without a session is the
+  /// TC-WPN /health warm-up, which needs no credential at all. A gateway that
+  /// genuinely needs a token now passes one explicitly through the `bearer`
+  /// constructor argument, which puts every credential at its call site.
+  static String _defaultBearer() => Session.isActive ? Session.token! : '';
 
-  /// Authorization precedence, and the order matters:
-  ///
-  ///   1. The clinician's session JWT, when signed in. This is what the model
-  ///      service checks, and it is what makes every analysis attributable to
-  ///      a named clinician.
-  ///   2. The build-time HuggingFace token, only as a fallback for reaching a
-  ///      PRIVATE Space before sign-in (e.g. the /health warm-up call).
-  ///
-  /// Sending the HF token in place of the session token — which is what this
-  /// class did previously — means /predict arrives with a deploy credential
-  /// instead of a user credential, and the Space rejects it with 401.
+  /// Omits Authorization entirely when there is no credential, rather than
+  /// sending `Bearer ` with an empty value — an empty bearer is a 401 that
+  /// reads like a wrong password instead of like a missing session.
   Map<String, String> get _headers {
     final bearer = _bearer();
     return {
@@ -188,7 +203,7 @@ class ApiClient {
   ) async {
     if (baseUrl.isEmpty) {
       throw ApiException(
-        kind: ApiFailure.notFound,
+        kind: ApiFailure.notConfigured,
         endpoint: endpoint,
         detail: 'No base URL configured for this service.',
       );

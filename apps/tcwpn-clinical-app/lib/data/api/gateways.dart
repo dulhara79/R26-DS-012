@@ -23,8 +23,10 @@
 //   CentralBackendGateway  — enrolment, note ingestion, fusion, timeline,
 //                            evidence, verdict.
 //   TcwpnWarmupGateway     — /health only, to wake a sleeping Space.
-//   C3Gateway              — the Personalised Intervention Framework, called
-//                            directly. NOT a fusion modality; see Modality.
+//
+// C3Gateway was DELETED. It posted to /v3/risk/classify, the retired
+// intervention route, and nothing under lib/features/ ever called it. Keeping a
+// dead client for a dead endpoint is how stale contracts creep back in.
 
 import '../../core/config/env.dart';
 import '../../domain/models.dart';
@@ -69,10 +71,14 @@ class CentralBackendGateway {
     required String mrn,
     String? enrolledBy,
   }) async {
-    final json = await _api.post('/v1/subjects', {
-      'mrn': mrn,
-      if (enrolledBy != null && enrolledBy.isNotEmpty) 'enrolled_by': enrolledBy,
-    }, timeout: Env.quickTimeout);
+    final json = await _api.post(
+        '/v1/subjects',
+        {
+          'mrn': mrn,
+          if (enrolledBy != null && enrolledBy.isNotEmpty)
+            'enrolled_by': enrolledBy,
+        },
+        timeout: Env.quickTimeout);
     return EnrolmentResult.fromJson(json);
   }
 
@@ -110,10 +116,13 @@ class CentralBackendGateway {
     required String modality,
     required String externalId,
   }) =>
-      _api.post('/v1/subjects/$subjectId/external-ids', {
-        'modality': modality,
-        'external_id': externalId,
-      }, timeout: Env.quickTimeout);
+      _api.post(
+          '/v1/subjects/$subjectId/external-ids',
+          {
+            'modality': modality,
+            'external_id': externalId,
+          },
+          timeout: Env.quickTimeout);
 
   // ── Clinical note ─────────────────────────────────────────────────────────
 
@@ -212,12 +221,15 @@ class CentralBackendGateway {
     String? author,
     String? note,
   }) =>
-      _api.post('/v1/verdict', {
-        'fusion_result_id': fusionResultId,
-        'tier_label': tierLabel,
-        if (author != null && author.isNotEmpty) 'author': author,
-        if (note != null && note.isNotEmpty) 'note': note,
-      }, timeout: Env.quickTimeout);
+      _api.post(
+          '/v1/verdict',
+          {
+            'fusion_result_id': fusionResultId,
+            'tier_label': tierLabel,
+            if (author != null && author.isNotEmpty) 'author': author,
+            if (note != null && note.isNotEmpty) 'note': note,
+          },
+          timeout: Env.quickTimeout);
 
   void dispose() => _api.close();
 }
@@ -231,8 +243,7 @@ class CentralBackendGateway {
 /// makes to the Space; inference goes through the Central Backend.
 class TcwpnWarmupGateway {
   final ApiClient _api;
-  TcwpnWarmupGateway([ApiClient? api])
-      : _api = api ?? ApiClient(Env.tcwpnBase);
+  TcwpnWarmupGateway([ApiClient? api]) : _api = api ?? ApiClient(Env.tcwpnBase);
 
   Future<Map<String, dynamic>?> health() async {
     if (!Env.hasTcwpnWarmup) return null;
@@ -241,58 +252,6 @@ class TcwpnWarmupGateway {
     } on ApiException {
       return null;
     }
-  }
-
-  void dispose() => _api.close();
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Component 3 — intervention engine
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// The Personalised Intervention Framework.
-///
-/// NOT a fusion modality. The backend's composite is built from four modalities
-/// and intervention is not one of them, so nothing this class returns may be
-/// rendered as a contribution to the composite. It is shown as its own section.
-class C3Gateway {
-  final ApiClient _api;
-  C3Gateway([ApiClient? api])
-      : _api = api ?? ApiClient(Env.c3Base, bearer: () => Session.token ?? '');
-
-  /// Calibrated XGBoost + APS conformal classification.
-  ///
-  /// `textualRisk` is TC-WPN's score as the backend stored it — a genuinely
-  /// independent modality, not a transform of the GAD-7 score.
-  Future<C3Result> classify({
-    required Patient patient,
-    required List<int> gad7Answers,
-    double? physiologicalRisk,
-    double? behavioralRisk,
-    double? textualRisk,
-    double? lastRewardNorm,
-    int interactionCount = 0,
-    int escalationCount = 0,
-  }) async {
-    final gad7 = gad7Answers.fold<int>(0, (a, b) => a + b);
-    final json = await _api.post('/v3/risk/classify', {
-      'patient_id': patient.mrn,
-      'gad7_score': gad7,
-      'gad7_answers': gad7Answers,
-      'features': {
-        ...patient.c3Demographics(),
-        'physiological_risk': physiologicalRisk,
-        'behavioral_risk': behavioralRisk,
-        'textual_risk': textualRisk,
-        'interaction_count_norm': (interactionCount / 100.0).clamp(0.0, 1.0),
-        'escalation_count_norm': (escalationCount / 10.0).clamp(0.0, 1.0),
-        'last_reward_norm': lastRewardNorm,
-      },
-      'alpha': 0.10,
-      'explain': true,
-      'retrieve_cases': true,
-    });
-    return C3Result.fromJson(json);
   }
 
   void dispose() => _api.close();
