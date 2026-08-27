@@ -966,7 +966,9 @@ class _DashboardPageState extends State<DashboardPage>
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.7),
+              color: Theme.of(
+                context,
+              ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.75),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
@@ -991,13 +993,19 @@ class _DashboardPageState extends State<DashboardPage>
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.amber.shade50,
+        color: Theme.of(context).colorScheme.tertiaryContainer,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.amber.shade200),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.5),
+        ),
       ),
       child: Row(
         children: [
-          Icon(Icons.wifi_off_rounded, color: Colors.amber.shade800, size: 18),
+          Icon(
+            Icons.wifi_off_rounded,
+            color: Theme.of(context).colorScheme.tertiary,
+            size: 18,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -1006,7 +1014,7 @@ class _DashboardPageState extends State<DashboardPage>
                   : _statusMessage,
               style: GoogleFonts.poppins(
                 fontSize: 11,
-                color: Colors.amber.shade800,
+                color: Theme.of(context).colorScheme.onTertiaryContainer,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1021,8 +1029,10 @@ class _DashboardPageState extends State<DashboardPage>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(AppTheme.kPrimaryDeep),
+          CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(
+              Theme.of(context).colorScheme.primary,
+            ),
           ),
           const SizedBox(height: 20),
           Text(
@@ -1061,12 +1071,12 @@ class _DashboardPageState extends State<DashboardPage>
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
+                  color: Theme.of(context).colorScheme.tertiaryContainer,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.tune_rounded,
-                  color: Colors.amber,
+                  color: Theme.of(context).colorScheme.tertiary,
                   size: 48,
                 ),
               ),
@@ -1137,12 +1147,14 @@ class _DashboardPageState extends State<DashboardPage>
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: enabled ? const Color(0xFFEDE7F6) : Colors.grey.shade100,
+            color: enabled
+                ? Theme.of(context).colorScheme.primaryContainer
+                : Theme.of(context).colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: enabled
-                  ? const Color(0xFF764BA2).withValues(alpha: 0.35)
-                  : Colors.grey.shade300,
+                  ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.5)
+                  : Theme.of(context).colorScheme.outlineVariant,
             ),
           ),
           child: Column(
@@ -1426,9 +1438,11 @@ class _DashboardPageState extends State<DashboardPage>
                     child: CircularProgressIndicator(
                       value: progress,
                       strokeWidth: 8,
-                      backgroundColor: Colors.grey.shade100,
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        AppTheme.kPrimaryDeep,
+                      backgroundColor: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Theme.of(context).colorScheme.primary,
                       ),
                     ),
                   ),
@@ -1532,7 +1546,9 @@ class _DashboardPageState extends State<DashboardPage>
             style: GoogleFonts.poppins(
               fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: complete ? Colors.green : AppTheme.kPrimaryDeep,
+              color: complete
+                  ? Colors.green
+                  : Theme.of(context).colorScheme.primary,
             ),
           ),
       ],
@@ -1562,12 +1578,12 @@ class _DashboardPageState extends State<DashboardPage>
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppTheme.kPrimaryDeep.withValues(alpha: 0.1),
+                    color: Theme.of(context).colorScheme.primaryContainer,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.insights_rounded,
-                    color: AppTheme.kPrimaryDeep,
+                    color: Theme.of(context).colorScheme.primary,
                     size: 20,
                   ),
                 ),
@@ -1586,7 +1602,7 @@ class _DashboardPageState extends State<DashboardPage>
             Icon(
               Icons.hourglass_empty_rounded,
               size: 40,
-              color: Colors.grey.shade300,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             const SizedBox(height: 12),
             Text(
@@ -1600,7 +1616,7 @@ class _DashboardPageState extends State<DashboardPage>
               'Your 10-minute outlook will appear after one minute of readings',
               style: GoogleFonts.poppins(
                 fontSize: 11,
-                color: Colors.grey.shade400,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 40),
@@ -2055,25 +2071,26 @@ class _DashboardPageState extends State<DashboardPage>
 
   Widget _buildServiceStrip() {
     final bool isWorn = _currentReading?.isWorn ?? false;
+    final colors = Theme.of(context).colorScheme;
 
-    Color bgColor = const Color(0xFFFFEBEE);
-    Color borderColor = Colors.red.shade200;
-    Color dotColor = Colors.red;
-    Color textColor = Colors.red.shade800;
+    Color bgColor = colors.errorContainer;
+    Color borderColor = colors.error.withValues(alpha: 0.5);
+    Color dotColor = colors.error;
+    Color textColor = colors.onErrorContainer;
     String statusText = 'Chest Strap Disconnected';
 
     if (_chestStrapConnected) {
       if (isWorn) {
-        bgColor = const Color(0xFFE8F5E9);
-        borderColor = Colors.green.shade200;
-        dotColor = Colors.green;
-        textColor = Colors.green.shade800;
+        bgColor = colors.tertiaryContainer;
+        borderColor = colors.tertiary.withValues(alpha: 0.5);
+        dotColor = colors.tertiary;
+        textColor = colors.onTertiaryContainer;
         statusText = 'Chest strap connected and active';
       } else {
-        bgColor = const Color(0xFFFFF3E0);
-        borderColor = Colors.orange.shade300;
-        dotColor = Colors.orange;
-        textColor = Colors.orange.shade900;
+        bgColor = colors.secondaryContainer;
+        borderColor = colors.secondary.withValues(alpha: 0.5);
+        dotColor = colors.secondary;
+        textColor = colors.onSecondaryContainer;
         statusText = 'Chest strap connected. Please put it on.';
       }
     }
@@ -2113,15 +2130,19 @@ class _DashboardPageState extends State<DashboardPage>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.orange.shade50,
+          color: Theme.of(context).colorScheme.tertiaryContainer,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.orange.shade200),
+          border: Border.all(
+            color: Theme.of(
+              context,
+            ).colorScheme.tertiary.withValues(alpha: 0.5),
+          ),
         ),
         child: Row(
           children: [
             Icon(
               Icons.battery_alert_rounded,
-              color: Colors.orange.shade700,
+              color: Theme.of(context).colorScheme.tertiary,
               size: 18,
             ),
             const SizedBox(width: 10),
@@ -2130,13 +2151,13 @@ class _DashboardPageState extends State<DashboardPage>
                 'Battery settings may stop background updates. Tap to fix this.',
                 style: GoogleFonts.poppins(
                   fontSize: 11,
-                  color: Colors.orange.shade800,
+                  color: Theme.of(context).colorScheme.onTertiaryContainer,
                 ),
               ),
             ),
             Icon(
               Icons.chevron_right_rounded,
-              color: Colors.orange.shade400,
+              color: Theme.of(context).colorScheme.tertiary,
               size: 18,
             ),
           ],
@@ -2151,15 +2172,17 @@ class _DashboardPageState extends State<DashboardPage>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.red.shade50,
+          color: Theme.of(context).colorScheme.errorContainer,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.red.shade200),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.error.withValues(alpha: 0.5),
+          ),
         ),
         child: Row(
           children: [
             Icon(
               Icons.notifications_off_rounded,
-              color: Colors.red.shade700,
+              color: Theme.of(context).colorScheme.error,
               size: 18,
             ),
             const SizedBox(width: 10),
@@ -2168,7 +2191,7 @@ class _DashboardPageState extends State<DashboardPage>
                 'Anxiety check-in notifications are turned off. Tap to turn them on.',
                 style: GoogleFonts.poppins(
                   fontSize: 11,
-                  color: Colors.red.shade800,
+                  color: Theme.of(context).colorScheme.onErrorContainer,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -2627,7 +2650,11 @@ class _DashboardPageState extends State<DashboardPage>
       ),
       child: Column(
         children: [
-          Icon(Icons.show_chart_rounded, size: 48, color: Colors.grey.shade300),
+          Icon(
+            Icons.show_chart_rounded,
+            size: 48,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(height: 12),
           Text(
             'Historical trends will appear here',
@@ -2642,7 +2669,7 @@ class _DashboardPageState extends State<DashboardPage>
             'Keep using Aura with your chest strap to build your history.',
             style: GoogleFonts.poppins(
               fontSize: 12,
-              color: Colors.grey.shade400,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             textAlign: TextAlign.center,
           ),

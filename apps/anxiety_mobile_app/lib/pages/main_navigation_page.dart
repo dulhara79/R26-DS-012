@@ -100,13 +100,22 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   ) {
     final bool isActive = _currentIndex == index;
 
-    final List<Color> gradients = [
-      const Color(0xFF667eea), // Home
-      const Color(0xFF764ba2), // Physio
-      const Color(0xFF5E60CE), // Phenotype
-      const Color(0xFF2D9C79), // Check-ins
-      const Color(0xFF5E60CE), // Profile
-    ];
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final List<Color> gradients = dark
+        ? [
+            const Color(0xFF9AAEFF), // Home
+            const Color(0xFFC5A1E8), // Physio
+            Theme.of(context).colorScheme.primary, // Phenotype
+            const Color(0xFF66D5B1), // Check-ins
+            Theme.of(context).colorScheme.primary, // Profile
+          ]
+        : [
+            const Color(0xFF667eea), // Home
+            const Color(0xFF764ba2), // Physio
+            const Color(0xFF5E60CE), // Phenotype
+            const Color(0xFF2D9C79), // Check-ins
+            const Color(0xFF5E60CE), // Profile
+          ];
 
     return GestureDetector(
       onTap: () => setState(() => _currentIndex = index),

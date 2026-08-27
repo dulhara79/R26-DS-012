@@ -72,10 +72,12 @@ class _Component2BootstrapPageState extends State<Component2BootstrapPage>
       future: _bootstrapFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            backgroundColor: Color(0xFFF7F5FF),
+          return Scaffold(
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             body: Center(
-              child: CircularProgressIndicator(color: Color(0xFF6D5BD0)),
+              child: CircularProgressIndicator(
+                color: Theme.of(context).colorScheme.primary,
+              ),
             ),
           );
         }

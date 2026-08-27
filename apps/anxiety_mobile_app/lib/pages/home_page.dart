@@ -926,14 +926,18 @@ class _NotificationsSheet extends StatelessWidget {
                             context,
                           ).colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: Colors.orange.shade200),
+                          border: Border.all(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.tertiary.withValues(alpha: 0.5),
+                          ),
                         ),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Icon(
                               Icons.warning_amber_rounded,
-                              color: Colors.orange.shade700,
+                              color: Theme.of(context).colorScheme.tertiary,
                               size: 20,
                             ),
                             const SizedBox(width: 10),
@@ -942,7 +946,9 @@ class _NotificationsSheet extends StatelessWidget {
                                 notifications[i],
                                 style: GoogleFonts.poppins(
                                   fontSize: 12,
-                                  color: Colors.orange.shade900,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface,
                                   height: 1.4,
                                 ),
                               ),

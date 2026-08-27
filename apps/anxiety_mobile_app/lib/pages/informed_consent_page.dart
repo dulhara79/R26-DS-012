@@ -168,6 +168,8 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
     super.dispose();
   }
 
+  ColorScheme get _colors => Theme.of(context).colorScheme;
+
   // ─────────────────────────────────────────────────────────────────────────
   // BUILD
   // ─────────────────────────────────────────────────────────────────────────
@@ -193,9 +195,12 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface,
+                    color: _colors.surface,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white, width: 1.5),
+                    border: Border.all(
+                      color: _colors.outlineVariant,
+                      width: 1.5,
+                    ),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.06),
@@ -520,14 +525,10 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppTheme.kPrimaryDeep.withValues(alpha: 0.1),
+              color: _colors.primaryContainer.withValues(alpha: 0.6),
               borderRadius: BorderRadius.circular(11),
             ),
-            child: const Icon(
-              Icons.gavel_rounded,
-              color: AppTheme.kPrimaryDeep,
-              size: 26,
-            ),
+            child: Icon(Icons.gavel_rounded, color: _colors.primary, size: 26),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -538,22 +539,24 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
               style: GoogleFonts.poppins(
                 fontSize: 19,
                 fontWeight: FontWeight.w700,
-                color: Theme.of(context).colorScheme.onSurface,
+                color: _colors.onSurface,
               ),
             ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.green.withValues(alpha: 0.1),
+              color: _colors.tertiaryContainer.withValues(alpha: 0.65),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.green.shade300),
+              border: Border.all(
+                color: _colors.tertiary.withValues(alpha: 0.55),
+              ),
             ),
             child: Text(
               "R26-DS-012",
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.green.shade700,
+                color: _colors.onTertiaryContainer,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -606,8 +609,10 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
             child: ElevatedButton(
               onPressed: _canProceed ? _acceptConsent : null,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.kPrimaryDeep,
-                disabledBackgroundColor: Colors.grey.shade300,
+                backgroundColor: _colors.primary,
+                foregroundColor: _colors.onPrimary,
+                disabledBackgroundColor: _colors.surfaceContainerHighest,
+                disabledForegroundColor: _colors.onSurfaceVariant,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
@@ -618,7 +623,9 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
                 children: [
                   Icon(
                     _canProceed ? Icons.verified_outlined : Icons.lock_outline,
-                    color: _canProceed ? Colors.white : Colors.grey.shade500,
+                    color: _canProceed
+                        ? _colors.onPrimary
+                        : _colors.onSurfaceVariant,
                     size: 20,
                   ),
                   const SizedBox(width: 10),
@@ -627,7 +634,9 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w600,
                       fontSize: 15,
-                      color: _canProceed ? Colors.white : Colors.grey.shade500,
+                      color: _canProceed
+                          ? _colors.onPrimary
+                          : _colors.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -637,7 +646,7 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
           const SizedBox(height: 5),
           Text(
             "Consent timestamp is recorded automatically upon confirmation.",
-            style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+            style: TextStyle(fontSize: 10, color: _colors.onSurfaceVariant),
             textAlign: TextAlign.center,
           ),
         ],
@@ -661,9 +670,9 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
           _allChecked ? 'All statements selected' : 'Agree to all statements',
         ),
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppTheme.kPrimaryDeep,
+          foregroundColor: _colors.primary,
           side: BorderSide(
-            color: _allChecked ? Colors.green.shade400 : AppTheme.kPrimaryDeep,
+            color: _allChecked ? _colors.tertiary : _colors.primary,
           ),
           padding: const EdgeInsets.symmetric(vertical: 13),
           shape: RoundedRectangleBorder(
@@ -723,16 +732,16 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
           // Ticked + locked → green tint. Ticked + interactive → purple tint.
           color: value
               ? (locked
-                    ? Colors.green.withValues(alpha: 0.06)
-                    : AppTheme.kPrimaryDeep.withValues(alpha: 0.06))
-              : Colors.grey.shade50,
+                    ? _colors.tertiaryContainer.withValues(alpha: 0.45)
+                    : _colors.primaryContainer.withValues(alpha: 0.45))
+              : _colors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(11),
           border: Border.all(
             color: value
                 ? (locked
-                      ? Colors.green.shade400
-                      : AppTheme.kPrimaryDeep.withValues(alpha: 0.45))
-                : Colors.grey.shade300,
+                      ? _colors.tertiary
+                      : _colors.primary.withValues(alpha: 0.7))
+                : _colors.outlineVariant,
             width: value ? 1.5 : 1.0,
           ),
         ),
@@ -745,12 +754,10 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
               child: Checkbox(
                 value: value,
                 onChanged: locked ? null : onChange,
-                activeColor: locked
-                    ? Colors.green.shade600
-                    : AppTheme.kPrimaryDeep,
+                activeColor: locked ? _colors.tertiary : _colors.primary,
                 // Keep the checkmark visible even when disabled.
                 fillColor: locked && value
-                    ? WidgetStateProperty.all(Colors.green.shade600)
+                    ? WidgetStateProperty.all(_colors.tertiary)
                     : null,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(4),
@@ -771,19 +778,15 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
                         fontSize: 12.5,
                         height: 1.45,
                         color: value
-                            ? Theme.of(context).colorScheme.onSurface
-                            : Colors.grey.shade700,
+                            ? _colors.onSurface
+                            : _colors.onSurfaceVariant,
                         fontWeight: value ? FontWeight.w500 : FontWeight.normal,
                       ),
                     ),
                   ),
                   if (locked && value) ...[
                     const SizedBox(width: 6),
-                    const Icon(
-                      Icons.lock_outline,
-                      size: 13,
-                      color: Colors.green,
-                    ),
+                    Icon(Icons.lock_outline, size: 13, color: _colors.tertiary),
                   ],
                 ],
               ),
@@ -803,17 +806,13 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.blue.shade50,
+        color: _colors.secondaryContainer.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.shade200),
+        border: Border.all(color: _colors.secondary.withValues(alpha: 0.55)),
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.info_outline_rounded,
-            color: Colors.blue.shade700,
-            size: 18,
-          ),
+          Icon(Icons.info_outline_rounded, color: _colors.secondary, size: 18),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -821,7 +820,7 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
               "The original agreement is recorded, and you may withdraw through Your Data and Privacy.",
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.blue.shade800,
+                color: _colors.onSecondaryContainer,
                 height: 1.45,
               ),
             ),
@@ -836,13 +835,13 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.green.shade50,
+        color: _colors.tertiaryContainer.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.green.shade200),
+        border: Border.all(color: _colors.tertiary.withValues(alpha: 0.55)),
       ),
       child: Row(
         children: [
-          Icon(Icons.verified_outlined, color: Colors.green.shade700, size: 18),
+          Icon(Icons.verified_outlined, color: _colors.tertiary, size: 18),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -853,7 +852,7 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: Colors.green.shade800,
+                    color: _colors.onTertiaryContainer,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -861,7 +860,7 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
                   "Date & time: $_consentTimestamp",
                   style: TextStyle(
                     fontSize: 11.5,
-                    color: Colors.green.shade700,
+                    color: _colors.onTertiaryContainer,
                   ),
                 ),
               ],
@@ -881,24 +880,20 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
       decoration: BoxDecoration(
-        color: Colors.amber.shade50,
+        color: _colors.tertiaryContainer.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.amber.shade300),
+        border: Border.all(color: _colors.tertiary.withValues(alpha: 0.55)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.touch_app_rounded,
-            color: Colors.amber.shade700,
-            size: 17,
-          ),
+          Icon(Icons.touch_app_rounded, color: _colors.tertiary, size: 17),
           const SizedBox(width: 6),
           Text(
             "Scroll to the bottom to read the full consent form",
             style: TextStyle(
               fontSize: 11,
-              color: Colors.amber.shade800,
+              color: _colors.onTertiaryContainer,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -922,9 +917,9 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
       width: double.infinity,
       padding: const EdgeInsets.all(11),
       decoration: BoxDecoration(
-        color: Colors.orange.shade50,
+        color: _colors.tertiaryContainer.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.orange.shade300),
+        border: Border.all(color: _colors.tertiary.withValues(alpha: 0.55)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -934,14 +929,17 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
             style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w600,
-              color: Colors.orange.shade800,
+              color: _colors.onTertiaryContainer,
             ),
           ),
           const SizedBox(height: 4),
           ...pending.map(
             (p) => Text(
               "• $p",
-              style: TextStyle(fontSize: 11, color: Colors.orange.shade700),
+              style: TextStyle(
+                fontSize: 11,
+                color: _colors.onTertiaryContainer,
+              ),
             ),
           ),
         ],
@@ -957,31 +955,25 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
     return Container(
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
-        color: AppTheme.kPrimaryDeep.withValues(alpha: 0.05),
+        color: _colors.primaryContainer.withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppTheme.kPrimaryDeep.withValues(alpha: 0.18),
-        ),
+        border: Border.all(color: _colors.primary.withValues(alpha: 0.35)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.school_outlined,
-            color: AppTheme.kPrimaryDeep,
-            size: 20,
-          ),
+          Icon(Icons.school_outlined, color: _colors.primary, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   "Sri Lanka Institute of Information Technology (SLIIT)",
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.kPrimaryDeep,
+                    color: _colors.onPrimaryContainer,
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -992,7 +984,7 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
                   "Ethics approval details must be confirmed before participant recruitment.",
                   style: TextStyle(
                     fontSize: 11,
-                    color: Colors.grey.shade700,
+                    color: _colors.onSurfaceVariant,
                     height: 1.5,
                   ),
                 ),
@@ -1101,14 +1093,14 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: _colors.outlineVariant),
         borderRadius: BorderRadius.circular(11),
       ),
       child: Column(
         children: [
           Container(
             decoration: BoxDecoration(
-              color: AppTheme.kPrimaryDeep.withValues(alpha: 0.08),
+              color: _colors.primaryContainer.withValues(alpha: 0.55),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(10),
               ),
@@ -1130,7 +1122,7 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
                 borderRadius: last
                     ? const BorderRadius.vertical(bottom: Radius.circular(10))
                     : null,
-                border: const Border(top: BorderSide(color: Color(0xFFEEEEEE))),
+                border: Border(top: BorderSide(color: _colors.outlineVariant)),
               ),
               child: _tRow(e.value[0], e.value[1], e.value[2]),
             );
@@ -1144,9 +1136,7 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
     final s = TextStyle(
       fontSize: 11,
       fontWeight: header ? FontWeight.w700 : FontWeight.normal,
-      color: header
-          ? AppTheme.kPrimaryDeep
-          : Theme.of(context).colorScheme.onSurface,
+      color: header ? _colors.onPrimaryContainer : _colors.onSurface,
       height: 1.4,
     );
     return Padding(
@@ -1173,10 +1163,10 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
           Container(
             padding: const EdgeInsets.all(5),
             decoration: BoxDecoration(
-              color: AppTheme.kAccentBlue.withValues(alpha: 0.15),
+              color: _colors.primaryContainer.withValues(alpha: 0.55),
               borderRadius: BorderRadius.circular(7),
             ),
-            child: Icon(icon, size: 15, color: AppTheme.kPrimaryDeep),
+            child: Icon(icon, size: 15, color: _colors.primary),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1195,7 +1185,7 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
                   desc,
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.grey.shade700,
+                    color: _colors.onSurfaceVariant,
                     height: 1.4,
                   ),
                 ),
@@ -1216,7 +1206,7 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
       style: GoogleFonts.poppins(
         fontSize: 14,
         fontWeight: FontWeight.w700,
-        color: AppTheme.kPrimaryDeep,
+        color: _colors.primary,
       ),
     ),
   );
@@ -1228,7 +1218,7 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
       style: TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w700,
-        color: Theme.of(context).colorScheme.onSurface,
+        color: _colors.onSurface,
       ),
     ),
   );
@@ -1240,7 +1230,7 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
       style: TextStyle(
         fontSize: 12.5,
         height: 1.55,
-        color: Colors.grey.shade800,
+        color: _colors.onSurfaceVariant,
       ),
     ),
   );
@@ -1255,8 +1245,8 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
           child: Container(
             width: 5,
             height: 5,
-            decoration: const BoxDecoration(
-              color: AppTheme.kAccentBlue,
+            decoration: BoxDecoration(
+              color: _colors.primary,
               shape: BoxShape.circle,
             ),
           ),
@@ -1268,7 +1258,7 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
             style: TextStyle(
               fontSize: 12.5,
               height: 1.5,
-              color: Colors.grey.shade800,
+              color: _colors.onSurfaceVariant,
             ),
           ),
         ),
@@ -1278,6 +1268,6 @@ class _InformedConsentPageState extends State<InformedConsentPage> {
 
   Widget _divider() => Padding(
     padding: const EdgeInsets.symmetric(vertical: 14),
-    child: Divider(height: 1, color: Colors.grey.shade200),
+    child: Divider(height: 1, color: _colors.outlineVariant),
   );
 }

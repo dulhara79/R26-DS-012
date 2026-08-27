@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../theme/app_theme.dart';
 import '../services/background/service_config.dart';
 
 class PrivacyPolicyPage extends StatelessWidget {
@@ -20,15 +19,17 @@ class PrivacyPolicyPage extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppTheme.kPrimaryDeep.withValues(alpha: 0.1),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primaryContainer.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   'v${ServiceConfig.consentVersion}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.kPrimaryDeep,
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
                   ),
                 ),
               ),
@@ -39,7 +40,7 @@ class PrivacyPolicyPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          _header(),
+          _header(context),
           const SizedBox(height: 20),
           _section(
             '1. Who Is Responsible for Your Data',
@@ -169,11 +170,13 @@ class PrivacyPolicyPage extends StatelessWidget {
     );
   }
 
-  Widget _header() {
+  Widget _header(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.kPrimaryDeep.withValues(alpha: 0.06),
+        color: Theme.of(
+          context,
+        ).colorScheme.primaryContainer.withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
@@ -184,7 +187,7 @@ class PrivacyPolicyPage extends StatelessWidget {
             style: GoogleFonts.poppins(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: AppTheme.kPrimaryDeep,
+              color: Theme.of(context).colorScheme.onPrimaryContainer,
             ),
           ),
           const SizedBox(height: 4),
@@ -199,7 +202,7 @@ class PrivacyPolicyPage extends StatelessWidget {
             'Protection Act (PDPA), No. 9 of 2022, as amended. This version is for the research prototype and must be finalized against the approved protocol before participant recruitment.',
             style: TextStyle(
               fontSize: 13,
-              color: Colors.grey.shade700,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               height: 1.5,
             ),
           ),
