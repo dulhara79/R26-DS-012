@@ -36,20 +36,41 @@ dart run flutter_launcher_icons
 ## 3. Debug APK
 
 ```bash
+ Get-Content .env | Where-Object { $_ -match '=' -and $_ -notmatch '^#' } | ForEach-Object {                                                                                               
+     $name, $value = $_.Split('=', 2)                                      
+     $cleanValue = $value.Trim().Trim("'").Trim('"')
+     Set-Item -Path "Env:\$($name.Trim())" -Value $cleanValue
+ } 
+```
+
+```bash
 flutter build apk --debug `
-  --dart-define=BACKEND_BASE=$BACKEND_BASE `
-  --dart-define=BACKEND_TOKEN=$BACKEND_TOKEN `
-  --dart-define=TCWPN_BASE=$TCWPN_BASE `
+  --dart-define=BACKEND_BASE=$env:BACKEND_BASE `
+  --dart-define=BACKEND_TOKEN=$env:BACKEND_TOKEN `
+  --dart-define=TCWPN_BASE=$env:TCWPN_BASE `
+  --dart-define=DEMO_DATA=false `
+  --dart-define=AUTH_SALT=$ENV:AUTH_SALT `
+  --dart-define=AUTH_LOCAL=$env:AUTH_LOCAL`
 ```
 
 ## 4. Release APK
 
 ```bash
+ Get-Content .env | Where-Object { $_ -match '=' -and $_ -notmatch '^#' } | ForEach-Object {                                                                                               
+     $name, $value = $_.Split('=', 2)                                      
+     $cleanValue = $value.Trim().Trim("'").Trim('"')
+     Set-Item -Path "Env:\$($name.Trim())" -Value $cleanValue
+ } 
+```
+
+```bash
 flutter build apk --release `
-  --dart-define=BACKEND_BASE=$BACKEND_BASE `
-  --dart-define=BACKEND_TOKEN=$BACKEND_TOKEN `
-  --dart-define=TCWPN_BASE=$TCWPN_BASE `
-  --dart-define=DEMO_DATA=false
+  --dart-define=BACKEND_BASE=$env:BACKEND_BASE `
+  --dart-define=BACKEND_TOKEN=$env:BACKEND_TOKEN `
+  --dart-define=TCWPN_BASE=$env:TCWPN_BASE `
+  --dart-define=DEMO_DATA=false `
+  --dart-define=AUTH_SALT=r26-ds012-local-salt `
+  --dart-define=AUTH_LOCAL=$env:AUTH_LOCAL`
 ```
 
 Output: `build/app/outputs/flutter-apk/app-release.apk`
