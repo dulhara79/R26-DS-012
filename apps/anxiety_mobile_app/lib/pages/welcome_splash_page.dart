@@ -89,15 +89,27 @@ class _WelcomeSplashPageState extends State<WelcomeSplashPage>
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFFF3EEFF), Color(0xFFE8E0F7), Color(0xFFF0ECFF)],
+            colors: dark
+                ? const [
+                    Color(0xFF111218),
+                    Color(0xFF1A1B24),
+                    Color(0xFF221E30),
+                  ]
+                : const [
+                    Color(0xFFF3EEFF),
+                    Color(0xFFE8E0F7),
+                    Color(0xFFF0ECFF),
+                  ],
           ),
         ),
         child: SafeArea(
@@ -139,7 +151,7 @@ class _WelcomeSplashPageState extends State<WelcomeSplashPage>
                         style: GoogleFonts.poppins(
                           fontSize: 16,
                           fontWeight: FontWeight.w400,
-                          color: const Color(0xFF8B7DA8),
+                          color: colors.onSurfaceVariant,
                           letterSpacing: 1.5,
                         ),
                       ),
@@ -169,9 +181,9 @@ class _WelcomeSplashPageState extends State<WelcomeSplashPage>
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(
-                            0xFF9B7FD4,
-                          ).withValues(alpha: 0.12),
+                          color: colors.primaryContainer.withValues(
+                            alpha: 0.45,
+                          ),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
@@ -179,7 +191,7 @@ class _WelcomeSplashPageState extends State<WelcomeSplashPage>
                           style: GoogleFonts.poppins(
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
-                            color: const Color(0xFF7C5CBF),
+                            color: colors.primary,
                           ),
                         ),
                       ),
@@ -251,7 +263,9 @@ class _PulsingDotsState extends State<_PulsingDots>
               height: 8,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF9B7FD4).withValues(alpha: opacity),
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: opacity),
               ),
             );
           },

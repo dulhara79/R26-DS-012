@@ -11,7 +11,8 @@ class LongitudinalContextPage extends StatefulWidget {
   const LongitudinalContextPage({super.key, required this.userId});
 
   @override
-  State<LongitudinalContextPage> createState() => _LongitudinalContextPageState();
+  State<LongitudinalContextPage> createState() =>
+      _LongitudinalContextPageState();
 }
 
 class _LongitudinalContextPageState extends State<LongitudinalContextPage> {
@@ -27,8 +28,9 @@ class _LongitudinalContextPageState extends State<LongitudinalContextPage> {
   }
 
   Future<void> _load() async {
-    final context =
-        await ClinicianLongitudinalContextService.buildAndCache(widget.userId);
+    final context = await ClinicianLongitudinalContextService.buildAndCache(
+      widget.userId,
+    );
     final events = await ClinicianInsightService.loadCheckInRecords(
       widget.userId,
       days: 30,
@@ -50,19 +52,24 @@ class _LongitudinalContextPageState extends State<LongitudinalContextPage> {
   Map<String, dynamic> _map(dynamic value) =>
       value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
 
+  ColorScheme get _colors => Theme.of(context).colorScheme;
+  Color get _primaryText => _colors.onSurface;
+  Color get _secondaryText => _colors.onSurfaceVariant;
+  Color get _mutedText => _colors.onSurfaceVariant.withValues(alpha: 0.78);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F5FF),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF7F5FF),
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         elevation: 0,
         title: Text(
           'Check-in history',
           style: GoogleFonts.poppins(
             fontSize: 17,
             fontWeight: FontWeight.w600,
-            color: const Color(0xFF2D3142),
+            color: _primaryText,
           ),
         ),
       ),
@@ -96,7 +103,9 @@ class _LongitudinalContextPageState extends State<LongitudinalContextPage> {
                   _sectionTitle('Physiological event check-ins'),
                   const SizedBox(height: 8),
                   if (_eventCheckIns.isEmpty)
-                    _emptyCard('No physiological event check-ins in the last 30 days.')
+                    _emptyCard(
+                      'No physiological event check-ins in the last 30 days.',
+                    )
                   else
                     for (final record in _eventCheckIns.take(8)) ...[
                       _eventRecordCard(record),
@@ -111,29 +120,29 @@ class _LongitudinalContextPageState extends State<LongitudinalContextPage> {
   }
 
   Widget _introCard() => _card(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Your longitudinal context',
-              style: GoogleFonts.poppins(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF2D3142),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'This combines your self-reports, responses to physiological alerts, intervention follow-ups and behavioural changes. These streams are shown separately so one signal is not mistaken for another.',
-              style: GoogleFonts.poppins(
-                fontSize: 11.5,
-                height: 1.5,
-                color: const Color(0xFF676B80),
-              ),
-            ),
-          ],
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Your longitudinal context',
+          style: GoogleFonts.poppins(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: _primaryText,
+          ),
         ),
-      );
+        const SizedBox(height: 6),
+        Text(
+          'This combines your self-reports, responses to physiological alerts, intervention follow-ups and behavioural changes. These streams are shown separately so one signal is not mistaken for another.',
+          style: GoogleFonts.poppins(
+            fontSize: 11.5,
+            height: 1.5,
+            color: _secondaryText,
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _selfReportTrendCard() {
     final selfReport = _map(_context['self_report_trend']);
@@ -154,7 +163,10 @@ class _LongitudinalContextPageState extends State<LongitudinalContextPage> {
           if (ema['mean_stress'] != null)
             _insightRow('Average EMA stress', '${ema['mean_stress']} / 4'),
           if (ema['common_context'] != null)
-            _insightRow('Most common EMA context', ema['common_context'].toString()),
+            _insightRow(
+              'Most common EMA context',
+              ema['common_context'].toString(),
+            ),
           _scoreTrendRow('GAD-7', gad, 21),
           _scoreTrendRow('PSS-10', pss, 40),
           const SizedBox(height: 7),
@@ -166,7 +178,11 @@ class _LongitudinalContextPageState extends State<LongitudinalContextPage> {
     );
   }
 
-  Widget _scoreTrendRow(String label, Map<String, dynamic> trend, int maxScore) {
+  Widget _scoreTrendRow(
+    String label,
+    Map<String, dynamic> trend,
+    int maxScore,
+  ) {
     if (trend['available'] != true || trend['latest_score'] == null) {
       return _insightRow(label, 'No local trend recorded yet');
     }
@@ -175,10 +191,10 @@ class _LongitudinalContextPageState extends State<LongitudinalContextPage> {
     final change = delta == null
         ? 'first locally retained result'
         : delta > 0
-            ? '+${delta.toStringAsFixed(delta % 1 == 0 ? 0 : 1)} from previous'
-            : delta < 0
-                ? '${delta.toStringAsFixed(delta % 1 == 0 ? 0 : 1)} from previous'
-                : 'unchanged from previous';
+        ? '+${delta.toStringAsFixed(delta % 1 == 0 ? 0 : 1)} from previous'
+        : delta < 0
+        ? '${delta.toStringAsFixed(delta % 1 == 0 ? 0 : 1)} from previous'
+        : 'unchanged from previous';
     return _insightRow(label, '$latest / $maxScore · $change');
   }
 
@@ -200,7 +216,10 @@ class _LongitudinalContextPageState extends State<LongitudinalContextPage> {
           if (rate != null)
             _insightRow('Confirmation rate', '${(rate * 100).round()}%'),
           if (thirty['common_context'] != null)
-            _insightRow('Common situation', thirty['common_context'].toString()),
+            _insightRow(
+              'Common situation',
+              thirty['common_context'].toString(),
+            ),
           const SizedBox(height: 7),
           _note(
             'A confirmation means the participant reported anxiety at that check-in. It does not prove every physiological alert was a clinical anxiety episode.',
@@ -228,9 +247,15 @@ class _LongitudinalContextPageState extends State<LongitudinalContextPage> {
           _insightRow('Follow-ups answered', '$followups'),
           _insightRow('Reported feeling better', '$better'),
           if (rate != null)
-            _insightRow('Reported improvement rate', '${(rate * 100).round()}%'),
+            _insightRow(
+              'Reported improvement rate',
+              '${(rate * 100).round()}%',
+            ),
           if (thirty['most_helpful_action'] != null)
-            _insightRow('Frequently helpful action', thirty['most_helpful_action'].toString()),
+            _insightRow(
+              'Frequently helpful action',
+              thirty['most_helpful_action'].toString(),
+            ),
           const SizedBox(height: 7),
           _note(
             'These are observational follow-up reports and should not be interpreted as proof that an intervention caused improvement.',
@@ -252,9 +277,15 @@ class _LongitudinalContextPageState extends State<LongitudinalContextPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _insightRow('Personal baseline ready', c2['baseline_ready'] == true ? 'Yes' : 'No'),
+          _insightRow(
+            'Personal baseline ready',
+            c2['baseline_ready'] == true ? 'Yes' : 'No',
+          ),
           if (quality['recent_usable_days'] != null)
-            _insightRow('Recent usable sensing days', quality['recent_usable_days'].toString()),
+            _insightRow(
+              'Recent usable sensing days',
+              quality['recent_usable_days'].toString(),
+            ),
           for (final raw in patterns.take(4))
             if (raw is Map)
               _insightRow(
@@ -292,25 +323,33 @@ class _LongitudinalContextPageState extends State<LongitudinalContextPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.assignment_outlined, color: Color(0xFF6D5BD0)),
+          Icon(Icons.assignment_outlined, color: _colors.primary),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(record.instrument,
-                    style: GoogleFonts.poppins(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF2D3142))),
+                Text(
+                  record.instrument,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: _primaryText,
+                  ),
+                ),
                 const SizedBox(height: 3),
-                Text(detail,
-                    style: GoogleFonts.poppins(
-                        fontSize: 11, color: const Color(0xFF676B80))),
+                Text(
+                  detail,
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: _secondaryText,
+                  ),
+                ),
                 const SizedBox(height: 3),
-                Text(_formatDateTime(record.recordedAt),
-                    style: GoogleFonts.poppins(
-                        fontSize: 10, color: const Color(0xFF8B8FA3))),
+                Text(
+                  _formatDateTime(record.recordedAt),
+                  style: GoogleFonts.poppins(fontSize: 10, color: _mutedText),
+                ),
               ],
             ),
           ),
@@ -323,25 +362,35 @@ class _LongitudinalContextPageState extends State<LongitudinalContextPage> {
     final response = record.confirmedAnxious == null
         ? 'Not answered'
         : record.confirmedAnxious == true
-            ? 'Reported anxiety'
-            : 'Did not report anxiety';
+        ? 'Reported anxiety'
+        : 'Did not report anxiety';
     return _card(
       child: ExpansionTile(
         tilePadding: EdgeInsets.zero,
         childrenPadding: EdgeInsets.zero,
-        title: Text(response,
-            style: GoogleFonts.poppins(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF2D3142))),
-        subtitle: Text(_formatDateTime(record.detectedAt),
-            style: GoogleFonts.poppins(
-                fontSize: 10, color: const Color(0xFF8B8FA3))),
+        title: Text(
+          response,
+          style: GoogleFonts.poppins(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: _primaryText,
+          ),
+        ),
+        subtitle: Text(
+          _formatDateTime(record.detectedAt),
+          style: GoogleFonts.poppins(fontSize: 10, color: _mutedText),
+        ),
         children: [
           if (record.activity != null) _detailRow('Context', record.activity!),
-          if (record.actionTaken != null) _detailRow('Action', record.actionTaken!),
+          if (record.actionTaken != null)
+            _detailRow('Action', record.actionTaken!),
           if (record.feltBetter != null)
-            _detailRow('Follow-up', record.feltBetter! ? 'Reported feeling better' : 'Did not report feeling better'),
+            _detailRow(
+              'Follow-up',
+              record.feltBetter!
+                  ? 'Reported feeling better'
+                  : 'Did not report feeling better',
+            ),
           _detailRow('Source', _sourceLabel(record.riskSource)),
         ],
       ),
@@ -352,142 +401,160 @@ class _LongitudinalContextPageState extends State<LongitudinalContextPage> {
     required IconData icon,
     required String title,
     required Widget child,
-  }) =>
-      _card(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  }) => _card(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                Icon(icon, color: const Color(0xFF2D9C79)),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: Text(title,
-                      style: GoogleFonts.poppins(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF2D3142))),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            child,
-          ],
-        ),
-      );
-
-  Widget _insightRow(String label, String value) => Padding(
-        padding: const EdgeInsets.only(bottom: 7),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.only(top: 5),
-              child: Icon(Icons.circle, size: 5, color: Color(0xFF2D9C79)),
-            ),
-            const SizedBox(width: 8),
+            Icon(icon, color: const Color(0xFF2D9C79)),
+            const SizedBox(width: 9),
             Expanded(
-              child: RichText(
-                text: TextSpan(
-                  style: GoogleFonts.poppins(
-                      fontSize: 11,
-                      height: 1.4,
-                      color: const Color(0xFF676B80)),
-                  children: [
-                    TextSpan(text: '$label: ', style: const TextStyle(fontWeight: FontWeight.w600)),
-                    TextSpan(text: value),
-                  ],
+              child: Text(
+                title,
+                style: GoogleFonts.poppins(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w700,
+                  color: _primaryText,
                 ),
               ),
             ),
           ],
         ),
-      );
+        const SizedBox(height: 10),
+        child,
+      ],
+    ),
+  );
+
+  Widget _insightRow(String label, String value) => Padding(
+    padding: const EdgeInsets.only(bottom: 7),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(top: 5),
+          child: Icon(Icons.circle, size: 5, color: Color(0xFF2D9C79)),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                height: 1.4,
+                color: _secondaryText,
+              ),
+              children: [
+                TextSpan(
+                  text: '$label: ',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                TextSpan(text: value),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _detailRow(String label, String value) => Padding(
-        padding: const EdgeInsets.only(bottom: 7),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 90,
-              child: Text(label,
-                  style: GoogleFonts.poppins(
-                      fontSize: 10.5, color: const Color(0xFF8B8FA3))),
-            ),
-            Expanded(
-              child: Text(value,
-                  style: GoogleFonts.poppins(
-                      fontSize: 10.8,
-                      fontWeight: FontWeight.w500,
-                      color: const Color(0xFF4F5368))),
-            ),
-          ],
+    padding: const EdgeInsets.only(bottom: 7),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 90,
+          child: Text(
+            label,
+            style: GoogleFonts.poppins(fontSize: 10.5, color: _mutedText),
+          ),
         ),
-      );
+        Expanded(
+          child: Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 10.8,
+              fontWeight: FontWeight.w500,
+              color: _primaryText,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _note(String text) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF0EDFF),
-          borderRadius: BorderRadius.circular(11),
-        ),
-        child: Text(text,
-            style: GoogleFonts.poppins(
-                fontSize: 10.2,
-                height: 1.45,
-                color: const Color(0xFF625B82))),
-      );
+    width: double.infinity,
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      color: _colors.primaryContainer.withValues(alpha: 0.6),
+      borderRadius: BorderRadius.circular(11),
+    ),
+    child: Text(
+      text,
+      style: GoogleFonts.poppins(
+        fontSize: 10.2,
+        height: 1.45,
+        color: _colors.onPrimaryContainer,
+      ),
+    ),
+  );
 
   Widget _emptyCard(String text) => _card(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Text(text,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                  fontSize: 11, color: const Color(0xFF75798C))),
-        ),
-      );
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: GoogleFonts.poppins(fontSize: 11, color: _secondaryText),
+      ),
+    ),
+  );
 
   Widget _disclaimer() => Container(
-        padding: const EdgeInsets.all(13),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFF8E8),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Text(
-          'Clinician longitudinal context should support, not replace, clinical assessment. Self-report, physiological confirmations, intervention follow-ups and behavioural changes have different meanings and are intentionally kept separate.',
-          style: GoogleFonts.poppins(
-              fontSize: 10.5,
-              height: 1.45,
-              color: const Color(0xFF795B26)),
-        ),
-      );
-
-  Widget _sectionTitle(String text) => Text(text,
+    padding: const EdgeInsets.all(13),
+    decoration: BoxDecoration(
+      color: _colors.tertiaryContainer.withValues(alpha: 0.7),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Text(
+      'Clinician longitudinal context should support, not replace, clinical assessment. Self-report, physiological confirmations, intervention follow-ups and behavioural changes have different meanings and are intentionally kept separate.',
       style: GoogleFonts.poppins(
-          fontSize: 15,
-          fontWeight: FontWeight.w700,
-          color: const Color(0xFF2D3142)));
+        fontSize: 10.5,
+        height: 1.45,
+        color: _colors.onTertiaryContainer,
+      ),
+    ),
+  );
+
+  Widget _sectionTitle(String text) => Text(
+    text,
+    style: GoogleFonts.poppins(
+      fontSize: 15,
+      fontWeight: FontWeight.w700,
+      color: _primaryText,
+    ),
+  );
 
   Widget _card({required Widget child}) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFFE9E7F2)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+    width: double.infinity,
+    padding: const EdgeInsets.all(15),
+    decoration: BoxDecoration(
+      color: _colors.surface,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: _colors.outlineVariant),
+      boxShadow: [
+        BoxShadow(
+          color: Theme.of(context).shadowColor.withValues(alpha: 0.08),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
         ),
-        child: child,
-      );
+      ],
+    ),
+    child: child,
+  );
 
   String _directionLabel(String? direction) {
     switch (direction) {

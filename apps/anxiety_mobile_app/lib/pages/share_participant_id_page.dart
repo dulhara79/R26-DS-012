@@ -4,7 +4,6 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../services/api_service.dart';
 import '../services/participant_identity_service.dart';
-import '../theme/app_theme.dart';
 
 class ShareParticipantIdPage extends StatelessWidget {
   final String participantId;
@@ -171,8 +170,10 @@ class ShareParticipantIdPage extends StatelessWidget {
                 icon: const Icon(Icons.copy_rounded),
                 label: const Text('Copy ID'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppTheme.kPrimaryDeep,
-                  side: const BorderSide(color: AppTheme.kPrimaryDeep),
+                  foregroundColor: Theme.of(context).colorScheme.primary,
+                  side: BorderSide(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                 ),
               ),
               const SizedBox(height: 24),

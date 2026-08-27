@@ -14,7 +14,8 @@ class ParticipantBehaviorPage extends StatefulWidget {
   const ParticipantBehaviorPage({super.key, this.userId});
 
   @override
-  State<ParticipantBehaviorPage> createState() => _ParticipantBehaviorPageState();
+  State<ParticipantBehaviorPage> createState() =>
+      _ParticipantBehaviorPageState();
 }
 
 class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
@@ -50,7 +51,9 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
     final prefs = await SharedPreferences.getInstance();
     final id = widget.userId ?? await BackgroundServiceHelper.getCachedId();
     final enrolledRaw = prefs.getString('enrolled_date');
-    final enrolled = enrolledRaw == null ? null : DateTime.tryParse(enrolledRaw);
+    final enrolled = enrolledRaw == null
+        ? null
+        : DateTime.tryParse(enrolledRaw);
 
     final daysEnrolled = enrolled == null
         ? 0
@@ -124,11 +127,11 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
       _daysWithData = (quality['days_with_data'] as num?)?.toInt() ?? 0;
       _baselineCalendarDaysElapsed =
           (quality['baseline_calendar_days_elapsed'] as num?)?.toInt() ??
-              daysEnrolled.clamp(0, 28);
+          daysEnrolled.clamp(0, 28);
       _baselineDaysAvailable =
           (quality['baseline_days_with_features'] as num?)?.toInt() ??
-              (quality['baseline_days_available'] as num?)?.toInt() ??
-              0;
+          (quality['baseline_days_available'] as num?)?.toInt() ??
+          0;
       _baselineUsableDays =
           (quality['baseline_usable_days'] as num?)?.toInt() ?? 0;
       _baselineDaysRequired =
@@ -166,19 +169,24 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
 
   bool get _baselineReady => _baselineReadyFromBackend;
 
+  ColorScheme get _colors => Theme.of(context).colorScheme;
+  Color get _primaryText => _colors.onSurface;
+  Color get _secondaryText => _colors.onSurfaceVariant;
+  Color get _mutedText => _colors.onSurfaceVariant.withValues(alpha: 0.78);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F5FF),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFFF7F5FF),
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         title: Text(
           'Behavioural Context',
           style: GoogleFonts.poppins(
             fontSize: 17,
             fontWeight: FontWeight.w600,
-            color: const Color(0xFF2D3142),
+            color: _primaryText,
           ),
         ),
       ),
@@ -219,29 +227,29 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
   }
 
   Widget _introCard() => _card(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Your recent patterns',
-              style: GoogleFonts.poppins(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF2D3142),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'This page compares your recent behaviour with your own usual patterns. It does not estimate or diagnose anxiety.',
-              style: GoogleFonts.poppins(
-                fontSize: 12.5,
-                height: 1.5,
-                color: const Color(0xFF676B80),
-              ),
-            ),
-          ],
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Your recent patterns',
+          style: GoogleFonts.poppins(
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            color: _primaryText,
+          ),
         ),
-      );
+        const SizedBox(height: 6),
+        Text(
+          'This page compares your recent behaviour with your own usual patterns. It does not estimate or diagnose anxiety.',
+          style: GoogleFonts.poppins(
+            fontSize: 12.5,
+            height: 1.5,
+            color: _secondaryText,
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _baselineCard() {
     final need = _baselineDaysRequired <= 0 ? 28 : _baselineDaysRequired;
@@ -254,7 +262,7 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
         children: [
           Row(
             children: [
-              const Icon(Icons.auto_graph_rounded, color: Color(0xFF6D5BD0)),
+              Icon(Icons.auto_graph_rounded, color: _colors.primary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -264,7 +272,7 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
                   style: GoogleFonts.poppins(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: const Color(0xFF2D3142),
+                    color: _primaryText,
                   ),
                 ),
               ),
@@ -278,7 +286,7 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
             style: GoogleFonts.poppins(
               fontSize: 12,
               height: 1.45,
-              color: const Color(0xFF676B80),
+              color: _secondaryText,
             ),
           ),
           const SizedBox(height: 14),
@@ -287,8 +295,8 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
             child: LinearProgressIndicator(
               value: fraction,
               minHeight: 9,
-              backgroundColor: const Color(0xFFE9E4FF),
-              valueColor: const AlwaysStoppedAnimation(Color(0xFF6D5BD0)),
+              backgroundColor: _colors.primaryContainer,
+              valueColor: AlwaysStoppedAnimation(_colors.primary),
             ),
           ),
           const SizedBox(height: 8),
@@ -297,25 +305,19 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
             style: GoogleFonts.poppins(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF6D5BD0),
+              color: _colors.primary,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             '$_baselineUsableDays usable sensing day${_baselineUsableDays == 1 ? '' : 's'} · minimum $_baselineMinUsableDays needed',
-            style: GoogleFonts.poppins(
-              fontSize: 11.5,
-              color: const Color(0xFF75798C),
-            ),
+            style: GoogleFonts.poppins(fontSize: 11.5, color: _secondaryText),
           ),
           if (_baselineDaysAvailable > _baselineUsableDays) ...[
             const SizedBox(height: 3),
             Text(
               '$_baselineDaysAvailable baseline day${_baselineDaysAvailable == 1 ? '' : 's'} contain some collected data.',
-              style: GoogleFonts.poppins(
-                fontSize: 10.5,
-                color: const Color(0xFF8B8FA3),
-              ),
+              style: GoogleFonts.poppins(fontSize: 10.5, color: _mutedText),
             ),
           ],
         ],
@@ -339,7 +341,7 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
           for (int i = 0; i < visible.length; i++) ...[
             _patternRow(visible[i]),
             if (i != visible.length - 1)
-              const Divider(height: 22, color: Color(0xFFE9E7F2)),
+              Divider(height: 22, color: Theme.of(context).dividerColor),
           ],
         ],
       ),
@@ -354,15 +356,15 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
     if (!_baselineReady || item.z == null) {
       message = 'Not enough information yet';
       icon = Icons.hourglass_empty_rounded;
-      color = const Color(0xFF8B8FA3);
+      color = _mutedText;
     } else if (item.direction == 'above') {
       message = 'Higher than your usual pattern';
       icon = Icons.trending_up_rounded;
-      color = const Color(0xFF7D68D6);
+      color = _colors.primary;
     } else if (item.direction == 'below') {
       message = 'Lower than your usual pattern';
       icon = Icons.trending_down_rounded;
-      color = const Color(0xFF7D68D6);
+      color = _colors.primary;
     } else {
       message = 'Similar to your usual pattern';
       icon = Icons.trending_flat_rounded;
@@ -390,7 +392,7 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
                 style: GoogleFonts.poppins(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: const Color(0xFF2D3142),
+                  color: _primaryText,
                 ),
               ),
               const SizedBox(height: 2),
@@ -398,7 +400,7 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
                 message,
                 style: GoogleFonts.poppins(
                   fontSize: 11.5,
-                  color: const Color(0xFF75798C),
+                  color: _secondaryText,
                 ),
               ),
             ],
@@ -415,48 +417,48 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
   }
 
   Widget _changeCard() => _card(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Icon(Icons.notifications_none_rounded, color: Color(0xFFB7791F)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Recent change noticed',
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF2D3142),
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    _changeDetection?.message ??
-                        'A noticeable change in one of your recent behavioural patterns was detected.',
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      height: 1.45,
-                      color: const Color(0xFF676B80),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'This is a pattern change, not an anxiety diagnosis or risk prediction.',
-                    style: GoogleFonts.poppins(
-                      fontSize: 11.5,
-                      height: 1.45,
-                      color: const Color(0xFF8A6A2F),
-                    ),
-                  ),
-                ],
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.notifications_none_rounded, color: Color(0xFFB7791F)),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Recent change noticed',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: _primaryText,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 5),
+              Text(
+                _changeDetection?.message ??
+                    'A noticeable change in one of your recent behavioural patterns was detected.',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  height: 1.45,
+                  color: _secondaryText,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'This is a pattern change, not an anxiety diagnosis or risk prediction.',
+                style: GoogleFonts.poppins(
+                  fontSize: 11.5,
+                  height: 1.45,
+                  color: _colors.onTertiaryContainer,
+                ),
+              ),
+            ],
+          ),
         ),
-      );
+      ],
+    ),
+  );
 
   Widget _dataQualityCard() {
     final total = _coverage.isEmpty ? 14 : _coverage.length;
@@ -473,7 +475,7 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
             style: GoogleFonts.poppins(
               fontSize: 13.5,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF2D3142),
+              color: _primaryText,
             ),
           ),
           const SizedBox(height: 8),
@@ -482,7 +484,7 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
             style: GoogleFonts.poppins(
               fontSize: 11.5,
               height: 1.45,
-              color: const Color(0xFF75798C),
+              color: _secondaryText,
             ),
           ),
         ],
@@ -491,176 +493,170 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
   }
 
   Widget _checkInCard() => _card(
-        child: Row(
-          children: [
-            const Icon(Icons.edit_note_rounded, color: Color(0xFF6D5BD0)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${_checkIns.length} check-ins recorded',
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF2D3142),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Your check-ins stay separate from passive behavioural observations.',
-                    style: GoogleFonts.poppins(
-                      fontSize: 11.5,
-                      height: 1.4,
-                      color: const Color(0xFF75798C),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-
-  Widget _collectionDetails() => _card(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            InkWell(
-              onTap: () =>
-                  setState(() => _showCollectionDetails = !_showCollectionDetails),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.settings_input_antenna_rounded,
-                    color: Color(0xFF6D5BD0),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Data collection details',
-                      style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF2D3142),
-                      ),
-                    ),
-                  ),
-                  Icon(
-                    _showCollectionDetails
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
-                    color: const Color(0xFF8B8FA3),
-                  ),
-                ],
-              ),
-            ),
-            if (_showCollectionDetails) ...[
-              const Divider(height: 24, color: Color(0xFFE9E7F2)),
-              _detailRow(
-                'Participant',
-                _participantId.isEmpty ? 'Unknown' : _participantId,
-              ),
-              _detailRow('Days enrolled', '$_daysEnrolled'),
-              _detailRow(
-                'Collection service',
-                _serviceRunning ? 'Running' : 'Stopped',
-              ),
-              _detailRow('Pending uploads', '$_pendingUploads'),
-              if (_emaExpected > 0)
-                _detailRow(
-                  'Check-in coverage',
-                  '$_emaReceived / $_emaExpected',
+    child: Row(
+      children: [
+        Icon(Icons.edit_note_rounded, color: _colors.primary),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${_checkIns.length} check-ins recorded',
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: _primaryText,
                 ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            DigitalPhenotypingPage(userId: widget.userId),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.sensors_rounded, size: 17),
-                  label: const Text('View sensing & collection details'),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Your check-ins stay separate from passive behavioural observations.',
+                style: GoogleFonts.poppins(
+                  fontSize: 11.5,
+                  height: 1.4,
+                  color: _secondaryText,
                 ),
               ),
             ],
-          ],
-        ),
-      );
-
-  Widget _detailRow(String label, String value) => Padding(
-        padding: const EdgeInsets.only(bottom: 7),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: GoogleFonts.poppins(
-                  fontSize: 11.5,
-                  color: const Color(0xFF75798C),
-                ),
-              ),
-            ),
-            Text(
-              value,
-              style: GoogleFonts.poppins(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF2D3142),
-              ),
-            ),
-          ],
-        ),
-      );
-
-  Widget _disclaimer() => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF0EDFF),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Text(
-          'These are descriptive observations of your own behavioural patterns. They are not a diagnosis, anxiety risk score, or clinical prediction. Discuss any concerns with a qualified clinician.',
-          style: GoogleFonts.poppins(
-            fontSize: 11,
-            height: 1.45,
-            color: const Color(0xFF625B82),
           ),
         ),
-      );
+      ],
+    ),
+  );
+
+  Widget _collectionDetails() => _card(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () =>
+              setState(() => _showCollectionDetails = !_showCollectionDetails),
+          child: Row(
+            children: [
+              Icon(
+                Icons.settings_input_antenna_rounded,
+                color: _colors.primary,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Data collection details',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: _primaryText,
+                  ),
+                ),
+              ),
+              Icon(
+                _showCollectionDetails
+                    ? Icons.keyboard_arrow_up_rounded
+                    : Icons.keyboard_arrow_down_rounded,
+                color: _mutedText,
+              ),
+            ],
+          ),
+        ),
+        if (_showCollectionDetails) ...[
+          Divider(height: 24, color: Theme.of(context).dividerColor),
+          _detailRow(
+            'Participant',
+            _participantId.isEmpty ? 'Unknown' : _participantId,
+          ),
+          _detailRow('Days enrolled', '$_daysEnrolled'),
+          _detailRow(
+            'Collection service',
+            _serviceRunning ? 'Running' : 'Stopped',
+          ),
+          _detailRow('Pending uploads', '$_pendingUploads'),
+          if (_emaExpected > 0)
+            _detailRow('Check-in coverage', '$_emaReceived / $_emaExpected'),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        DigitalPhenotypingPage(userId: widget.userId),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.sensors_rounded, size: 17),
+              label: const Text('View sensing & collection details'),
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+
+  Widget _detailRow(String label, String value) => Padding(
+    padding: const EdgeInsets.only(bottom: 7),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: GoogleFonts.poppins(fontSize: 11.5, color: _secondaryText),
+          ),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.poppins(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+            color: _primaryText,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _disclaimer() => Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: _colors.primaryContainer.withValues(alpha: 0.6),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Text(
+      'These are descriptive observations of your own behavioural patterns. They are not a diagnosis, anxiety risk score, or clinical prediction. Discuss any concerns with a qualified clinician.',
+      style: GoogleFonts.poppins(
+        fontSize: 11,
+        height: 1.45,
+        color: _colors.onPrimaryContainer,
+      ),
+    ),
+  );
 
   Widget _sectionTitle(String title) => Text(
-        title,
-        style: GoogleFonts.poppins(
-          fontSize: 16,
-          fontWeight: FontWeight.w700,
-          color: const Color(0xFF2D3142),
-        ),
-      );
+    title,
+    style: GoogleFonts.poppins(
+      fontSize: 16,
+      fontWeight: FontWeight.w700,
+      color: _primaryText,
+    ),
+  );
 
   Widget _card({required Widget child}) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFFE9E7F2)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.035),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+    width: double.infinity,
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: _colors.surface,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: _colors.outlineVariant),
+      boxShadow: [
+        BoxShadow(
+          color: Theme.of(context).shadowColor.withValues(alpha: 0.08),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
         ),
-        child: child,
-      );
+      ],
+    ),
+    child: child,
+  );
 }
 
 class _PatternItem {
@@ -668,11 +664,7 @@ class _PatternItem {
   final String direction;
   final double? z;
 
-  const _PatternItem({
-    required this.label,
-    required this.direction,
-    this.z,
-  });
+  const _PatternItem({required this.label, required this.direction, this.z});
 }
 
 class _ChangeDetection {

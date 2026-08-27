@@ -31,32 +31,52 @@ import 'package:usage_stats/usage_stats.dart';
 import 'package:flutter_sms_inbox/flutter_sms_inbox.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/background_service_helper.dart';
+import '../theme/theme_controller.dart';
 
 // ─────────────────────────────────────────────
-// COLOUR TOKENS — unchanged from v1
+// COLOUR TOKENS
 // ─────────────────────────────────────────────
 class _C {
-  static const scaffold = Color(0xFFF5F3FF);
-  static const cardBase = Color(0xFFFFFFFF);
-  static const chip = Color(0xFFF0ECFF);
+  static bool get _dark => ThemeController.instance.isDarkNow;
 
-  static const p500 = Color(0xFF5E60CE);
-  static const p400 = Color(0xFF7C5CBF);
-  static const p200 = Color(0xFFC4B5FD);
-  static const p100 = Color(0xFFF0ECFF);
+  static Color get scaffold =>
+      _dark ? const Color(0xFF111218) : const Color(0xFFF5F3FF);
+  static Color get cardBase =>
+      _dark ? const Color(0xFF1A1B24) : const Color(0xFFFFFFFF);
+  static Color get chip =>
+      _dark ? const Color(0xFF29243B) : const Color(0xFFF0ECFF);
 
-  static const primary = Color(0xFF5E60CE);
-  static const amber = Color(0xFFF59B24);
-  static const amberBg = Color(0xFFFEF3DC);
-  static const rose = Color(0xFFEF5777);
-  static const roseBg = Color(0xFFFDEAEE);
-  static const teal = Color(0xFF0F9D8C);
-  static const tealBg = Color(0xFFE3F5F2);
+  static Color get p500 =>
+      _dark ? const Color(0xFFB8B6FF) : const Color(0xFF5E60CE);
+  static Color get p400 =>
+      _dark ? const Color(0xFFC6B4FF) : const Color(0xFF7C5CBF);
+  static Color get p200 =>
+      _dark ? const Color(0xFF655A88) : const Color(0xFFC4B5FD);
+  static Color get p100 =>
+      _dark ? const Color(0xFF29243B) : const Color(0xFFF0ECFF);
 
-  static const textPrimary = Color(0xFF2D3142);
-  static const textSecondary = Color(0xFF5A607F);
-  static const textMuted = Color(0xFF9095A7);
-  static const border = Color(0xFFE8E5F4);
+  static Color get primary => p500;
+  static Color get amber =>
+      _dark ? const Color(0xFFFFB75D) : const Color(0xFFF59B24);
+  static Color get amberBg =>
+      _dark ? const Color(0xFF3A2B16) : const Color(0xFFFEF3DC);
+  static Color get rose =>
+      _dark ? const Color(0xFFFF8299) : const Color(0xFFEF5777);
+  static Color get roseBg =>
+      _dark ? const Color(0xFF3B2028) : const Color(0xFFFDEAEE);
+  static Color get teal =>
+      _dark ? const Color(0xFF5ED7C7) : const Color(0xFF0F9D8C);
+  static Color get tealBg =>
+      _dark ? const Color(0xFF173633) : const Color(0xFFE3F5F2);
+
+  static Color get textPrimary =>
+      _dark ? const Color(0xFFF3F1FA) : const Color(0xFF2D3142);
+  static Color get textSecondary =>
+      _dark ? const Color(0xFFC9C5D6) : const Color(0xFF5A607F);
+  static Color get textMuted =>
+      _dark ? const Color(0xFFA9A4B7) : const Color(0xFF9095A7);
+  static Color get border =>
+      _dark ? const Color(0xFF383643) : const Color(0xFFE8E5F4);
 }
 
 // ─────────────────────────────────────────────
@@ -522,7 +542,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
         elevation: 0,
         leading: Navigator.canPop(context)
             ? IconButton(
-                icon: const Icon(
+                icon: Icon(
                   Icons.arrow_back_ios_new_rounded,
                   color: _C.textPrimary,
                   size: 20,
@@ -540,7 +560,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.ios_share_rounded,
               color: _C.textMuted,
               size: 19,
@@ -549,7 +569,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
             onPressed: _exportForClinician,
           ),
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.refresh_rounded,
               color: _C.textMuted,
               size: 20,
@@ -563,7 +583,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
       ),
       body: SafeArea(
         child: _loading
-            ? const Center(child: CircularProgressIndicator(color: _C.primary))
+            ? Center(child: CircularProgressIndicator(color: _C.primary))
             : RefreshIndicator(
                 onRefresh: _load,
                 color: _C.primary,
@@ -711,7 +731,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(Icons.favorite_rounded, size: 17, color: _C.rose),
+        Icon(Icons.favorite_rounded, size: 17, color: _C.rose),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
@@ -764,9 +784,9 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
     onTap: () async {
       await Clipboard.setData(ClipboardData(text: number));
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Copied $number to clipboard')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Copied $number to clipboard')));
       }
     },
     child: Container(
@@ -779,7 +799,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.call_rounded, size: 13, color: _C.rose),
+          Icon(Icons.call_rounded, size: 13, color: _C.rose),
           const SizedBox(width: 6),
           Text(
             '$label \u00b7 $number',
@@ -821,7 +841,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
         children: [
           Row(
             children: [
-              const Icon(Icons.insights_rounded, color: _C.primary, size: 19),
+              Icon(Icons.insights_rounded, color: _C.primary, size: 19),
               const SizedBox(width: 8),
               Text(
                 'Last 28 days',
@@ -925,7 +945,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
         children: [
           Row(
             children: [
-              const Icon(Icons.hourglass_top_rounded, color: _C.p400, size: 19),
+              Icon(Icons.hourglass_top_rounded, color: _C.p400, size: 19),
               const SizedBox(width: 8),
               Text(
                 'Building your baseline',
@@ -954,7 +974,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
               value: frac,
               minHeight: 8,
               backgroundColor: _C.p100,
-              valueColor: const AlwaysStoppedAnimation(_C.p400),
+              valueColor: AlwaysStoppedAnimation(_C.p400),
             ),
           ),
           const SizedBox(height: 8),
@@ -974,8 +994,8 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Padding(
-                      padding: EdgeInsets.only(top: 2),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
                       child: Icon(
                         Icons.info_outline_rounded,
                         size: 14,
@@ -1024,7 +1044,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
         children: [
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.notifications_active_outlined,
                 size: 17,
                 color: _C.amber,
@@ -1059,7 +1079,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
+              Icon(
                 Icons.info_outline_rounded,
                 size: 13,
                 color: _C.textMuted,
@@ -1354,7 +1374,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(Icons.edit_note_rounded, size: 17, color: _C.teal),
+        Icon(Icons.edit_note_rounded, size: 17, color: _C.teal),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
@@ -1390,15 +1410,8 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
         children: [
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: const BoxDecoration(
-              color: _C.chip,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.history_edu_rounded,
-              color: _C.primary,
-              size: 20,
-            ),
+            decoration: BoxDecoration(color: _C.chip, shape: BoxShape.circle),
+            child: Icon(Icons.history_edu_rounded, color: _C.primary, size: 20),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -1421,7 +1434,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: _C.textMuted),
+          Icon(Icons.chevron_right_rounded, color: _C.textMuted),
         ],
       ),
     ),
@@ -1441,7 +1454,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
       children: [
         Row(
           children: [
-            const Icon(Icons.description_outlined, size: 18, color: _C.primary),
+            Icon(Icons.description_outlined, size: 18, color: _C.primary),
             const SizedBox(width: 8),
             Text(
               'Export for your clinician',
@@ -1479,7 +1492,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
             ),
             style: OutlinedButton.styleFrom(
               foregroundColor: _C.primary,
-              side: const BorderSide(color: _C.p200),
+              side: BorderSide(color: _C.p200),
               padding: const EdgeInsets.symmetric(vertical: 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -1588,7 +1601,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(Icons.shield_outlined, size: 17, color: _C.p500),
+        Icon(Icons.shield_outlined, size: 17, color: _C.p500),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
@@ -1646,7 +1659,7 @@ class CheckInHistoryPage extends StatelessWidget {
         backgroundColor: _C.scaffold,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(
+          icon: Icon(
             Icons.arrow_back_ios_new_rounded,
             color: _C.textPrimary,
             size: 20,
@@ -1681,7 +1694,8 @@ class CheckInHistoryPage extends StatelessWidget {
             : ListView.separated(
                 padding: const EdgeInsets.all(20),
                 itemCount: entries.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 12),
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: 12),
                 itemBuilder: (context, i) {
                   final e = entries[i];
                   return Container(

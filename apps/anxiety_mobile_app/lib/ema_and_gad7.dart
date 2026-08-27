@@ -388,7 +388,10 @@ class _Gad7ScreenState extends State<Gad7Screen> {
               Text(
                 'Thank you for completing this week\'s check-in. Your answers help the research team understand how anxiety changes over time.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 13,
+                ),
               ),
             ],
           ),
@@ -548,7 +551,9 @@ class _Gad7ScreenState extends State<Gad7Screen> {
                                             ? Theme.of(
                                                 context,
                                               ).colorScheme.onSurface
-                                            : Colors.grey.shade700,
+                                            : Theme.of(
+                                                context,
+                                              ).colorScheme.onSurfaceVariant,
                                         fontWeight: isSelected
                                             ? FontWeight.w600
                                             : FontWeight.normal,
