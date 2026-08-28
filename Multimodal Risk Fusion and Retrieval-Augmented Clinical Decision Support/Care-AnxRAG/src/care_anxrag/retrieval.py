@@ -69,9 +69,9 @@ class CareRetriever:
 
         if self.database.count_chunks(status=None) > 0:
             self.database.assert_embedding_identity(self.embedder.model_id)
-        query_embedding = self.embedder.embed([analysis.normalized_query])[0]
+        query_embedding = self.embedder.embed([analysis.retrieval_query])[0]
         dense_ranked = self._dense_search(query_embedding, analysis.preferred_layers)
-        lexical_ranked = self._lexical_search(analysis.normalized_query)
+        lexical_ranked = self._lexical_search(analysis.retrieval_query)
         hits = self._fuse(dense_ranked, lexical_ranked)
         if not hits:
             return RetrievalResult(
@@ -104,7 +104,10 @@ class CareRetriever:
                 hit.chunk.layer,
             )
             hit.relevance_score = self._relevance_score(hit)
-            hit.care_score = self._care_score(hit)
+            hit.care_score = self._care_score(
+            hit,
+            analysis,
+        )
         hits.sort(key=lambda value: value.care_score, reverse=True)
 
         # Source authority and evidence quality must never make an unrelated chunk
@@ -240,6 +243,24 @@ class CareRetriever:
         return hits[: self.settings.fused_candidates]
 
     @staticmethod
+    def _clinical_compatibility_adjustment(
+    applicability_score: float,
+    ) -> float:
+        """
+        Convert strong clinical incompatibility into a ranking adjustment.
+
+        Applicability below 0.50 represents a strong mismatch, such as
+        evidence explicitly targeting a different anxiety subtype.
+
+        Generic or partially applicable anxiety evidence is not penalized
+        here; its normal applicability score already handles that case.
+        """
+        if applicability_score < 0.50:
+            return 0.60
+
+        return 1.0
+
+    @staticmethod
     def _relevance_score(hit: SearchHit) -> float:
         # Deliberately excludes authority/evidence/freshness: this is the guardrail
         # against highly authoritative but irrelevant evidence. Lexical presence is
@@ -252,9 +273,31 @@ class CareRetriever:
             + 0.05 * hit.applicability_score
         )
 
-    def _care_score(self, hit: SearchHit) -> float:
+    @staticmethod
+    def _treatment_compatibility_adjustment(hit, analysis) -> float:
+        requested_treatments = set(
+            getattr(analysis, "treatments", []) or []
+        )
+
+        if not requested_treatments:
+            return 1.0
+
+        title = (
+            getattr(hit.chunk, "title", "") or ""
+        ).lower().replace("-", " ")
+
+        if (
+            "cognitive_behavioral_therapy" in requested_treatments
+            and "metacognitive therapy" in title
+        ):
+            return 0.65
+
+        return 1.0
+
+    def _care_score(self, hit: SearchHit, analysis=None) -> float:
         weights = self.settings.weights
-        return clamp(
+
+        base_score = clamp(
             weights.semantic * hit.dense_score
             + weights.lexical * hit.lexical_score
             + weights.rrf * hit.rrf_normalized
@@ -263,6 +306,26 @@ class CareRetriever:
             + weights.evidence * hit.chunk.evidence_score
             + weights.freshness * hit.freshness_score
             + weights.applicability * hit.applicability_score
+        )
+
+        subtype_compatibility = self._clinical_compatibility_adjustment(
+            hit.applicability_score
+        )
+
+        treatment_compatibility = 1.0
+
+        if analysis is not None:
+            treatment_compatibility = (
+                self._treatment_compatibility_adjustment(
+                    hit,
+                    analysis,
+                )
+            )
+
+        return clamp(
+            base_score
+            * subtype_compatibility
+            * treatment_compatibility
         )
 
     def _resolve_conflicts(
@@ -368,3 +431,16 @@ class CareRetriever:
         if unresolved_conflict > self.settings.unresolved_conflict_threshold:
             return True, "unresolved_high_confidence_evidence_conflict"
         return False, None
+
+def test_query_analyzer_identifies_cbt_treatment() -> None:
+    analyzer = QueryAnalyzer()
+
+    analysis = analyzer.analyze(
+        "What evidence supports CBT for generalized anxiety disorder?"
+    )
+
+    data = analysis.model_dump()
+
+    assert data.get("treatments") == [
+        "cognitive_behavioral_therapy"
+    ]
