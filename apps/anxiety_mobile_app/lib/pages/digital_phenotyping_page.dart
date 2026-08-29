@@ -1388,7 +1388,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
         p?.participantId ?? widget.userId ?? await BackgroundServiceHelper.getCachedId();
 
     try {
-      final context =
+      final clinicianContext =
           await ClinicianLongitudinalContextService.buildAndCache(participantId);
       final buf = StringBuffer();
       final now = DateTime.now();
@@ -1434,7 +1434,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
       buf.writeln('');
 
       // 1) Self-report trend
-      final selfReport = mapOf(context['self_report_trend']);
+      final selfReport = mapOf(clinicianContext['self_report_trend']);
       final sevenDay = mapOf(selfReport['seven_day']);
       final ema = mapOf(sevenDay['ema']);
       final gad7 = mapOf(selfReport['gad7']);
@@ -1465,7 +1465,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
 
       // 2) Physiological event confirmations
       final physiological =
-          mapOf(context['physiological_event_confirmations']);
+          mapOf(clinicianContext['physiological_event_confirmations']);
       final physiological30 = mapOf(physiological['thirty_day']);
       buf.writeln('2. PHYSIOLOGICAL EVENT CONFIRMATIONS (30 DAYS)');
       buf.writeln('Alert check-ins: ${physiological30['events'] ?? 0}');
@@ -1493,7 +1493,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
       buf.writeln('');
 
       // 3) Intervention response
-      final intervention = mapOf(context['intervention_response']);
+      final intervention = mapOf(clinicianContext['intervention_response']);
       final intervention30 = mapOf(intervention['thirty_day']);
       buf.writeln('3. INTERVENTION RESPONSE (30 DAYS)');
       buf.writeln(
@@ -1522,7 +1522,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
       buf.writeln('');
 
       // 4) C2 behavioural changes
-      final c2 = mapOf(context['c2_behavioral_changes']);
+      final c2 = mapOf(clinicianContext['c2_behavioral_changes']);
       final quality = mapOf(c2['data_quality']);
       final change = mapOf(c2['change_detection']);
       final patterns = c2['patterns'] is List ? c2['patterns'] as List : const [];
