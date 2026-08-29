@@ -22,6 +22,7 @@ dependencies:
 
   # Data Storage
   shared_preferences: ^2.2.0
+  crypto: ^3.0.3
   intl: ^0.18.1
   connectivity_plus: ^4.0.1
 
