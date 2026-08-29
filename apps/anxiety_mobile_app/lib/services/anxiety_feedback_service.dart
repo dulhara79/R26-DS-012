@@ -60,19 +60,49 @@ class PredictiveEscalationGate {
   PredictedEscalation? evaluate({
     required double currentRisk,
     required List<double> riskForecast,
+    List<int>? forecastHorizonsMinutes,
     required DateTime observedAt,
   }) {
-    if (riskForecast.length < minimumLeadMinutes) {
+    final hasDirectHorizons =
+        forecastHorizonsMinutes != null &&
+        forecastHorizonsMinutes.length == riskForecast.length &&
+        forecastHorizonsMinutes.every(
+          (minutes) => minutes >= minimumLeadMinutes,
+        );
+    if (!hasDirectHorizons && riskForecast.length < minimumLeadMinutes) {
       _clearCandidate();
       return null;
     }
 
     final current = currentRisk.clamp(0.0, 100.0).toDouble();
-    final future = riskForecast
-        .skip(minimumLeadMinutes - 1)
-        .map((value) => value.clamp(0.0, 100.0).toDouble())
-        .toList();
-    final peak = future.reduce((a, b) => a >= b ? a : b);
+    final List<MapEntry<int, double>> futurePoints;
+    if (hasDirectHorizons) {
+      futurePoints = List.generate(
+        riskForecast.length,
+        (index) => MapEntry(
+          forecastHorizonsMinutes![index],
+          riskForecast[index].clamp(0.0, 100.0).toDouble(),
+        ),
+      );
+    } else {
+      futurePoints = List.generate(
+        riskForecast.length - (minimumLeadMinutes - 1),
+        (offset) {
+          final index = offset + minimumLeadMinutes - 1;
+          return MapEntry(
+            index + 1,
+            riskForecast[index].clamp(0.0, 100.0).toDouble(),
+          );
+        },
+      );
+    }
+    if (futurePoints.isEmpty) {
+      _clearCandidate();
+      return null;
+    }
+    final peak = futurePoints
+        .map((point) => point.value)
+        .reduce((a, b) => a >= b ? a : b);
     final increase = peak - current;
 
     final highEscalation =
@@ -115,13 +145,11 @@ class PredictiveEscalationGate {
         : minimumElevatedIncrease;
     var leadMinutes = currentHigh ? 0 : minimumLeadMinutes;
     if (!currentHigh) {
-      for (var index = minimumLeadMinutes - 1;
-          index < riskForecast.length;
-          index++) {
-        final predicted = riskForecast[index].clamp(0.0, 100.0).toDouble();
+      for (final point in futurePoints) {
+        final predicted = point.value;
         if (predicted >= targetThreshold &&
             predicted - current >= requiredIncrease) {
-          leadMinutes = index + 1;
+          leadMinutes = point.key;
           break;
         }
       }
@@ -377,19 +405,33 @@ class AnxietyFeedbackService {
   }) {
     if (response['status'] != 'success') return;
     final rawForecast = response['risk_forecast'];
-    if (rawForecast is! List ||
-        rawForecast.length < 10 ||
-        rawForecast.any((value) => value is! num)) {
-      // Raw reconstruction errors from an older server deployment, or an
-      // incomplete response, must never trigger participant alerts.
+    final rawHorizons = response['forecast_horizons_minutes'];
+    final directForecast =
+        rawForecast is List &&
+        rawForecast.length == 2 &&
+        rawForecast.every((value) => value is num) &&
+        rawHorizons is List &&
+        rawHorizons.length == 2 &&
+        rawHorizons.every((value) => value is num) &&
+        (rawHorizons[0] as num).toInt() == 5 &&
+        (rawHorizons[1] as num).toInt() == 10;
+    final legacyForecast =
+        rawForecast is List &&
+        rawForecast.length >= 10 &&
+        rawForecast.every((value) => value is num);
+    if (!directForecast && !legacyForecast) {
+      // Incomplete or malformed forecasts must never trigger participant alerts.
       return;
     }
 
     final forecast = rawForecast
         .cast<num>()
-        .take(10)
+        .take(directForecast ? 2 : 10)
         .map((value) => value.toDouble())
         .toList();
+    final forecastHorizons = directForecast
+        ? rawHorizons.cast<num>().map((value) => value.toInt()).toList()
+        : null;
     final currentFromApi = response['current_risk_index'];
     final liveReading = ChestStrapService().hasLiveWornReading
         ? ChestStrapService().lastReading
@@ -404,6 +446,7 @@ class AnxietyFeedbackService {
     final escalation = _forecastGate.evaluate(
       currentRisk: currentRisk,
       riskForecast: forecast,
+      forecastHorizonsMinutes: forecastHorizons,
       observedAt: now,
     );
     if (escalation == null) return;

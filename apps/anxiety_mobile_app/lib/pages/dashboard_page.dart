@@ -858,7 +858,7 @@ class _DashboardPageState extends State<DashboardPage>
       case 'not_calibrated':
         return _buildCalibrationRequiredScreen();
       case 'buffering':
-        return _buildBufferingScreen();
+        return _buildDashboardList(risk);
       case 'error':
       case 'success':
       default:
