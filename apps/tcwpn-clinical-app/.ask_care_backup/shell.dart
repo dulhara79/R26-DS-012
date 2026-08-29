@@ -22,7 +22,6 @@ import 'alerts/alerts_screen.dart';
 import 'chart/patient_chart_screen.dart';
 import 'patients/scan_patient_id_screen.dart';
 import 'settings/settings_screen.dart';
-import 'evidence/ask_care_screen.dart';
 import 'tcwpn/support_set_screen.dart';
 
 class AppShell extends StatefulWidget {
@@ -41,12 +40,11 @@ class _AppShellState extends State<AppShell> {
     return Scaffold(
       body: IndexedStack(
         index: _tab,
-        children: [
+        children: const [
           _CaseloadTab(),
           _PatientsTab(),
           AlertsScreen(),
           SettingsScreen(),
-          AskCareScreen(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -77,11 +75,6 @@ class _AppShellState extends State<AppShell> {
             icon: Icon(Icons.tune_outlined),
             selectedIcon: Icon(Icons.tune_rounded),
             label: 'Settings',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.psychology_outlined),
-            selectedIcon: Icon(Icons.psychology),
-            label: 'Ask CARE',
           ),
         ],
       ),
