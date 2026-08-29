@@ -54,8 +54,7 @@ class _DashboardPageState extends State<DashboardPage>
   List<double> _forecastData = [];
   String _statusMessage = "";
   Timer? _predictionTimer;
-  int _bufferingCountdown = 60;
-  Timer? _bufferingTimer;
+  double _forecastCoverage = 0.0;
   List<Map<String, dynamic>> _historyData = [];
   String _historyStatus = 'loading';
   String _historyMessage = '';
@@ -178,7 +177,6 @@ class _DashboardPageState extends State<DashboardPage>
     );
     _entryController.dispose();
     _predictionTimer?.cancel();
-    _bufferingTimer?.cancel();
     _btStateSubscription?.cancel();
     _readingSubscription?.cancel();
     _forecastScrollController.dispose();
@@ -483,22 +481,46 @@ class _DashboardPageState extends State<DashboardPage>
 
     if (status == 'success') {
       final List? riskForecast = result['risk_forecast'] as List?;
+      final List? forecastHorizons =
+          result['forecast_horizons_minutes'] as List?;
       if (riskForecast == null ||
-          riskForecast.length < 10 ||
-          riskForecast.any((value) => value is! num)) {
+          riskForecast.length != 2 ||
+          riskForecast.any(
+            (value) => value is! num || !value.toDouble().isFinite,
+          ) ||
+          forecastHorizons == null ||
+          forecastHorizons.length != 2 ||
+          forecastHorizons.any(
+            (value) => value is! num || !value.toDouble().isFinite,
+          )) {
         setState(() {
           _predictionStatus = 'error';
           _forecastData = [];
           _currentModelRisk = null;
-          _statusMessage = 'The 10-minute forecast is not available right now.';
+          _forecastCoverage = 0.0;
+          _statusMessage =
+              'The +5 and +10 minute forecast is not available right now.';
         });
         return;
       }
       final parsedForecast = riskForecast
           .cast<num>()
-          .take(10)
           .map((value) => value.toDouble())
           .toList();
+      final parsedHorizons = forecastHorizons
+          .cast<num>()
+          .map((value) => value.toDouble())
+          .toList();
+      if (parsedHorizons[0] != 5.0 || parsedHorizons[1] != 10.0) {
+        setState(() {
+          _predictionStatus = 'error';
+          _forecastData = [];
+          _currentModelRisk = null;
+          _forecastCoverage = 0.0;
+          _statusMessage = 'The forecast horizons are not recognised.';
+        });
+        return;
+      }
       final currentRisk =
           (result['current_risk_index'] as num?)?.toDouble() ??
           (ChestStrapService().hasLiveWornReading
@@ -519,6 +541,7 @@ class _DashboardPageState extends State<DashboardPage>
         _predictionStatus = "success";
         _forecastData = parsedForecast;
         _currentModelRisk = currentRisk;
+        _forecastCoverage = 1.0;
         _statusMessage = message;
       });
       AnxietyFeedbackService().observeForecastResponse(result);
@@ -531,13 +554,9 @@ class _DashboardPageState extends State<DashboardPage>
         });
       }
 
-      _bufferingTimer?.cancel();
-      _bufferingTimer = null;
-
       // ── Send trajectory to fusion model (fire-and-forget) ──────────────
-      // Compute a single physiological risk score = peak scaled value in the
-      // 10-step forecast. The fusion teammate uses this number + the full
-      // trajectory array to assign a weight and produce a final risk decision.
+      // Compute one physiological risk score from the higher of the direct
+      // +5 and +10 minute forecasts, while also sending both forecast values.
       if (parsedForecast.isNotEmpty && _cachedId.isNotEmpty) {
         final double peakRisk = parsedForecast
             .map(_scaleForecastValue)
@@ -561,24 +580,26 @@ class _DashboardPageState extends State<DashboardPage>
         });
       }
     } else if (status == 'buffering') {
+      final coverage = ((result['coverage'] as num?)?.toDouble() ?? 0.0)
+          .clamp(0.0, 1.0)
+          .toDouble();
       setState(() {
         _predictionStatus = "buffering";
         _forecastData = [];
         _currentModelRisk = null;
         _fusionRiskScore = null;
+        _forecastCoverage = coverage;
         _statusMessage = message;
       });
-      _startBufferingCountdown();
     } else if (status == 'not_calibrated') {
       setState(() {
         _predictionStatus = "not_calibrated";
         _forecastData = [];
         _currentModelRisk = null;
         _fusionRiskScore = null;
+        _forecastCoverage = 0.0;
         _statusMessage = message;
       });
-      _bufferingTimer?.cancel();
-      _bufferingTimer = null;
     } else {
       // API Offline/Error state
       setState(() {
@@ -586,30 +607,10 @@ class _DashboardPageState extends State<DashboardPage>
         _forecastData = [];
         _currentModelRisk = null;
         _fusionRiskScore = null;
+        _forecastCoverage = 0.0;
         _statusMessage = message;
       });
     }
-  }
-
-  void _startBufferingCountdown() {
-    if (_bufferingTimer != null) return;
-    _bufferingCountdown = 60;
-    _bufferingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      // Pause countdown if the strap is not connected!
-      if (!_chestStrapConnected) return;
-
-      setState(() {
-        if (_bufferingCountdown > 0) {
-          _bufferingCountdown--;
-        } else {
-          // Stay at 0, next periodic API fetch will resolve state change
-        }
-      });
-    });
   }
 
   double _scaleForecastValue(double value) {
@@ -1389,7 +1390,8 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Widget _buildBufferingScreen() {
-    final double progress = (60 - _bufferingCountdown) / 60.0;
+    final progress = _forecastCoverage.clamp(0.0, 1.0).toDouble();
+    final collectedMinutes = (progress * 10).round();
 
     return Center(
       child: SingleChildScrollView(
@@ -1411,7 +1413,7 @@ class _DashboardPageState extends State<DashboardPage>
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Connecting to Your Chest Strap',
+                'Building Your Forecast',
                 style: GoogleFonts.poppins(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
@@ -1420,7 +1422,7 @@ class _DashboardPageState extends State<DashboardPage>
               ),
               const SizedBox(height: 6),
               Text(
-                'Collecting your first readings',
+                'Collecting 10 consecutive one-minute readings',
                 style: GoogleFonts.poppins(
                   fontSize: 12,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1450,7 +1452,7 @@ class _DashboardPageState extends State<DashboardPage>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '$_bufferingCountdown',
+                        '$collectedMinutes/10',
                         style: GoogleFonts.poppins(
                           fontSize: 32,
                           fontWeight: FontWeight.w800,
@@ -1459,7 +1461,7 @@ class _DashboardPageState extends State<DashboardPage>
                         ),
                       ),
                       Text(
-                        'seconds',
+                        'minutes',
                         style: GoogleFonts.poppins(
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
@@ -1473,7 +1475,9 @@ class _DashboardPageState extends State<DashboardPage>
               const SizedBox(height: 36),
 
               Text(
-                'Please sit quietly and breathe normally. Your forecast will appear after one minute of readings.',
+                _statusMessage.isEmpty
+                    ? 'Keep the chest strap connected. The forecast will appear after 10 consecutive valid one-minute readings.'
+                    : _statusMessage,
                 style: GoogleFonts.poppins(
                   fontSize: 13,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1496,17 +1500,15 @@ class _DashboardPageState extends State<DashboardPage>
                   _buildPipelineStepRow(true, 'Personal resting level ready'),
                   const SizedBox(height: 10),
                   _buildPipelineStepRow(
-                    _bufferingCountdown == 0,
-                    'Collecting the first minute of readings',
-                    trailing: _bufferingCountdown > 0 ? 'In progress' : null,
+                    progress >= 1.0,
+                    'Collecting 10 consecutive valid minutes',
+                    trailing: '$collectedMinutes/10',
                   ),
                   const SizedBox(height: 10),
                   _buildPipelineStepRow(
                     false,
-                    'Preparing your first forecast',
-                    trailing: _bufferingCountdown == 0
-                        ? 'Connecting...'
-                        : 'Pending',
+                    'Preparing the +5 and +10 minute forecast',
+                    trailing: progress >= 1.0 ? 'Connecting...' : 'Pending',
                   ),
                 ],
               ),
@@ -1613,7 +1615,7 @@ class _DashboardPageState extends State<DashboardPage>
               ),
             ),
             Text(
-              'Your 10-minute outlook will appear after one minute of readings',
+              'Your outlook will appear after 10 consecutive valid one-minute readings',
               style: GoogleFonts.poppins(
                 fontSize: 11,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1634,11 +1636,12 @@ class _DashboardPageState extends State<DashboardPage>
                 _scaleForecastValue(forecast.first))
             .clamp(0.0, 100.0)
             .toDouble();
+    const forecastHorizons = <double>[5.0, 10.0];
     final List<FlSpot> spots = [
       FlSpot(0, currentRisk),
       ...List.generate(forecast.length, (index) {
         final yVal = _scaleForecastValue(forecast[index]);
-        return FlSpot((index + 1).toDouble(), yVal);
+        return FlSpot(forecastHorizons[index], yVal);
       }),
     ];
     final forecastSummary = describeForecast(
