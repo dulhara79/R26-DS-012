@@ -1,17 +1,3 @@
-"""
-Central Backend — Component 4 · R26-DS-012
-
-Implements the integration sequence diagram end to end.
-
-    ENROLMENT          steps 1-9    identity, pairing, patient separation
-    PASSIVE MODALITIES steps 10-21  physiological / behavioural / contextual
-    CLINICAL MODALITY  steps 22-26  note enters from the clinician side only
-    FUSION             steps 27-31  gate, fuse, persist
-    EGRESS             steps 32-35  two views, one source of truth
-
-Run:  uvicorn main:app --reload --port 8000
-Docs: http://127.0.0.1:8000/docs
-"""
 
 from __future__ import annotations
 
@@ -63,6 +49,13 @@ async def lifespan(_: FastAPI):
 
 from support_bank import (SupportBankUnavailable, describe_bank,
                           seed_support_bank, select_support_set)
+
+# CARE-X — explanation layer for the fused composite.
+import explain as carex
+_CAREX_THRESHOLDS = carex.load_tier_thresholds()
+_CAREX_REFERENCE_STATUS = carex.load_reference_status()
+_CAREX_BASE_WEIGHTS = carex.load_base_weights()
+
 SUPPORT_BANK_VERSION = __import__("os").getenv("SUPPORT_BANK_VERSION", "synthetic-v1")
 
 
@@ -83,7 +76,10 @@ except Exception as _sb_exc:
 finally:
     try: _sb_db.close()
     except Exception: pass
-
+    
+@app.get("/", tags=["ops"])
+def root():
+    return {"service": "R26-DS-012 Central Backend", "status": "running", "docs": "/docs"}
 
 def _auth(authorization: Optional[str]):
     if API_TOKEN and authorization != f"Bearer {API_TOKEN}":
@@ -767,9 +763,20 @@ def doctor_timeline(subject_id: str, limit: int = 20,
                           if k != "gate"} if latest else {},
         "modalities": modality_view,
         "updated_at": latest.computed_at if latest else None,
+        "fusion_result_id": latest.id if latest else None,
+        "modalities_used": latest.modalities_used if latest else 0,
+        "renormalised": bool(latest.renormalised) if latest else False,
         "trend": [{"composite": h.composite, "tier": h.tier, "band": h.band,
                    "computed_at": h.computed_at, "trigger": h.trigger}
                   for h in reversed(history)],
+
+        # CARE-X: compact form only. The full explanation (weight provenance,
+        # exact counterfactuals, honesty ledger) is on the /explanation endpoint
+        # so it is not re-serialised on every timeline poll.
+        "explanation": carex.explanation_summary(carex.explain_fusion(
+            _carex_fusion_dict(latest), modality_view,
+            _CAREX_THRESHOLDS, _CAREX_REFERENCE_STATUS,
+            _CAREX_BASE_WEIGHTS)),
     }
 
 
@@ -808,6 +815,113 @@ def doctor_evidence(subject_id: str, req: EvidenceRequest,
     return {"subject_id": subject_id, **result.to_wire()}
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# CARE-X — explanation of the fused composite
+# ═════════════════════════════════════════════════════════════════════════════
+def _carex_fusion_dict(row) -> dict:
+    """FusionResult row -> the plain dict CARE-X consumes.
+
+    Kept as an adapter rather than passing the ORM object so the explainer has
+    no SQLAlchemy dependency and stays unit-testable against fixtures.
+    """
+    if row is None:
+        return {}
+    return {
+        "composite": row.composite,
+        "tier": row.tier,
+        "band": row.band,
+        "confidence": row.confidence,
+        "reason": row.reason,
+        "renormalised": row.renormalised,
+        "weights": row.weights or {},
+        "contributions": row.contributions or {},
+        "harmonisation": row.harmonisation or {},
+    }
+
+
+@app.get("/v1/doctor/patients/{subject_id}/explanation", tags=["egress"])
+def doctor_explanation(subject_id: str, db: Session = Depends(get_session),
+                       authorization: Optional[str] = Header(None)):
+    """Why this composite came out the way it did.
+
+    Reads only the stored fusion result — no component is re-called — so the
+    explanation is reproducible months later, when those Spaces may be gone.
+    Deterministic: the same fusion result always yields the same explanation, or
+    a clinician reopening yesterday's assessment would see a different rationale
+    and stop trusting the number.
+    """
+    _auth(authorization)
+    _require_subject(db, subject_id)
+
+    latest = _latest_fusion(db, subject_id)
+    if latest is None:
+        return {"subject_id": subject_id, "assessed": False,
+                "narrative": "No assessment has been produced for this patient yet. "
+                             "This is an absence of evidence, not a low-risk result.",
+                "explainer_version": carex.EXPLAINER_VERSION}
+
+    readings = _latest_readings(db, subject_id)
+    now = dt.datetime.now(dt.timezone.utc)
+    modality_view = {}
+    for modality in ALL_MODALITIES:
+        r = readings.get(modality)
+        if not r:
+            modality_view[modality] = {"status": "absent", "score": None}
+            continue
+        captured = r["captured_at"]
+        if captured.tzinfo is None:
+            captured = captured.replace(tzinfo=dt.timezone.utc)
+        age_min = (now - captured).total_seconds() / 60.0
+        max_age = gate.MAX_AGE_MINUTES.get(modality)
+        modality_view[modality] = {
+            "status": r["status"], "score": r["raw_score"],
+            "confidence": r["confidence"], "coverage": r["coverage"],
+            "age_minutes": round(age_min, 1),
+            "fresh": (max_age is None) or (age_min <= max_age),
+            "model_version": r["model_version"],
+            "excluded": modality in gate.EXCLUDED_MODALITIES,
+        }
+
+    explanation = carex.explain_fusion(
+        _carex_fusion_dict(latest), modality_view,
+        _CAREX_THRESHOLDS, _CAREX_REFERENCE_STATUS, _CAREX_BASE_WEIGHTS)
+
+    _audit(db, subject_id, "egress.explanation",
+           {"fusion_result_id": latest.id, "explainer": carex.EXPLAINER_VERSION})
+    db.commit()
+
+    explanation["subject_id"] = subject_id
+    explanation["fusion_result_id"] = latest.id
+    explanation["computed_at"] = latest.computed_at
+    return explanation
+
+@app.post("/v1/evidence/ask", tags=["egress"])
+def global_evidence(
+    req: EvidenceRequest,
+    db: Session = Depends(get_session),
+    authorization: Optional[str] = Header(None),
+):
+    _auth(authorization)
+
+    result = rag_client.call_rag(req.question)
+
+    _audit(
+        db,
+        None,
+        "rag.global_ask",
+        {
+            "available": result.available,
+            "abstained": result.abstained,
+            "safety_level": result.safety_level,
+            "local_crisis_bypass": getattr(result, "local_crisis_bypass", False),
+            "error": result.error,
+        },
+    )
+    db.commit()
+
+    return result.to_wire()
+
+
 @app.get("/health", tags=["ops"])
 def health():
     return {
@@ -824,5 +938,6 @@ def health():
 
 
 if __name__ == "__main__":
+    # pyrefly: ignore [missing-import]
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
