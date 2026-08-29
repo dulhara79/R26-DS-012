@@ -5,7 +5,6 @@ import '../profile_page.dart';
 import 'home_page.dart';
 import 'dashboard_page.dart';
 import 'component2_bootstrap_page.dart';
-import 'longitudinal_context_page.dart';
 
 class MainNavigationPage extends StatefulWidget {
   final String? userId;
@@ -23,12 +22,10 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   @override
   void initState() {
     super.initState();
-    final userId = widget.userId ?? '';
     _pages = [
       HomePage(userId: widget.userId),
       DashboardPage(userId: widget.userId),
       Component2BootstrapPage(userId: widget.userId),
-      LongitudinalContextPage(userId: userId),
       ProfilePage(isTab: true),
     ];
   }
@@ -74,12 +71,6 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
                 ),
                 _buildNavItem(
                   3,
-                  Icons.fact_check_rounded,
-                  Icons.fact_check_outlined,
-                  'Check-ins',
-                ),
-                _buildNavItem(
-                  4,
                   Icons.person_rounded,
                   Icons.person_outline_rounded,
                   'Profile',
@@ -106,14 +97,12 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
             const Color(0xFF9AAEFF), // Home
             const Color(0xFFC5A1E8), // Physio
             Theme.of(context).colorScheme.primary, // Phenotype
-            const Color(0xFF66D5B1), // Check-ins
             Theme.of(context).colorScheme.primary, // Profile
           ]
         : [
             const Color(0xFF667eea), // Home
             const Color(0xFF764ba2), // Physio
             const Color(0xFF5E60CE), // Phenotype
-            const Color(0xFF2D9C79), // Check-ins
             const Color(0xFF5E60CE), // Profile
           ];
 

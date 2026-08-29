@@ -31,6 +31,7 @@ import 'package:usage_stats/usage_stats.dart';
 import 'package:flutter_sms_inbox/flutter_sms_inbox.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/background_service_helper.dart';
+import '../services/clinician_longitudinal_context_service.dart';
 import '../theme/theme_controller.dart';
 
 // ─────────────────────────────────────────────
@@ -264,27 +265,6 @@ class DayCoverage {
 }
 
 // ─────────────────────────────────────────────
-// NEW MODEL (4) — Check-in history, kept structurally separate from
-// passive data. Free-text answers are shown verbatim, never summarised
-// or re-scored.
-// ─────────────────────────────────────────────
-class CheckInEntry {
-  final DateTime timestamp;
-  final Map<String, String>
-  answers; // question label -> participant's own words
-
-  const CheckInEntry({required this.timestamp, required this.answers});
-
-  factory CheckInEntry.fromJson(Map<String, dynamic> j) => CheckInEntry(
-    timestamp:
-        DateTime.tryParse(j['timestamp'] as String? ?? '') ?? DateTime.now(),
-    answers: (j['answers'] as Map<String, dynamic>? ?? {}).map(
-      (k, v) => MapEntry(k, v.toString()),
-    ),
-  );
-}
-
-// ─────────────────────────────────────────────
 // PAGE
 // ─────────────────────────────────────────────
 class DigitalPhenotypingPage extends StatefulWidget {
@@ -312,7 +292,6 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
   ObservationPayload? _payload;
   PassiveMetrics _passive = const PassiveMetrics();
   List<DayCoverage> _coverage = [];
-  List<CheckInEntry> _checkIns = [];
 
   static const double _falseAlarmRate = 0.06; // ~6%, from validation on GLOBEM
 
@@ -328,7 +307,6 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
       _fetchObservations(),
       _fetchPassiveMetrics(),
       _fetchCoverage(),
-      _fetchCheckIns(),
     ]);
     if (mounted) setState(() => _loading = false);
   }
@@ -413,24 +391,6 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
           usable: false,
         );
       });
-    }
-  }
-
-  /// (4) Check-in history, participant's own words, never re-scored here.
-  Future<void> _fetchCheckIns() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cached = prefs.getString('c2_checkin_history');
-      if (cached != null && cached.isNotEmpty) {
-        final list = jsonDecode(cached) as List;
-        _checkIns =
-            list
-                .map((e) => CheckInEntry.fromJson(e as Map<String, dynamic>))
-                .toList()
-              ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      }
-    } catch (e) {
-      debugPrint('Check-in history parse error: $e');
     }
   }
 
@@ -662,12 +622,6 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
                         _batteryStatus,
                         'Affects collection reliability',
                       ),
-                      const SizedBox(height: 18),
-                      _sectionTitle('Check-ins'),
-                      const SizedBox(height: 10),
-                      _checkInSeparationCard(),
-                      const SizedBox(height: 10),
-                      _checkInHistoryLink(context),
                       const SizedBox(height: 18),
                       _clinicianExportCard(),
                       const SizedBox(height: 18),
@@ -1362,85 +1316,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
     ),
   );
 
-  // ─── (4) CHECK-IN SEPARATION + HISTORY LINK ──
-
-  Widget _checkInSeparationCard() => Container(
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: _C.tealBg,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: _C.teal.withValues(alpha: 0.3)),
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(Icons.edit_note_rounded, size: 17, color: _C.teal),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            'Your check-ins are kept separate from the passive data on '
-            'this page, because this study hasn\u2019t established a link '
-            'between the two \u2014 so your check-ins always reflect what '
-            'you actually told us, not a model\u2019s guess.',
-            style: GoogleFonts.poppins(
-              fontSize: 11.5,
-              color: _C.textSecondary,
-              height: 1.5,
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-
-  Widget _checkInHistoryLink(BuildContext context) => InkWell(
-    borderRadius: BorderRadius.circular(16),
-    onTap: () => Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => CheckInHistoryPage(entries: _checkIns)),
-    ),
-    child: Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _C.cardBase,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _C.border),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: _C.chip, shape: BoxShape.circle),
-            child: Icon(Icons.history_edu_rounded, color: _C.primary, size: 20),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'View check-in history',
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: _C.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${_checkIns.length} entries, in your own words',
-                  style: GoogleFonts.poppins(fontSize: 11, color: _C.textMuted),
-                ),
-              ],
-            ),
-          ),
-          Icon(Icons.chevron_right_rounded, color: _C.textMuted),
-        ],
-      ),
-    ),
-  );
-
-  // ─── (5) CLINICIAN EXPORT ─────────────────────
+  // ─── CLINICIAN EXPORT ─────────────────────
 
   Widget _clinicianExportCard() => Container(
     padding: const EdgeInsets.all(16),
@@ -1468,9 +1344,9 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
         ),
         const SizedBox(height: 6),
         Text(
-          'A plain-text summary of this week\u2019s raw figures, for you to '
-          'share yourself. Nothing is sent automatically \u2014 you stay in '
-          'control of what your clinician sees.',
+          'A privacy-safe longitudinal summary combining self-reports, physiological '
+          'event confirmations, intervention follow-ups and behavioural context. '
+          'Nothing is sent automatically — you choose whether to share it.',
           style: GoogleFonts.poppins(
             fontSize: 11.5,
             color: _C.textSecondary,
@@ -1484,7 +1360,7 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
             onPressed: _exportForClinician,
             icon: const Icon(Icons.ios_share_rounded, size: 16),
             label: Text(
-              'Export this week',
+              'Prepare clinician summary',
               style: GoogleFonts.poppins(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
@@ -1504,88 +1380,241 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
     ),
   );
 
-  /// Builds a plain-text weekly summary and opens the share sheet so the
-  /// participant can send it wherever they choose (email, print, hand a
-  /// phone to their clinician directly). No score is included — only the
-  /// same raw figures shown on this page, matching `display_permitted: false`.
+  /// Builds a participant-controlled plain-text clinician summary from the
+  /// four descriptive streams. Nothing is transmitted automatically.
   Future<void> _exportForClinician() async {
     final p = _payload;
-    final buf = StringBuffer();
-    final now = DateTime.now();
+    final participantId =
+        p?.participantId ?? widget.userId ?? await BackgroundServiceHelper.getCachedId();
 
-    buf.writeln('WEEKLY BEHAVIOURAL DATA SUMMARY');
-    buf.writeln('Generated ${now.toIso8601String()}');
-    buf.writeln(
-      'Participant ID: ${p?.participantId ?? widget.userId ?? 'unknown'}',
-    );
-    buf.writeln('');
-    buf.writeln('This is a plain export of raw, participant-facing figures.');
-    buf.writeln('It contains no risk score, prediction, or model output.');
-    buf.writeln('Nothing here should be treated as a diagnosis.');
-    buf.writeln('');
-    buf.writeln('-- Data coverage --');
-    final usableDays = _coverage.where((d) => d.usable).length;
-    buf.writeln('Usable data on $usableDays of ${_coverage.length} days.');
-    buf.writeln('');
-    buf.writeln('-- This week, raw figures --');
-    buf.writeln('Screen time today: ${_screenHours.toStringAsFixed(1)} hrs');
-    buf.writeln('Communication today: $_callCount calls, $_smsCount SMS');
-    if (_passive.homeHours != null && _passive.awayHours != null) {
+    try {
+      final context =
+          await ClinicianLongitudinalContextService.buildAndCache(participantId);
+      final buf = StringBuffer();
+      final now = DateTime.now();
+
+      Map<String, dynamic> mapOf(dynamic value) =>
+          value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
+
+      String pct(dynamic value) {
+        if (value is! num) return 'Not available';
+        return '${(value.toDouble() * 100).round()}%';
+      }
+
+      String scoreLine(
+        String label,
+        Map<String, dynamic> trend,
+        int maxScore,
+      ) {
+        if (trend['available'] != true || trend['latest_score'] == null) {
+          return '$label: no local trend recorded yet';
+        }
+        final latest = trend['latest_score'];
+        final previous = trend['previous_score'];
+        final delta = trend['delta'] as num?;
+        final change = delta == null
+            ? 'first locally retained result'
+            : delta > 0
+            ? '+${delta.toStringAsFixed(delta % 1 == 0 ? 0 : 1)} from previous'
+            : delta < 0
+            ? '${delta.toStringAsFixed(delta % 1 == 0 ? 0 : 1)} from previous'
+            : 'unchanged from previous';
+        return '$label: $latest / $maxScore'
+            '${previous == null ? '' : ' (previous $previous)'} · $change';
+      }
+
+      buf.writeln('CLINICIAN LONGITUDINAL CONTEXT SUMMARY');
+      buf.writeln('Generated: ${now.toIso8601String()}');
+      buf.writeln('Participant ID: $participantId');
+      buf.writeln('');
       buf.writeln(
-        'Time at home: ${_passive.homeHours!.toStringAsFixed(1)} hrs, '
-        'away: ${_passive.awayHours!.toStringAsFixed(1)} hrs',
+        'Participant-controlled descriptive summary. It is not a diagnosis, '
+        'does not replace clinical assessment, and is not sent automatically.',
       );
-    }
-    if (_passive.significantPlaces != null) {
-      buf.writeln('Significant places visited: ${_passive.significantPlaces}');
-    }
-    if (_passive.sleepProxyWindow != null) {
-      buf.writeln('Sleep proxy window: ${_passive.sleepProxyWindow}');
-    }
-    if (_passive.activityDataAvailable && _passive.activityProxyScore != null) {
-      buf.writeln(
-        'Activity proxy: ${_passive.activityProxyScore!.toStringAsFixed(2)}',
-      );
-    }
-    buf.writeln('');
-    if (p != null && p.reportable && p.observations.isNotEmpty) {
-      buf.writeln('-- Observations vs. own baseline --');
-      for (final o in p.observations) {
-        final z = o.z != null
-            ? '${o.z! >= 0 ? '+' : ''}${o.z!.toStringAsFixed(2)}\u03c3'
-            : 'n/a';
+      buf.writeln('');
+
+      // 1) Self-report trend
+      final selfReport = mapOf(context['self_report_trend']);
+      final sevenDay = mapOf(selfReport['seven_day']);
+      final ema = mapOf(sevenDay['ema']);
+      final gad7 = mapOf(selfReport['gad7']);
+      final pss10 = mapOf(selfReport['pss10']);
+
+      buf.writeln('1. SELF-REPORT TREND');
+      buf.writeln('EMA check-ins in last 7 days: ${ema['count'] ?? 0}');
+      if (ema['mean_anxiety'] != null) {
+        buf.writeln('Average EMA anxiety: ${ema['mean_anxiety']} / 5');
+      }
+      if (ema['mean_stress'] != null) {
+        buf.writeln('Average EMA stress: ${ema['mean_stress']} / 4');
+      }
+      if (ema['mean_fatigue'] != null) {
+        buf.writeln('Average EMA fatigue: ${ema['mean_fatigue']} / 5');
+      }
+      if (ema['mean_social_connection'] != null) {
         buf.writeln(
-          '${o.label}: $z (${o.direction}, confidence: ${o.confidence})',
+          'Average EMA social connection: ${ema['mean_social_connection']} / 5',
+        );
+      }
+      if (ema['common_context'] != null) {
+        buf.writeln('Most common EMA context: ${ema['common_context']}');
+      }
+      buf.writeln(scoreLine('GAD-7', gad7, 21));
+      buf.writeln(scoreLine('PSS-10', pss10, 40));
+      buf.writeln('');
+
+      // 2) Physiological event confirmations
+      final physiological =
+          mapOf(context['physiological_event_confirmations']);
+      final physiological30 = mapOf(physiological['thirty_day']);
+      buf.writeln('2. PHYSIOLOGICAL EVENT CONFIRMATIONS (30 DAYS)');
+      buf.writeln('Alert check-ins: ${physiological30['events'] ?? 0}');
+      buf.writeln('Answered: ${physiological30['answered'] ?? 0}');
+      buf.writeln(
+        'Participant-confirmed anxiety: '
+        '${physiological30['confirmed_anxiety'] ?? 0}',
+      );
+      buf.writeln(
+        'Did not confirm anxiety: ${physiological30['not_confirmed'] ?? 0}',
+      );
+      buf.writeln(
+        'Confirmation rate: ${pct(physiological30['confirmation_rate'])}',
+      );
+      if (physiological30['common_context'] != null) {
+        buf.writeln(
+          'Common situation during alert check-ins: '
+          '${physiological30['common_context']}',
+        );
+      }
+      buf.writeln(
+        'Interpretation: these are participant confirmations of app check-ins; '
+        'they do not prove every physiological alert was a clinical anxiety episode.',
+      );
+      buf.writeln('');
+
+      // 3) Intervention response
+      final intervention = mapOf(context['intervention_response']);
+      final intervention30 = mapOf(intervention['thirty_day']);
+      buf.writeln('3. INTERVENTION RESPONSE (30 DAYS)');
+      buf.writeln(
+        'Actions/interventions attempted: '
+        '${intervention30['intervention_attempts'] ?? 0}',
+      );
+      buf.writeln(
+        'Follow-ups answered: ${intervention30['followups_answered'] ?? 0}',
+      );
+      buf.writeln(
+        'Reported feeling better: ${intervention30['felt_better_count'] ?? 0}',
+      );
+      buf.writeln(
+        'Reported improvement rate: ${pct(intervention30['felt_better_rate'])}',
+      );
+      if (intervention30['most_helpful_action'] != null) {
+        buf.writeln(
+          'Most frequently helpful action: '
+          '${intervention30['most_helpful_action']}',
+        );
+      }
+      buf.writeln(
+        'Interpretation: follow-up improvement is participant reported and '
+        'observational; it does not establish treatment efficacy.',
+      );
+      buf.writeln('');
+
+      // 4) C2 behavioural changes
+      final c2 = mapOf(context['c2_behavioral_changes']);
+      final quality = mapOf(c2['data_quality']);
+      final change = mapOf(c2['change_detection']);
+      final patterns = c2['patterns'] is List ? c2['patterns'] as List : const [];
+
+      buf.writeln('4. COMPONENT 2 BEHAVIOURAL CONTEXT');
+      buf.writeln('Validation status: not_validated');
+      buf.writeln('Fusion eligible: false');
+      buf.writeln('Clinical/fusion score: not provided');
+      buf.writeln(
+        'Personal baseline ready: ${c2['baseline_ready'] == true ? 'Yes' : 'No'}',
+      );
+      if (quality['recent_usable_days'] != null) {
+        buf.writeln(
+          'Recent usable sensing days: ${quality['recent_usable_days']}',
+        );
+      }
+      if (quality['baseline_usable_days'] != null) {
+        buf.writeln(
+          'Usable baseline sensing days: ${quality['baseline_usable_days']}',
+        );
+      }
+      for (final raw in patterns.take(6)) {
+        if (raw is! Map) continue;
+        final label = raw['label'] ?? raw['key'] ?? 'Behaviour';
+        final direction = raw['direction'] ?? 'unknown';
+        buf.writeln('$label: $direction relative to personal baseline');
+      }
+      if (change['detected'] == true) {
+        buf.writeln(
+          'Sustained behavioural change detected: '
+          '${change['feature'] ?? 'behaviour'} · '
+          '${change['direction'] ?? 'changed'}',
+        );
+      } else {
+        buf.writeln('Sustained behavioural change detected: No');
+      }
+      buf.writeln(
+        'Interpretation: C2 is descriptive within-person behavioural context '
+        'only and contributes no numerical value to the multimodal composite.',
+      );
+      buf.writeln('');
+
+      // Additional current raw context already visible on this C2 screen.
+      buf.writeln('ADDITIONAL CURRENT PASSIVE CONTEXT');
+      final usableDays = _coverage.where((d) => d.usable).length;
+      buf.writeln('Usable sensing data: $usableDays of ${_coverage.length} recent days');
+      buf.writeln('Screen time today: ${_screenHours.toStringAsFixed(1)} hrs');
+      buf.writeln('Communication today: $_callCount calls, $_smsCount SMS');
+      if (_passive.homeHours != null && _passive.awayHours != null) {
+        buf.writeln(
+          'Time at home: ${_passive.homeHours!.toStringAsFixed(1)} hrs; '
+          'away: ${_passive.awayHours!.toStringAsFixed(1)} hrs',
+        );
+      }
+      if (_passive.significantPlaces != null) {
+        buf.writeln(
+          'Significant places visited: ${_passive.significantPlaces}',
+        );
+      }
+      if (_passive.sleepProxyWindow != null) {
+        buf.writeln('Sleep proxy window: ${_passive.sleepProxyWindow}');
+      }
+      if (_passive.activityDataAvailable &&
+          _passive.activityProxyScore != null) {
+        buf.writeln(
+          'Activity proxy: ${_passive.activityProxyScore!.toStringAsFixed(2)}',
         );
       }
       buf.writeln('');
+      buf.writeln('PRIVACY');
       buf.writeln(
-        'Note: roughly ${(_falseAlarmRate * 100).toStringAsFixed(0)}% of flagged '
-        'shifts like these occur without further significance (validation '
-        'false-alarm rate).',
+        'No exact GPS coordinates, raw location trail, app package names, '
+        'call/SMS content, or Component 2 experimental probability are included.',
       );
-    } else {
-      buf.writeln(
-        'Baseline not yet established \u2014 no comparative observations '
-        'available this week.',
-      );
-    }
-    buf.writeln('');
-    buf.writeln('-- Check-ins --');
-    buf.writeln(
-      '${_checkIns.length} check-in entries recorded, kept separate '
-      'from passive data and available to the participant in the app.',
-    );
 
-    try {
       await Clipboard.setData(ClipboardData(text: buf.toString()));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Copied summary to clipboard')),
+          const SnackBar(
+            content: Text('Clinician summary copied to clipboard'),
+          ),
         );
       }
     } catch (e) {
-      debugPrint('Export error: $e');
+      debugPrint('Clinician export error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not prepare clinician summary'),
+          ),
+        );
+      }
     }
   }
 
@@ -1620,136 +1649,3 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// (4) CHECK-IN HISTORY PAGE
-// A simple, chronological journal of past check-in answers, shown verbatim.
-// No aggregation, scoring, or cross-referencing against passive data here —
-// that separation is the point.
-// ─────────────────────────────────────────────────────────────────────────────
-class CheckInHistoryPage extends StatelessWidget {
-  final List<CheckInEntry> entries;
-  const CheckInHistoryPage({super.key, required this.entries});
-
-  String _formatDate(DateTime d) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    final hour = d.hour % 12 == 0 ? 12 : d.hour % 12;
-    final ampm = d.hour >= 12 ? 'PM' : 'AM';
-    final minute = d.minute.toString().padLeft(2, '0');
-    return '${months[d.month - 1]} ${d.day}, ${d.year} \u00b7 $hour:$minute $ampm';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _C.scaffold,
-      appBar: AppBar(
-        backgroundColor: _C.scaffold,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: _C.textPrimary,
-            size: 20,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          'Check-in history',
-          style: GoogleFonts.poppins(
-            color: _C.textPrimary,
-            fontWeight: FontWeight.w600,
-            fontSize: 17,
-          ),
-        ),
-      ),
-      body: SafeArea(
-        child: entries.isEmpty
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    'No check-ins yet. They\u2019ll show up here, in your own '
-                    'words, as soon as you complete one.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      color: _C.textMuted,
-                    ),
-                  ),
-                ),
-              )
-            : ListView.separated(
-                padding: const EdgeInsets.all(20),
-                itemCount: entries.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: 12),
-                itemBuilder: (context, i) {
-                  final e = entries[i];
-                  return Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: _C.cardBase,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: _C.border),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _formatDate(e.timestamp),
-                          style: GoogleFonts.poppins(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                            color: _C.p500,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        ...e.answers.entries.map(
-                          (qa) => Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  qa.key,
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 11.5,
-                                    color: _C.textMuted,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  qa.value,
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 13.5,
-                                    color: _C.textPrimary,
-                                    height: 1.4,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-      ),
-    );
-  }
-}
