@@ -109,23 +109,29 @@ def _get_c3_token() -> str:
     now = time.time()
     if _c3_jwt_cache["token"] and now < _c3_jwt_cache["expires_at"] - 300:
         return _c3_jwt_cache["token"]
-    # Log in fresh
-    try:
-        with httpx.Client() as lc:
-            r = lc.post(f"{C3_BASE}/auth/login",
-                        json={"clinician_id": _C3_CLINICIAN_ID,
-                              "password": _C3_PASSWORD},
-                        timeout=30.0)
-            r.raise_for_status()
-            body = r.json()
-            _c3_jwt_cache["token"] = body["access_token"]
-            _c3_jwt_cache["expires_at"] = now + body.get("expires_in", 43200)
-            return _c3_jwt_cache["token"]
-    except Exception as exc:
-        # Login failed — return empty so call_c3 gets a 401 and reports it
-        _c3_jwt_cache["token"] = ""
-        _c3_jwt_cache["expires_at"] = 0.0
-        return ""
+    # Log in fresh. HF Spaces sleep after inactivity — the first call can
+    # take 30-60s while the container wakes. We use a 60s timeout and one
+    # automatic retry with a 5s gap so a cold start doesn't fail the whole
+    # clinical note ingestion during a live demo.
+    for _attempt in range(2):
+        try:
+            with httpx.Client() as lc:
+                r = lc.post(f"{C3_BASE}/auth/login",
+                            json={"clinician_id": _C3_CLINICIAN_ID,
+                                  "password": _C3_PASSWORD},
+                            timeout=60.0)
+                r.raise_for_status()
+                body = r.json()
+                _c3_jwt_cache["token"] = body["access_token"]
+                _c3_jwt_cache["expires_at"] = now + body.get("expires_in", 43200)
+                return _c3_jwt_cache["token"]
+        except Exception:
+            if _attempt == 0:
+                time.sleep(5)
+                continue
+            _c3_jwt_cache["token"] = ""
+            _c3_jwt_cache["expires_at"] = 0.0
+            return ""
 
 
 TIMEOUT_S = float(os.getenv("COMPONENT_TIMEOUT_S", "30"))
