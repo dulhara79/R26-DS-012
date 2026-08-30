@@ -6,7 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../background_service.dart';
 import '../profile_page.dart';
 import '../services/auth_validators.dart';
+import '../services/api_service.dart';
 import '../services/demo_auth_service.dart';
+import '../services/participant_identity_service.dart';
 import '../services/user_manager.dart';
 import '../theme/app_theme.dart';
 import 'baseline_calibration_page.dart';
@@ -70,6 +72,7 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       final account = result.account!;
+      await _selfEnrolParticipant(account.participantId);
       UserManager().login(account.participantId);
       await _startCollectionIfPossible();
 
@@ -115,6 +118,7 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       final account = result.account!;
+      await _selfEnrolParticipant(account.participantId);
       UserManager().login(account.participantId);
       await _startCollectionIfPossible();
 
@@ -124,6 +128,16 @@ class _LoginPageState extends State<LoginPage> {
       );
     } finally {
       if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _selfEnrolParticipant(String participantId) async {
+    // Register this participant on the central backend so fusion can
+    // accumulate scores before a clinician scans their QR. Idempotent
+    // server-side, so a retry after a dropped response is safe.
+    final subjectId = await ApiService.selfEnrol(participantId);
+    if (subjectId != null && subjectId.isNotEmpty) {
+      await ParticipantIdentityService.saveCentralSubjectId(subjectId);
     }
   }
 
