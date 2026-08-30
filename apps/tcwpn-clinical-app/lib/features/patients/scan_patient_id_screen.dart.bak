@@ -49,11 +49,6 @@ class _ScanPatientIdScreenState extends State<ScanPatientIdScreen> {
   /// experience than one that never scanned.
   static final RegExp _participantId = RegExp(r'^P_[A-F0-9]{16}$');
 
-  /// Aura wraps the participant id in a deep-link scheme:
-  ///   clinanx://patient/P_8A0840A798B81072
-  static final RegExp _auraDeepLink =
-      RegExp(r'clinanx://patient/(.+)', caseSensitive: false);
-
   final MobileScannerController _controller = MobileScannerController(
     detectionSpeed: DetectionSpeed.noDuplicates,
     formats: const [BarcodeFormat.qrCode],
@@ -76,12 +71,8 @@ class _ScanPatientIdScreenState extends State<ScanPatientIdScreen> {
     if (_handled) return;
 
     for (final barcode in capture.barcodes) {
-      var raw = (barcode.rawValue ?? '').trim();
-      if (raw.isEmpty) continue;
-      // Strip the clinanx://patient/ deep-link wrapper AURA adds to its QR
-      final dlMatch = _auraDeepLink.firstMatch(raw);
-      if (dlMatch != null) raw = dlMatch.group(1)!.trim();
-      final value = raw.toUpperCase();
+      final value = (barcode.rawValue ?? '').trim().toUpperCase();
+      if (value.isEmpty) continue;
 
       if (_participantId.hasMatch(value)) {
         _handled = true;

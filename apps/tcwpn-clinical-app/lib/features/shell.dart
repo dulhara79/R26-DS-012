@@ -42,7 +42,7 @@ class _AppShellState extends State<AppShell> {
     return Scaffold(
       body: IndexedStack(
         index: _tab,
-        children: [
+        children: const [
           _CaseloadTab(),
           _PatientsTab(),
           AlertsScreen(),
@@ -143,7 +143,7 @@ class _CaseloadTab extends StatelessWidget {
               children: [
                 _bandStrip(context, bandCounts, unscored, roster.patients.length),
                 const SizedBox(height: Ds.s6),
-                SectionLabel('Needs review'),
+                const SectionLabel('Needs review'),
                 if (review.isEmpty)
                   Panel(
                     child: Row(
@@ -173,7 +173,7 @@ class _CaseloadTab extends StatelessWidget {
                         ),
                       )),
                 const SizedBox(height: Ds.s6),
-                SectionLabel('Framework'),
+                const SectionLabel('Framework'),
                 const _FrameworkPanel(),
                 const SizedBox(height: Ds.s4),
                 const DecisionSupportNotice(),

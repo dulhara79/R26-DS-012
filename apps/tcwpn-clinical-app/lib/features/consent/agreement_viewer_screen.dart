@@ -85,11 +85,12 @@ class _ReceiptTabState extends State<_ReceiptTab> {
   void initState() {
     super.initState();
     ConsentStore.current().then((r) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _rec = r;
           _loading = false;
         });
+      }
     });
   }
 
@@ -157,7 +158,7 @@ class _ReceiptTabState extends State<_ReceiptTab> {
           ),
         ),
         const SizedBox(height: Ds.s5),
-        SectionLabel('Acceptance receipt'),
+        const SectionLabel('Acceptance receipt'),
         Panel(
           child: Column(
             children: [
@@ -194,7 +195,7 @@ class _ReceiptTabState extends State<_ReceiptTab> {
         ),
         if (!r.isWithdrawn) ...[
           const SizedBox(height: Ds.s6),
-          SectionLabel('Withdrawing'),
+          const SectionLabel('Withdrawing'),
           const InlineNotice(
             icon: Icons.info_outline_rounded,
             text:

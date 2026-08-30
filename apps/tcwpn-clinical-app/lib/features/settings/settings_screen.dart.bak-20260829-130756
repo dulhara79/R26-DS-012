@@ -6,7 +6,6 @@
 // from configuration or from the model service's own /health response; nothing
 // is a literal typed into the UI.
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -342,19 +341,7 @@ class _PinningPanelState extends State<_PinningPanel> {
 
     return Column(
       children: [
-        if (kIsWeb)
-          const Padding(
-            padding: EdgeInsets.only(bottom: Ds.s3),
-            child: InlineNotice(
-              icon: Icons.gpp_maybe_outlined,
-              tone: Ds.amber,
-              text: 'This is a web build. Certificate pinning is a '
-                  'native-only capability, so the browser performs TLS '
-                  'validation instead. Use the Android or iOS build with '
-                  'patient data.',
-            ),
-          )
-        else if (kPinningDisabled)
+        if (kPinningDisabled)
           const Padding(
             padding: EdgeInsets.only(bottom: Ds.s3),
             child: InlineNotice(
@@ -399,7 +386,7 @@ class _PinningPanelState extends State<_PinningPanel> {
                   const SizedBox(width: Ds.s3),
                   Expanded(
                     child: Text(
-                      configured && !kPinningDisabled && !kIsWeb
+                      configured && !kPinningDisabled
                           ? 'Traffic is restricted to pinned certificate '
                               'authorities'
                           : 'Pinning is not active',
