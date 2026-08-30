@@ -24,7 +24,6 @@ import '../fusion/fusion_detail_screen.dart';
 import '../tcwpn/note_analysis_screen.dart';
 import '../tcwpn/tcwpn_result_screen.dart';
 import '../tcwpn/support_set_screen.dart';
-import '../explain/explain_screen.dart';
 
 class PatientChartScreen extends StatelessWidget {
   final Patient patient;
@@ -65,19 +64,6 @@ class _ChartBodyState extends State<_ChartBody> {
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: 'Why this tier?',
-            icon: const Icon(Icons.lightbulb_outline_rounded),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ChangeNotifierProvider.value(
-                  value: context.read<ChartController>(),
-                  child: const ExplainScreen(),
-                ),
-              ),
-            ),
-          ),
           IconButton(
             tooltip: 'Support set for this patient',
             icon: const Icon(Icons.dataset_outlined),

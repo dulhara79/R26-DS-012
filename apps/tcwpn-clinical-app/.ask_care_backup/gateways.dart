@@ -30,7 +30,6 @@
 
 import '../../core/config/env.dart';
 import '../../domain/models.dart';
-import '../../domain/evidence.dart';
 import 'api_client.dart';
 import 'session.dart';
 
@@ -207,40 +206,6 @@ class CentralBackendGateway {
       _api.post('/v1/doctor/patients/$subjectId/evidence', {
         'question': question,
       });
-
-  /// Global CARE-AnxRAG query - not scoped to any patient.
-  ///
-  /// Backs the Ask CARE tab, where a clinician asks a knowledge-base question
-  /// without first selecting a patient. Hits POST /v1/evidence/ask.
-  ///
-  /// The timeout is inferenceTimeout (180s), not quickTimeout: CARE-AnxRAG
-  /// generates locally through Ollama and a real answer has been measured at
-  /// ~58s, so a 25s limit would report "unavailable" for a service that was
-  /// working correctly.
-  ///
-  /// Transport failures become an `unavailable` result rather than an
-  /// exception, so the screen can tell "could not reach the service" apart
-  /// from "the service declined to answer" without either being mistaken for
-  /// an answer.
-  Future<EvidenceResult> askEvidence(String question) async {
-    final trimmed = question.trim();
-    if (trimmed.isEmpty) {
-      return EvidenceResult.failure('Enter a question first.');
-    }
-    try {
-      final json = await _api.post(
-        '/v1/evidence/ask',
-        {'question': trimmed},
-        timeout: Env.inferenceTimeout,
-      );
-      return EvidenceResult.fromJson(json);
-    } on ApiException catch (e) {
-      return EvidenceResult.failure(e.toString());
-    } catch (e) {
-      return EvidenceResult.failure('$e');
-    }
-  }
-
 
   /// Records the clinician's tier judgement against a SPECIFIC fusion row.
   ///
