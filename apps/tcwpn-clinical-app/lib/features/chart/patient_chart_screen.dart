@@ -53,6 +53,7 @@ class _ChartBodyState extends State<_ChartBody> {
   Widget build(BuildContext context) {
     final chart = context.watch<ChartController>();
     final p = chart.patient;
+    final pairing = chart.pendingPairing;
 
     return Scaffold(
       appBar: AppBar(
@@ -114,16 +115,29 @@ class _ChartBodyState extends State<_ChartBody> {
               label: const Text('Analyse note'),
             )
           : null,
-      body: chart.status == ChartStatus.idle
-          ? const Center(child: CircularProgressIndicator(color: Ds.brand))
-          : IndexedStack(
-              index: _section,
-              children: [
-                _RiskSection(chart: chart),
-                _NotesSection(chart: chart),
-                const _InterventionSection(),
-              ],
+      body: Column(
+        children: [
+          if (pairing != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Ds.s4, Ds.s3, Ds.s4, 0),
+              child: PairingCodeNotice(enrolment: pairing),
             ),
+          Expanded(
+            child: chart.status == ChartStatus.idle
+                ? const Center(
+                    child: CircularProgressIndicator(color: Ds.brand),
+                  )
+                : IndexedStack(
+                    index: _section,
+                    children: [
+                      _RiskSection(chart: chart),
+                      _NotesSection(chart: chart),
+                      const _InterventionSection(),
+                    ],
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -137,6 +151,30 @@ class _ChartBodyState extends State<_ChartBody> {
           ),
         ),
       );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+class PairingCodeNotice extends StatelessWidget {
+  final EnrolmentResult enrolment;
+
+  const PairingCodeNotice({super.key, required this.enrolment});
+
+  @override
+  Widget build(BuildContext context) {
+    final expiresAt = enrolment.expiresAt;
+    final expiryLabel = expiresAt == null
+        ? ''
+        : '\nExpires ${DateFormat('d MMM y, HH:mm').format(expiresAt.toUtc())} UTC';
+
+    return InlineNotice(
+      icon: Icons.link_rounded,
+      tone: Ds.amber,
+      text: 'PAIRING CODE: ${enrolment.pairingCode}\n'
+          'Ask the patient to enter this code in the Aura app.'
+          '$expiryLabel',
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
