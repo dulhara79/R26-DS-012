@@ -40,12 +40,12 @@ class AlertsScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(Ds.s4, Ds.s4, Ds.s4, Ds.s10),
               children: [
                 if (open.isNotEmpty) ...[
-                  SectionLabel('Awaiting acknowledgement'),
+                  const SectionLabel('Awaiting acknowledgement'),
                   ...open.map((a) => _AlertRow(alert: a)),
                   const SizedBox(height: Ds.s5),
                 ],
                 if (closed.isNotEmpty) ...[
-                  SectionLabel('Acknowledged'),
+                  const SectionLabel('Acknowledged'),
                   ...closed.take(30).map((a) => _AlertRow(alert: a)),
                 ],
               ],

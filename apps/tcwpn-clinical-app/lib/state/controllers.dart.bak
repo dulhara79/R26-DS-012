@@ -323,23 +323,6 @@ class ChartController extends ChangeNotifier {
       return resolved;
     }
 
-    // Patient-first: the patient registered in AURA before visiting the
-    // clinic. Attach links the clinician to the subject AURA already created.
-    if (_participantIdPattern.hasMatch(mrn.trim().toUpperCase())) {
-      final attached = await _backend.attach(
-        appUserId: mrn.trim().toUpperCase(),
-        mrn: mrn,
-        enrolledBy: clinicianId,
-      );
-      if (attached != null) {
-        _subjectId = attached;
-        await _linkBehaviouralId(attached);
-        await RecordStore.saveSubjectId(mrn, attached);
-        notifyListeners();
-        return attached;
-      }
-    }
-
     final enrolment = await _backend.enrol(mrn: mrn, enrolledBy: clinicianId);
     _subjectId = enrolment.subjectId;
     await _linkBehaviouralId(enrolment.subjectId);

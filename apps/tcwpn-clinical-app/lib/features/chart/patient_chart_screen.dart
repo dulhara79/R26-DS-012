@@ -350,7 +350,7 @@ class _RiskSection extends StatelessWidget {
             ],
           ],
           const SizedBox(height: Ds.s6),
-          SectionLabel('Where each signal comes from'),
+          const SectionLabel('Where each signal comes from'),
           if (f == null)
             const Panel(
               child: Text(
@@ -549,7 +549,7 @@ class _NotesSection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: Ds.s5),
-        SectionLabel('Note history'),
+        const SectionLabel('Note history'),
         ...chart.notes.map((n) => Padding(
               padding: const EdgeInsets.only(bottom: Ds.s3),
               child: _NoteTile(note: n, chart: chart),
@@ -663,17 +663,17 @@ class _InterventionSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListView(
         padding: const EdgeInsets.fromLTRB(Ds.s4, Ds.s4, Ds.s4, Ds.s10),
-        children: [
-          const InlineNotice(
+        children: const [
+          InlineNotice(
             icon: Icons.link_rounded,
             text: 'The intervention engine and its GAD-7 flow are owned by '
                 'Component 3. This section renders its calibrated tier, conformal '
                 'prediction set, and SHAP attribution once the C3 service address '
                 'is configured in Settings.',
           ),
-          const SizedBox(height: Ds.s5),
+          SizedBox(height: Ds.s5),
           SectionLabel('Expected from the C3 service'),
-          const Panel(
+          Panel(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

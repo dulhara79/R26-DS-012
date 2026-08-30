@@ -118,7 +118,7 @@ class _SupportSetScreenState extends State<SupportSetScreen> {
           ),
           const SizedBox(height: Ds.s5),
 
-          SectionLabel('Add a labelled note'),
+          const SectionLabel('Add a labelled note'),
           Panel(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -180,10 +180,10 @@ class _SupportSetScreenState extends State<SupportSetScreen> {
                   ),
                 ),
                 const SizedBox(height: Ds.s2),
-                Text(
+                const Text(
                   'Recency weighting discounts older notes, so an accurate date '
                   'changes how much this example counts.',
-                  style: const TextStyle(fontSize: 11, color: Ds.inkFaint, height: 1.4),
+                  style: TextStyle(fontSize: 11, color: Ds.inkFaint, height: 1.4),
                 ),
                 const SizedBox(height: Ds.s4),
                 ElevatedButton.icon(
@@ -196,7 +196,7 @@ class _SupportSetScreenState extends State<SupportSetScreen> {
           ),
           const SizedBox(height: Ds.s5),
 
-          SectionLabel('Current examples'),
+          const SectionLabel('Current examples'),
           if (notes.isEmpty)
             const Panel(
               child: Text(

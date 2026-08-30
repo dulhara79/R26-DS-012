@@ -209,8 +209,8 @@ class _LoadingState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: const [
+    return const Column(
+      children: [
         SizedBox(
           width: 28,
           height: 28,
@@ -248,9 +248,9 @@ class _EmptyState extends StatelessWidget {
         borderRadius: BorderRadius.circular(Ds.rMd),
         border: Border.all(color: Ds.brandEdge, width: 0.5),
       ),
-      child: Column(
+      child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
+        children: [
           Text(
             'Evidence retrieval, not diagnosis',
             style: TextStyle(
@@ -325,8 +325,8 @@ class _CrisisCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: const [
+          const Row(
+            children: [
               Icon(Icons.warning_amber_rounded, color: Ds.darkRed, size: 20),
               SizedBox(width: Ds.s2),
               Expanded(
@@ -390,8 +390,8 @@ class _AbstainedCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: const [
+          const Row(
+            children: [
               Icon(Icons.help_outline_rounded, color: Ds.amber, size: 20),
               SizedBox(width: Ds.s2),
               Expanded(
@@ -471,8 +471,8 @@ class _UnavailableCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: const [
+          const Row(
+            children: [
               Icon(Icons.cloud_off_rounded, color: Ds.grey, size: 20),
               SizedBox(width: Ds.s2),
               Expanded(

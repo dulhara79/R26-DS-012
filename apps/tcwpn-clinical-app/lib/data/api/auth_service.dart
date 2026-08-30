@@ -63,7 +63,7 @@ class AuthService {
     final authHost = Uri.tryParse(_base)?.host.toLowerCase() ?? '';
     final tcwpnHost = Uri.tryParse(Env.tcwpnBase)?.host.toLowerCase() ?? '';
     if (authHost.isNotEmpty && authHost == tcwpnHost) {
-      throw AuthMessage(
+      throw const AuthMessage(
         'AUTH_BASE is currently set to the TC-WPN model service ($_base). '
         'Password reset and registration must use your auth backend '
         '(for example: https://<org>-clinanx-auth.hf.space).',
