@@ -148,6 +148,40 @@ r = client.get("/v1/subjects/resolve", params={"mrn": "nhsl-2026-0142  "})
 check("MRN normalised (case/whitespace)", r.json().get("subject_id") == P1)
 
 
+# Patient-first flow: Aura registers before the clinician scans its QR.
+self_id = "P_1234567890ABCDEF"
+r = client.post("/v1/subjects/self", json={"app_user_id": self_id})
+check("patient self-enrolment returns 200", r.status_code == 200, r.text)
+P_SELF = r.json().get("subject_id")
+check("self-enrolment returns a subject UUID", len(P_SELF or "") == 36)
+
+r = client.post("/v1/subjects/self", json={"app_user_id": self_id})
+check("repeated self-enrolment reuses subject",
+      r.status_code == 200 and r.json().get("subject_id") == P_SELF, r.text)
+
+r = client.get("/v1/subjects/resolve", params={"app_user_id": self_id})
+check("self-enrolled patient resolves by app_user_id",
+      r.status_code == 200 and r.json().get("subject_id") == P_SELF, r.text)
+r = client.get("/v1/subjects/resolve", params={"mrn": self_id})
+check("doctor QR lookup resolves the self-enrolled patient",
+      r.status_code == 200 and r.json().get("subject_id") == P_SELF, r.text)
+
+r = client.post("/v1/subjects", json={"mrn": self_id, "enrolled_by": "dr.perera"})
+check("doctor enrolment reuses the self-enrolled subject",
+      r.status_code == 200 and r.json().get("subject_id") == P_SELF, r.text)
+
+doctor_first_id = "P_FEDCBA0987654321"
+r = client.post("/v1/subjects", json={"mrn": doctor_first_id})
+P_DOCTOR_FIRST = r.json().get("subject_id")
+r = client.post("/v1/subjects/self", json={"app_user_id": doctor_first_id})
+check("self-enrolment reuses an existing doctor subject",
+      r.status_code == 200 and r.json().get("subject_id") == P_DOCTOR_FIRST, r.text)
+
+r = client.post("/v1/subjects/self", json={"app_user_id": "invalid"})
+check("self-enrolment rejects malformed participant IDs", r.status_code == 422,
+      f"got {r.status_code}: {r.text}")
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 section("3 · The MRN is never stored in plaintext")
 import sqlite3  # noqa: E402
