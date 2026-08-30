@@ -674,10 +674,10 @@ class DecisionSupportNotice extends StatelessWidget {
             const SizedBox(width: Ds.s3),
             Expanded(
               child: RichText(
-                text: TextSpan(
-                  style: const TextStyle(
+                text: const TextSpan(
+                  style: TextStyle(
                       fontSize: 12, color: Ds.inkMuted, height: 1.5),
-                  children: const [
+                  children: [
                     TextSpan(
                       text: 'Clinical decision support. ',
                       style:

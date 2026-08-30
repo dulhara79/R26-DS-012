@@ -20,6 +20,8 @@
 // It is deliberately NOT persisted here. SecureStore remains the only place the
 // token is written to disk.
 
+import '../local/stores.dart';
+
 class Session {
   Session._();
 
@@ -38,5 +40,10 @@ class Session {
   static void clear() {
     _token = null;
     _clinicianId = null;
+  }
+
+  static Future<void> signOut() async {
+    await SecureStore.signOut();
+    clear();
   }
 }

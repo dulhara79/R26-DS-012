@@ -111,7 +111,7 @@ class FusionDetailScreen extends StatelessWidget {
             if (fusion.rejected.isNotEmpty ||
                 fusion.usableModalities.isNotEmpty) ...[
               const SizedBox(height: Ds.s5),
-              SectionLabel('Fusion gate'),
+              const SectionLabel('Fusion gate'),
               Panel(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -141,7 +141,7 @@ class FusionDetailScreen extends StatelessWidget {
 
             // ── Tier ───────────────────────────────────────────────────────
             const SizedBox(height: Ds.s5),
-            SectionLabel('Tier'),
+            const SectionLabel('Tier'),
             Panel(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -204,7 +204,7 @@ class FusionDetailScreen extends StatelessWidget {
             // ── Conformal ──────────────────────────────────────────────────
             if (fusion.conformal != null) ...[
               const SizedBox(height: Ds.s5),
-              SectionLabel('Conformal prediction set'),
+              const SectionLabel('Conformal prediction set'),
               Panel(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -226,7 +226,7 @@ class FusionDetailScreen extends StatelessWidget {
 
             // ── Provenance ─────────────────────────────────────────────────
             const SizedBox(height: Ds.s5),
-            SectionLabel('Provenance'),
+            const SectionLabel('Provenance'),
             Panel(
               child: Column(
                 children: [
@@ -257,7 +257,7 @@ class FusionDetailScreen extends StatelessWidget {
             // ── Largest contributor ────────────────────────────────────────
             if (latestNote?.result != null) ...[
               const SizedBox(height: Ds.s5),
-              SectionLabel('Most recent clinical note'),
+              const SectionLabel('Most recent clinical note'),
               Panel(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
