@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-
+import '../services/fusion_risk_service.dart';
 import '../services/chest_strap_service.dart';
 import '../services/api_service.dart';
 import '../services/anxiety_feedback_service.dart';
@@ -50,7 +50,8 @@ class HomePageState extends State<HomePage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-
+    FusionRiskService.instance.startPolling();
+    FusionRiskService.instance.latest.addListener(_onFusionRiskChanged);
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
@@ -161,9 +162,13 @@ class HomePageState extends State<HomePage> with TickerProviderStateMixin {
     _notificationThrottleTimer?.cancel();
     _fadeController.dispose();
     _pulseController.dispose();
+    FusionRiskService.instance.latest.removeListener(_onFusionRiskChanged);
     super.dispose();
   }
 
+void _onFusionRiskChanged() {
+    if (mounted) setState(() {});
+}
   // ── Combined Risk Logic ─────────────────────────────────────
   bool get _hasLiveReading =>
       _chestStrap.hasLiveWornReading && (_lastReading?.isWorn ?? false);
@@ -171,10 +176,14 @@ class HomePageState extends State<HomePage> with TickerProviderStateMixin {
   /// Uses the combined score when it is fresh. If only the chest strap is
   /// available, that reading becomes the current overall score.
   double? get _overallRisk {
+    final backendRisk = FusionRiskService.instance.latest.value;
+    if (backendRisk != null && backendRisk.hasScore) {
+      return backendRisk.scoreOutOf100;
+    }
     final combinedRisk = AnxietyFeedbackService().latestFusionRisk;
     if (combinedRisk != null) return combinedRisk;
     return _hasLiveReading ? _lastReading!.riskScore : null;
-  }
+}
 
   bool get _hasOverallRisk => _overallRisk != null;
 

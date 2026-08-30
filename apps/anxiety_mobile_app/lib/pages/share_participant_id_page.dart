@@ -10,7 +10,7 @@ class ShareParticipantIdPage extends StatelessWidget {
 
   const ShareParticipantIdPage({super.key, required this.participantId});
 
-  String get _qrData => 'clinanx://patient/$participantId';
+  String get _qrData => participantId;
 
   Future<void> _connectWithPairingCode(BuildContext context) async {
     final formKey = GlobalKey<FormState>();

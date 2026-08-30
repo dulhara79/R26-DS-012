@@ -17,7 +17,6 @@ import 'services/background/daily_reminder.dart';
 import 'services/participant_identity_service.dart';
 import 'services/rating_settings.dart';
 import 'theme/theme_controller.dart';
-import 'services/api_service.dart';
 
 class ProfilePage extends StatefulWidget {
   final bool isTab;
@@ -315,28 +314,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
     await prefs.setBool('profile_complete', true);
     await prefs.setString('user_profile_data', jsonEncode(profile));
-
-    // Send demographics to the central backend for C4/DCAR scoring.
-    // GAD-7 items are not collected on this screen, so send zeros — the
-    // GAD-7 screen sends the real answers separately and re-scores C4.
-    final pid = prefs.getString('participant_id') ?? '';
-    if (pid.isNotEmpty) {
-      final eduMap = {
-        'No formal education': 'none',
-        'Primary school': 'primary',
-        'Secondary school': 'secondary',
-        'Vocational/Technical': 'vocational',
-        'University/College': 'tertiary',
-        'Postgraduate': 'postgraduate',
-      };
-      ApiService.submitContextualIntake(
-        participantId: pid,
-        gad7Items: [0, 0, 0, 0, 0, 0, 0],
-        gender: _gender?.toLowerCase(),
-        age: int.tryParse(_ageController.text.trim()),
-        edu: eduMap[_educationLevel] ?? 'tertiary',
-      );
-    }
 
     if (mounted) {
       setState(() {
