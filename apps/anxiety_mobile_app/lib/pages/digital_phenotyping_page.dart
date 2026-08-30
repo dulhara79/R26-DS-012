@@ -79,6 +79,7 @@ class _C {
   static Color get border =>
       _dark ? const Color(0xFF383643) : const Color(0xFFE8E5F4);
 }
+
 // ─────────────────────────────────────────────
 // DATA MODEL — mirrors component2_output.py; unchanged from v1
 // ─────────────────────────────────────────────
@@ -1647,3 +1648,4 @@ class _DigitalPhenotypingPageState extends State<DigitalPhenotypingPage> {
     ),
   );
 }
+
