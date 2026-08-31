@@ -208,6 +208,7 @@ class _VerdictHeader extends StatelessWidget {
             runSpacing: Ds.s2,
             children: [
               _Fact('Modalities used', '${fusion.modalitiesUsed}'),
+              _Fact('Assessment status', fusion.assessmentLabel),
               if (fusion.confidence != null)
                 _Fact('Confidence',
                     '${(fusion.confidence! * 100).round()}%'),
