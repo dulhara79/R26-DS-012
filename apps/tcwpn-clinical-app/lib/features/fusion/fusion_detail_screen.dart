@@ -238,7 +238,8 @@ class FusionDetailScreen extends StatelessWidget {
                             .format(fusion.updatedAt!),
                   ),
                   _kv('Modalities',
-                      '${fusion.modalitiesUsed} of ${Modality.all.length} used in the composite'),
+                      '${fusion.modalitiesUsed} of 3 used in the composite'),
+                  _kv('Assessment status', fusion.assessmentLabel),
                   _kv(
                       'Weights',
                       fusion.renormalised

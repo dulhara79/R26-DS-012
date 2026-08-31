@@ -619,10 +619,13 @@ class PatientRow extends StatelessWidget {
                 Text(fusion!.compositeLabel,
                     style: AppTheme.data(size: 11.5, weight: FontWeight.w600)),
                 const SizedBox(width: Ds.s2),
-                Text(
-                    '${fusion!.modalitiesUsed} of ${Modality.all.length} modalities',
-                    style: const TextStyle(fontSize: 11, color: Ds.inkFaint)),
-                const Spacer(),
+                Expanded(
+                  child: Text(
+                    '${fusion!.assessmentLabel} · ${fusion!.modalitiesUsed} of 3 modalities',
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: Ds.inkFaint),
+                  ),
+                ),
                 if (fusion!.updatedAt != null)
                   Text(DateFormat('d MMM, HH:mm').format(fusion!.updatedAt!),
                       style: const TextStyle(fontSize: 11, color: Ds.inkFaint)),
