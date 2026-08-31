@@ -97,7 +97,7 @@ class FusionRiskService {
 
   Timer? _pollTimer;
 
-  static const Duration _pollInterval = Duration(minutes: 5);
+  static const Duration _pollInterval = Duration(seconds: 5);
   static const Duration _timeout = Duration(seconds: 10);
 
   /// Fetches once. Returns null when unpaired, unreachable, or on any
