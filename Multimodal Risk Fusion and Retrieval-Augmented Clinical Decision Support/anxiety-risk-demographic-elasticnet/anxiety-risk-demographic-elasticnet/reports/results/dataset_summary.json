@@ -1,0 +1,16 @@
+{
+  "raw_rows": 24292,
+  "clean_rows": 24268,
+  "excluded_age_rows": 24,
+  "positive_count": 542,
+  "positive_prevalence": 0.022333937695731002,
+  "features": [
+    "age",
+    "gender",
+    "edu",
+    "smoke",
+    "drink"
+  ],
+  "target": "GAD-7 >= 10",
+  "isi_used": false
+}

@@ -1,0 +1,12 @@
+feature,coefficient,odds_ratio,reference
+drink_current regular drinker (more than once a week),1.4800415185679305,4.393128073518739,vs never drinks
+"drink_drank in the past (more than once a week), but not in the past year",1.2156441719314175,3.372465812573,vs never drinks
+smoke_current smoker (cumulative smoking >10 packs),1.004586561657719,2.7307780310637906,vs never smokes
+drink_drinks occasionally (less than once a week),0.7188784002044237,2.0521302505160333,vs never drinks
+gender_male,-0.49493458730534495,0.6096107822760896,vs female
+smoke_occasional smoker (cumulative smoking <10 packs),0.4751626568227621,1.608275773239066,vs never smokes
+"smoke_former smoker (cumulative smoking >10 packs), but not in the past year",0.39254601921653043,1.480746006484224,vs never smokes
+edu_master's degree,-0.31857212076796104,0.7271866308060738,vs bachelor's degree
+edu_associate degree,0.21819951295334275,1.2438352041000595,vs bachelor's degree
+age,0.08803723898358622,1.0920287873131123,per 1-year increase
+edu_doctorate degree,0.0,1.0,vs bachelor's degree

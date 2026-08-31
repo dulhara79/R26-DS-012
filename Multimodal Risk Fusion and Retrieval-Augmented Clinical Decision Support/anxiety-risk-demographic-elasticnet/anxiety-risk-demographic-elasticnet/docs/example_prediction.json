@@ -1,0 +1,8 @@
+{
+  "demographic_probability": 0.1966078407311266,
+  "demographic_probability_percent": 19.660784073112662,
+  "demographic_fusion_score": 0.9145471813615884,
+  "reference_prevalence": 0.022355001545276604,
+  "target": "GAD-7 >= 10",
+  "model": "calibrated_elastic_net_logistic_regression"
+}

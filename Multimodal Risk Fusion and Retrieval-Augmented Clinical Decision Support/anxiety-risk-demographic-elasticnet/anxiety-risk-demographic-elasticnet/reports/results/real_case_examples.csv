@@ -1,0 +1,4 @@
+case,export_id,age,gender,edu,smoke,drink,actual_gad7_positive,demographic_probability,demographic_probability_percent,demographic_fusion_score
+low_predicted_vulnerability,66804,18.0,male,master's degree,never smokes,never drinks,0,0.006829692382559751,0.6829692382559751,0.2312038633118963
+high_predicted_vulnerability_common_age,75738,22.0,female,bachelor's degree,current smoker (cumulative smoking >10 packs),current regular drinker (more than once a week),1,0.1966078407311266,19.660784073112662,0.9145471813615884
+highest_scoring_actual_positive,75738,22.0,female,bachelor's degree,current smoker (cumulative smoking >10 packs),current regular drinker (more than once a week),1,0.1966078407311266,19.660784073112662,0.9145471813615884

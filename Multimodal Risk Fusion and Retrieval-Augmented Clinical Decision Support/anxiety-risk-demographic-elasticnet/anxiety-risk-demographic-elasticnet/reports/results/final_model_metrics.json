@@ -1,0 +1,40 @@
+{
+  "roc_auc": 0.6137293003074714,
+  "pr_auc": 0.042892324727843156,
+  "brier_score": 0.021664096502631913,
+  "log_loss": 0.10455528840063714,
+  "best_cv_pr_auc": 0.0615885959830374,
+  "best_params": {
+    "C": 1.0,
+    "l1_ratio": 0.75,
+    "class_weight": null
+  },
+  "n_total_clean": 24268,
+  "n_development": 19414,
+  "n_test": 4854,
+  "development_positive_count": 434,
+  "test_positive_count": 108,
+  "development_prevalence": 0.022355001545276604,
+  "test_prevalence": 0.022249690976514216,
+  "test_probability_min": 0.006829692382559751,
+  "test_probability_median": 0.018284733498692758,
+  "test_probability_max": 0.39509856660653553,
+  "test_fusion_score_min": 0.2312038633118963,
+  "test_fusion_score_median": 0.44889451691487037,
+  "test_fusion_score_max": 0.9661757019660455,
+  "common_age_range_1st_to_99th_percentile": [
+    18.0,
+    27.0
+  ],
+  "calibration": "sigmoid (Platt scaling)",
+  "target": "GAD-7 >= 10",
+  "features": [
+    "age",
+    "gender",
+    "edu",
+    "smoke",
+    "drink"
+  ],
+  "isi_used": false,
+  "fusion_transform": "sigmoid(logit(probability) - logit(development_prevalence))"
+}

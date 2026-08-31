@@ -1,0 +1,21 @@
+{
+  "component": "demographic_lifestyle",
+  "version": "1.0",
+  "inputs": {
+    "age": "number, training acceptance range 15-65",
+    "gender": "female | male",
+    "education": "dataset education category",
+    "smoking": "dataset smoking category",
+    "drinking": "dataset drinking category"
+  },
+  "outputs": {
+    "demographic_probability": "calibrated probability of GAD-7 >= 10",
+    "demographic_probability_percent": "same probability multiplied by 100",
+    "demographic_fusion_score": "0-1 baseline-adjusted evidence index; NOT a probability",
+    "reference_prevalence": "development-set positive prevalence",
+    "target": "GAD-7 >= 10",
+    "model": "calibrated_elastic_net_logistic_regression"
+  },
+  "fusion_transform": "sigmoid(logit(demographic_probability) - logit(reference_prevalence))",
+  "baseline_rule": "demographic_probability == reference_prevalence maps to demographic_fusion_score == 0.5"
+}
