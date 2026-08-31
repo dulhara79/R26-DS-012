@@ -24,7 +24,6 @@ import '../fusion/fusion_detail_screen.dart';
 import '../tcwpn/note_analysis_screen.dart';
 import '../tcwpn/tcwpn_result_screen.dart';
 import '../tcwpn/support_set_screen.dart';
-import '../explain/explain_screen.dart';
 
 class PatientChartScreen extends StatelessWidget {
   final Patient patient;
@@ -53,7 +52,6 @@ class _ChartBodyState extends State<_ChartBody> {
   Widget build(BuildContext context) {
     final chart = context.watch<ChartController>();
     final p = chart.patient;
-    final pairing = chart.pendingPairing;
 
     return Scaffold(
       appBar: AppBar(
@@ -66,19 +64,6 @@ class _ChartBodyState extends State<_ChartBody> {
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: 'Why this tier?',
-            icon: const Icon(Icons.lightbulb_outline_rounded),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ChangeNotifierProvider.value(
-                  value: context.read<ChartController>(),
-                  child: const ExplainScreen(),
-                ),
-              ),
-            ),
-          ),
           IconButton(
             tooltip: 'Support set for this patient',
             icon: const Icon(Icons.dataset_outlined),
@@ -115,29 +100,16 @@ class _ChartBodyState extends State<_ChartBody> {
               label: const Text('Analyse note'),
             )
           : null,
-      body: Column(
-        children: [
-          if (pairing != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Ds.s4, Ds.s3, Ds.s4, 0),
-              child: PairingCodeNotice(enrolment: pairing),
+      body: chart.status == ChartStatus.idle
+          ? const Center(child: CircularProgressIndicator(color: Ds.brand))
+          : IndexedStack(
+              index: _section,
+              children: [
+                _RiskSection(chart: chart),
+                _NotesSection(chart: chart),
+                const _InterventionSection(),
+              ],
             ),
-          Expanded(
-            child: chart.status == ChartStatus.idle
-                ? const Center(
-                    child: CircularProgressIndicator(color: Ds.brand),
-                  )
-                : IndexedStack(
-                    index: _section,
-                    children: [
-                      _RiskSection(chart: chart),
-                      _NotesSection(chart: chart),
-                      const _InterventionSection(),
-                    ],
-                  ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -151,30 +123,6 @@ class _ChartBodyState extends State<_ChartBody> {
           ),
         ),
       );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-
-class PairingCodeNotice extends StatelessWidget {
-  final EnrolmentResult enrolment;
-
-  const PairingCodeNotice({super.key, required this.enrolment});
-
-  @override
-  Widget build(BuildContext context) {
-    final expiresAt = enrolment.expiresAt;
-    final expiryLabel = expiresAt == null
-        ? ''
-        : '\nExpires ${DateFormat('d MMM y, HH:mm').format(expiresAt.toUtc())} UTC';
-
-    return InlineNotice(
-      icon: Icons.link_rounded,
-      tone: Ds.amber,
-      text: 'PAIRING CODE: ${enrolment.pairingCode}\n'
-          'Ask the patient to enter this code in the Aura app.'
-          '$expiryLabel',
-    );
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -350,7 +298,7 @@ class _RiskSection extends StatelessWidget {
             ],
           ],
           const SizedBox(height: Ds.s6),
-          const SectionLabel('Where each signal comes from'),
+          SectionLabel('Where each signal comes from'),
           if (f == null)
             const Panel(
               child: Text(
@@ -549,7 +497,7 @@ class _NotesSection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: Ds.s5),
-        const SectionLabel('Note history'),
+        SectionLabel('Note history'),
         ...chart.notes.map((n) => Padding(
               padding: const EdgeInsets.only(bottom: Ds.s3),
               child: _NoteTile(note: n, chart: chart),
@@ -663,17 +611,17 @@ class _InterventionSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListView(
         padding: const EdgeInsets.fromLTRB(Ds.s4, Ds.s4, Ds.s4, Ds.s10),
-        children: const [
-          InlineNotice(
+        children: [
+          const InlineNotice(
             icon: Icons.link_rounded,
             text: 'The intervention engine and its GAD-7 flow are owned by '
                 'Component 3. This section renders its calibrated tier, conformal '
                 'prediction set, and SHAP attribution once the C3 service address '
                 'is configured in Settings.',
           ),
-          SizedBox(height: Ds.s5),
+          const SizedBox(height: Ds.s5),
           SectionLabel('Expected from the C3 service'),
-          Panel(
+          const Panel(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

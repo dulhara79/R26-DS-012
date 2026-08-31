@@ -22,8 +22,6 @@ import 'alerts/alerts_screen.dart';
 import 'chart/patient_chart_screen.dart';
 import 'patients/scan_patient_id_screen.dart';
 import 'settings/settings_screen.dart';
-import 'evidence/ask_care_screen.dart';
-import 'dashboard/kpi_dashboard_screen.dart';
 import 'tcwpn/support_set_screen.dart';
 
 class AppShell extends StatefulWidget {
@@ -47,7 +45,6 @@ class _AppShellState extends State<AppShell> {
           _PatientsTab(),
           AlertsScreen(),
           SettingsScreen(),
-          AskCareScreen(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -78,11 +75,6 @@ class _AppShellState extends State<AppShell> {
             icon: Icon(Icons.tune_outlined),
             selectedIcon: Icon(Icons.tune_rounded),
             label: 'Settings',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.psychology_outlined),
-            selectedIcon: Icon(Icons.psychology),
-            label: 'Ask CARE',
           ),
         ],
       ),
@@ -117,14 +109,6 @@ class _CaseloadTab extends StatelessWidget {
         title: const Text('Caseload'),
         actions: [
           IconButton(
-            tooltip: 'Caseload dashboard',
-            icon: const Icon(Icons.insights_outlined),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const KpiDashboardScreen()),
-            ),
-          ),
-          IconButton(
             tooltip: 'Support set',
             icon: const Icon(Icons.dataset_outlined),
             onPressed: () => Navigator.push(
@@ -141,9 +125,9 @@ class _CaseloadTab extends StatelessWidget {
           : ListView(
               padding: const EdgeInsets.fromLTRB(Ds.s4, Ds.s3, Ds.s4, Ds.s10),
               children: [
-                _bandStrip(context, bandCounts, unscored, roster.patients.length),
+                _bandStrip(bandCounts, unscored, roster.patients.length),
                 const SizedBox(height: Ds.s6),
-                const SectionLabel('Needs review'),
+                SectionLabel('Needs review'),
                 if (review.isEmpty)
                   Panel(
                     child: Row(
@@ -173,7 +157,7 @@ class _CaseloadTab extends StatelessWidget {
                         ),
                       )),
                 const SizedBox(height: Ds.s6),
-                const SectionLabel('Framework'),
+                SectionLabel('Framework'),
                 const _FrameworkPanel(),
                 const SizedBox(height: Ds.s4),
                 const DecisionSupportNotice(),
@@ -184,8 +168,7 @@ class _CaseloadTab extends StatelessWidget {
 
   /// Distribution across the four alert bands. The proportions are the story,
   /// so it's drawn as one segmented rule rather than four separate counters.
-  Widget _bandStrip(BuildContext context, Map<AlertBand, int> counts,
-      int unscored, int total) {
+  Widget _bandStrip(Map<AlertBand, int> counts, int unscored, int total) {
     if (total == 0) {
       return const Panel(
         child: Text(
@@ -197,10 +180,6 @@ class _CaseloadTab extends StatelessWidget {
       );
     }
     return Panel(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const KpiDashboardScreen()),
-      ),
       padding: const EdgeInsets.all(Ds.s5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -221,9 +200,6 @@ class _CaseloadTab extends StatelessWidget {
               if (unscored > 0)
                 Text('$unscored not yet scored',
                     style: const TextStyle(fontSize: 11.5, color: Ds.inkFaint)),
-              const SizedBox(width: Ds.s2),
-              const Icon(Icons.chevron_right_rounded,
-                  size: 18, color: Ds.inkFaint),
             ],
           ),
           const SizedBox(height: Ds.s4),
@@ -619,13 +595,10 @@ class PatientRow extends StatelessWidget {
                 Text(fusion!.compositeLabel,
                     style: AppTheme.data(size: 11.5, weight: FontWeight.w600)),
                 const SizedBox(width: Ds.s2),
-                Expanded(
-                  child: Text(
-                    '${fusion!.assessmentLabel} · ${fusion!.modalitiesUsed} of 3 modalities',
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11, color: Ds.inkFaint),
-                  ),
-                ),
+                Text(
+                    '${fusion!.modalitiesUsed} of ${Modality.all.length} modalities',
+                    style: const TextStyle(fontSize: 11, color: Ds.inkFaint)),
+                const Spacer(),
                 if (fusion!.updatedAt != null)
                   Text(DateFormat('d MMM, HH:mm').format(fusion!.updatedAt!),
                       style: const TextStyle(fontSize: 11, color: Ds.inkFaint)),

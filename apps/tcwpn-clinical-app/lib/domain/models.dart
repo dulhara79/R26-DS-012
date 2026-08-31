@@ -1104,6 +1104,8 @@ class FusionResult {
   /// Weights were rescaled across the modalities that actually reported.
   final bool renormalised;
   final int modalitiesUsed;
+  final String assessmentStatus;
+  final List<String> missingModalities;
 
   /// The raw gate decision (`passed`, `usable_modalities`, `rejected`, `reason`)
   /// and conformal prediction set, passed through for the detail screen.
@@ -1126,6 +1128,8 @@ class FusionResult {
     this.modalities = const {},
     this.renormalised = false,
     this.modalitiesUsed = 0,
+    this.assessmentStatus = 'insufficient',
+    this.missingModalities = const [],
     this.gate,
     this.conformal,
     this.updatedAt,
@@ -1133,6 +1137,12 @@ class FusionResult {
   });
 
   bool get hasComposite => compositeScore != null;
+
+  String get assessmentLabel => assessmentStatus == 'complete'
+      ? 'Complete assessment'
+      : assessmentStatus == 'provisional'
+      ? 'Provisional assessment'
+      : 'Assessment incomplete';
 
   /// The gate refused to fuse. Distinct from "no data at all".
   bool get blocked => compositeScore == null;
@@ -1188,6 +1198,14 @@ class FusionResult {
     }
 
     final updatedAt = _serverDt(j['updated_at']);
+    final modalitiesUsed = _i(j['modalities_used']);
+    final assessmentStatus = j['assessment_status'] == null
+        ? modalitiesUsed >= 3
+            ? 'complete'
+            : modalitiesUsed >= 2
+            ? 'provisional'
+            : 'insufficient'
+        : _s(j['assessment_status']);
 
     final contribs = <ComponentContribution>[];
     for (final key in Modality.all) {
@@ -1227,7 +1245,11 @@ class FusionResult {
       contributions: contribs,
       modalities: modalities,
       renormalised: _b(j['renormalised']),
-      modalitiesUsed: _i(j['modalities_used']),
+      modalitiesUsed: modalitiesUsed,
+      assessmentStatus: assessmentStatus,
+      missingModalities: j['missing_modalities'] is List
+          ? (j['missing_modalities'] as List).map((value) => '$value').toList()
+          : const <String>[],
       gate: j['gate'] is Map ? Map<String, dynamic>.from(j['gate']) : null,
       conformal: j['conformal'] is Map
           ? Map<String, dynamic>.from(j['conformal'])
@@ -1249,6 +1271,8 @@ class FusionResult {
         'reason': reason,
         'renormalised': renormalised,
         'modalities_used': modalitiesUsed,
+        'assessment_status': assessmentStatus,
+        'missing_modalities': missingModalities,
         'weights': {for (final c in contributions) c.key: c.weight},
         'contributions': {for (final c in contributions) c.key: c.contribution},
         'modalities': {

@@ -36,6 +36,8 @@ const String _blockedTimeline = '''
   "reason": "insufficient evidence: 1 usable modality, need 2",
   "renormalised": true,
   "modalities_used": 1,
+  "assessment_status": "insufficient",
+  "missing_modalities": ["c1_physiological", "c4_demographic"],
   "weights": {},
   "contributions": {},
   "gate": {
@@ -75,6 +77,8 @@ const String _scoredTimeline = '''
   "reason": null,
   "renormalised": true,
   "modalities_used": 2,
+  "assessment_status": "provisional",
+  "missing_modalities": ["c1_physiological"],
   "weights": {
     "c1_physiological": 0.0, "c2_behavioral": 0.0,
     "c3_clinical_nlp": 0.65, "c4_demographic": 0.35
@@ -215,6 +219,25 @@ void main() {
   });
 
   group('a scored assessment parses faithfully', () {
+    test('two-score assessment is explicitly provisional', () {
+      final r = _parse(_scoredTimeline);
+      expect(r.assessmentStatus, 'provisional');
+      expect(r.assessmentLabel, 'Provisional assessment');
+      expect(r.missingModalities, ['c1_physiological']);
+    });
+
+    test('three-score assessment is explicitly complete', () {
+      final json = jsonDecode(_scoredTimeline) as Map<String, dynamic>;
+      json['assessment_status'] = 'complete';
+      json['missing_modalities'] = <String>[];
+      json['modalities_used'] = 3;
+      final r = FusionResult.fromJson(json, 'TEST-001');
+
+      expect(r.assessmentStatus, 'complete');
+      expect(r.assessmentLabel, 'Complete assessment');
+      expect(r.missingModalities, isEmpty);
+    });
+
     test('composite, tier and band come from the server', () {
       final r = _parse(_scoredTimeline);
       expect(r.compositeScore, closeTo(0.8878, 1e-9));
@@ -252,6 +275,8 @@ void main() {
       expect(restored.band, AlertBand.grey);
       expect(restored.fusionResultId, 1);
       expect(restored.reason, original.reason);
+      expect(restored.assessmentStatus, original.assessmentStatus);
+      expect(restored.missingModalities, original.missingModalities);
     });
   });
 

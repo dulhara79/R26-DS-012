@@ -107,7 +107,7 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
             ),
             const SizedBox(height: Ds.s4),
           ],
-          SectionLabel('Decision'),
+          const SectionLabel('Decision'),
           _decisionPanel(r),
           const SizedBox(height: Ds.s5),
           SectionLabel(
@@ -115,14 +115,14 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
           _attributionPanel(r),
           const SizedBox(height: Ds.s5),
           if (r.supportContributions.isNotEmpty) ...[
-            SectionLabel('Support set influence'),
+            const SectionLabel('Support set influence'),
             _supportInfluencePanel(r),
             const SizedBox(height: Ds.s5),
           ],
-          SectionLabel('Clinician review'),
+          const SectionLabel('Clinician review'),
           _verdictPanel(chart, r),
           const SizedBox(height: Ds.s5),
-          SectionLabel('Submitted note'),
+          const SectionLabel('Submitted note'),
           Panel(
             child: Text(
               _note.text,
@@ -131,7 +131,7 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
             ),
           ),
           const SizedBox(height: Ds.s5),
-          SectionLabel('Model'),
+          const SectionLabel('Model'),
           _modelPanel(r),
           const SizedBox(height: Ds.s5),
           const DecisionSupportNotice(),
@@ -288,10 +288,10 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
               const SizedBox(height: Ds.s4),
               const Divider(),
               const SizedBox(height: Ds.s3),
-              Text(
+              const Text(
                 'Distance to each class prototype in the 256-dimensional '
                 'embedding space. The nearer prototype determines the class.',
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 11.5, color: Ds.inkFaint, height: 1.4),
               ),
               const SizedBox(height: Ds.s3),
@@ -585,10 +585,10 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
             const SizedBox(height: Ds.s4),
             const Divider(),
             const SizedBox(height: Ds.s3),
-            Text(
+            const Text(
               'Add this note to the support set so future predictions for this '
               'patient learn from your label.',
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 12, color: Ds.inkMuted, height: 1.45),
             ),
             const SizedBox(height: Ds.s3),

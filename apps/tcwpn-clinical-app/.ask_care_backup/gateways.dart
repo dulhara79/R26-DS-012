@@ -30,8 +30,8 @@
 
 import '../../core/config/env.dart';
 import '../../domain/models.dart';
-import '../../domain/evidence.dart';
 import 'api_client.dart';
+import 'session.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Central Backend
@@ -80,31 +80,6 @@ class CentralBackendGateway {
         },
         timeout: Env.quickTimeout);
     return EnrolmentResult.fromJson(json);
-  }
-
-  /// Attaches a scanned AURA participant id to the subject the patient
-  /// already created via /v1/subjects/self. Returns the subject_id on success,
-  /// null if the backend has no AURA registration for that id (HTTP 404).
-  Future<String?> attach({
-    required String appUserId,
-    String? mrn,
-    String? enrolledBy,
-  }) async {
-    try {
-      final json = await _api.post(
-          '/v1/subjects/attach',
-          {
-            'app_user_id': appUserId,
-            if (mrn != null && mrn.isNotEmpty) 'mrn': mrn,
-            if (enrolledBy != null && enrolledBy.isNotEmpty)
-              'enrolled_by': enrolledBy,
-          },
-          timeout: Env.quickTimeout);
-      return json['subject_id'] as String?;
-    } on ApiException catch (e) {
-      if (e.kind == ApiFailure.notFound) return null;
-      rethrow;
-    }
   }
 
   /// Resolves an already-enrolled MRN to its subject_id.
@@ -231,40 +206,6 @@ class CentralBackendGateway {
       _api.post('/v1/doctor/patients/$subjectId/evidence', {
         'question': question,
       });
-
-  /// Global CARE-AnxRAG query - not scoped to any patient.
-  ///
-  /// Backs the Ask CARE tab, where a clinician asks a knowledge-base question
-  /// without first selecting a patient. Hits POST /v1/evidence/ask.
-  ///
-  /// The timeout is inferenceTimeout (180s), not quickTimeout: CARE-AnxRAG
-  /// generates locally through Ollama and a real answer has been measured at
-  /// ~58s, so a 25s limit would report "unavailable" for a service that was
-  /// working correctly.
-  ///
-  /// Transport failures become an `unavailable` result rather than an
-  /// exception, so the screen can tell "could not reach the service" apart
-  /// from "the service declined to answer" without either being mistaken for
-  /// an answer.
-  Future<EvidenceResult> askEvidence(String question) async {
-    final trimmed = question.trim();
-    if (trimmed.isEmpty) {
-      return EvidenceResult.failure('Enter a question first.');
-    }
-    try {
-      final json = await _api.post(
-        '/v1/evidence/ask',
-        {'question': trimmed},
-        timeout: Env.inferenceTimeout,
-      );
-      return EvidenceResult.fromJson(json);
-    } on ApiException catch (e) {
-      return EvidenceResult.failure(e.toString());
-    } catch (e) {
-      return EvidenceResult.failure('$e');
-    }
-  }
-
 
   /// Records the clinician's tier judgement against a SPECIFIC fusion row.
   ///

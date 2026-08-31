@@ -1,17 +1,3 @@
-"""
-Central Backend — Component 4 · R26-DS-012
-
-Implements the integration sequence diagram end to end.
-
-    ENROLMENT          steps 1-9    identity, pairing, patient separation
-    PASSIVE MODALITIES steps 10-21  physiological / behavioural / contextual
-    CLINICAL MODALITY  steps 22-26  note enters from the clinician side only
-    FUSION             steps 27-31  gate, fuse, persist
-    EGRESS             steps 32-35  two views, one source of truth
-
-Run:  uvicorn main:app --reload --port 8000
-Docs: http://127.0.0.1:8000/docs
-"""
 
 from __future__ import annotations
 
@@ -44,6 +30,7 @@ from db_models import (AuditLog, FusionResult, ModalityReading, PairingCode,
 
 API_TOKEN = os.getenv("BACKEND_API_TOKEN", "")
 ALL_MODALITIES = ["c1_physiological", "c2_behavioral", "c3_clinical_nlp", "c4_demographic"]
+FUSION_REQUIRED_MODALITIES = ("c1_physiological", "c3_clinical_nlp", "c4_demographic")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -63,6 +50,13 @@ async def lifespan(_: FastAPI):
 
 from support_bank import (SupportBankUnavailable, describe_bank,
                           seed_support_bank, select_support_set)
+
+# CARE-X — explanation layer for the fused composite.
+import explain as carex
+_CAREX_THRESHOLDS = carex.load_tier_thresholds()
+_CAREX_REFERENCE_STATUS = carex.load_reference_status()
+_CAREX_BASE_WEIGHTS = carex.load_base_weights()
+
 SUPPORT_BANK_VERSION = __import__("os").getenv("SUPPORT_BANK_VERSION", "synthetic-v1")
 
 
@@ -83,7 +77,10 @@ except Exception as _sb_exc:
 finally:
     try: _sb_db.close()
     except Exception: pass
-
+    
+@app.get("/", tags=["ops"])
+def root():
+    return {"service": "R26-DS-012 Central Backend", "status": "running", "docs": "/docs"}
 
 def _auth(authorization: Optional[str]):
     if API_TOKEN and authorization != f"Bearer {API_TOKEN}":
@@ -193,6 +190,59 @@ class EnrolResponse(BaseModel):
     subject_id: str
     pairing_code: str
     expires_at: dt.datetime
+
+
+class SelfEnrolRequest(BaseModel):
+    app_user_id: str = Field(..., pattern=r"^P_[A-F0-9]{16}$")
+
+
+class SelfEnrolResponse(BaseModel):
+    subject_id: str
+
+
+@app.post("/v1/subjects/self", response_model=SelfEnrolResponse, tags=["enrolment"])
+def self_enrol_subject(req: SelfEnrolRequest, db: Session = Depends(get_session)):
+    """Register an Aura participant before the clinician scans their QR.
+
+    The QR value is also the identifier the clinician app submits as its MRN,
+    so both aliases must point to the same central subject. Repeated calls are
+    idempotent, including when the clinician enrolled the participant first.
+    """
+    try:
+        mrn_hash = identity.hash_mrn(req.app_user_id)
+    except identity.PepperNotConfigured as exc:
+        raise HTTPException(500, str(exc))
+
+    app_alias = db.scalar(select(SubjectAlias).where(
+        SubjectAlias.alias_type == "app_user_id",
+        SubjectAlias.alias_value == req.app_user_id))
+    mrn_alias = db.scalar(select(SubjectAlias).where(
+        SubjectAlias.alias_type == "mrn_hash",
+        SubjectAlias.alias_value == mrn_hash))
+
+    if app_alias and mrn_alias and app_alias.subject_id != mrn_alias.subject_id:
+        raise HTTPException(409, "participant ID is already linked to different subjects")
+
+    existing = app_alias or mrn_alias
+    if existing:
+        subject_id = existing.subject_id
+        _require_subject(db, subject_id)
+        event = "enrol.self.repeat"
+    else:
+        subject_id = identity.new_subject_id()
+        db.add(Subject(subject_id=subject_id))
+        event = "enrol.self.created"
+
+    if not app_alias:
+        db.add(SubjectAlias(subject_id=subject_id, alias_type="app_user_id",
+                            alias_value=req.app_user_id))
+    if not mrn_alias:
+        db.add(SubjectAlias(subject_id=subject_id, alias_type="mrn_hash",
+                            alias_value=mrn_hash))
+
+    _audit(db, subject_id, event, {"alias": "app_user_id"})
+    db.commit()
+    return SelfEnrolResponse(subject_id=subject_id)
 
 
 @app.post("/v1/subjects", response_model=EnrolResponse, tags=["enrolment"])
@@ -315,6 +365,29 @@ def _minutes_since_last_fusion(db: Session, subject_id: str) -> Optional[float]:
     return (dt.datetime.now(dt.timezone.utc) - last).total_seconds() / 60.0
 
 
+def _assessment_summary(usable_modalities) -> dict:
+    used = set(usable_modalities or ()) & set(FUSION_REQUIRED_MODALITIES)
+    missing = [modality for modality in FUSION_REQUIRED_MODALITIES if modality not in used]
+    if not missing:
+        status = "complete"
+    elif len(used) >= gate.MIN_USABLE_MODALITIES:
+        status = "provisional"
+    else:
+        status = "insufficient"
+    return {"status": status, "missing_modalities": missing}
+
+
+def _assessment_for_row(row: Optional[FusionResult]) -> dict:
+    if row is None:
+        return _assessment_summary(())
+    harmonisation = row.harmonisation or {}
+    stored = harmonisation.get("assessment")
+    if isinstance(stored, dict) and stored.get("status"):
+        return stored
+    gate_summary = harmonisation.get("gate") or {}
+    return _assessment_summary(gate_summary.get("usable_modalities", ()))
+
+
 def _auto_fuse(db: Session, subject_id: str, trigger: str,
                debounce: bool = False) -> dict:
     """Run fusion after an ingest. Never lets a fusion failure fail the ingest —
@@ -328,9 +401,12 @@ def _auto_fuse(db: Session, subject_id: str, trigger: str,
                                               f"threshold {AUTO_FUSION_DEBOUNCE_MIN:g} min")}
     try:
         row = run_fusion(db, subject_id, trigger)
+        assessment = _assessment_for_row(row)
         return {"fusion_triggered": True,
                 "fusion": {"composite": row.composite, "tier": row.tier,
-                           "band": row.band, "reason": row.reason}}
+                           "band": row.band, "reason": row.reason,
+                           "assessment_status": assessment["status"],
+                           "missing_modalities": assessment["missing_modalities"]}}
     except Exception as exc:                     # noqa: BLE001
         return {"fusion_triggered": False,
                 "fusion_error": f"{type(exc).__name__}: {exc}"[:160]}
@@ -352,10 +428,8 @@ class PhysiologicalWindow(BaseModel):
     subject_id: Optional[str] = None
     device_user_id: Optional[str] = Field(
         None, description="id the chest strap streams under; defaults to subject_id")
-    # Target-contract fields (R26-DS-012_service_contracts.md §2). All optional:
-    # omit them and the client falls back to the legacy GET endpoint that's
-    # actually live today. Once C1 ships the target contract, the patient app
-    # should start sending these on every 60s window.
+    # Kept optional for compatibility with older patient-app requests. C1 gets
+    # its complete sensor feature windows directly through its own /ingest API.
     window_start: Optional[dt.datetime] = None
     window_end: Optional[dt.datetime] = None
     sampling_hz: Optional[int] = None
@@ -371,22 +445,14 @@ class PhysiologicalWindow(BaseModel):
 @app.post("/v1/ingest/physiological", tags=["ingestion"])
 def ingest_physiological(req: PhysiologicalWindow, db: Session = Depends(get_session),
                          authorization: Optional[str] = Header(None)):
-    """Steps 10-13. Chest-strap window, every 60 seconds."""
+    """Fetch and store C1's latest prediction for this participant."""
     _auth(authorization)
     subject_id = req.subject_id or _resolve(db, "app_user_id", req.app_user_id or "")
     _require_subject(db, subject_id)
 
-    window = None
-    if req.features:
-        window = {
-            "window_start": req.window_start.isoformat() if req.window_start else None,
-            "window_end": req.window_end.isoformat() if req.window_end else None,
-            "sampling_hz": req.sampling_hz,
-            "features": req.features,
-        }
-
-    result = mc.call_c1(req.device_user_id or _external_id(db, subject_id, "c1_physiological"),
-                        window=window)
+    c1_user_id = (req.device_user_id or req.app_user_id or
+                  _external_id(db, subject_id, "c1_physiological"))
+    result = mc.call_c1(c1_user_id)
     row = _store(db, subject_id, "c1_physiological", result)
     db.commit()
     fusion_info = _auto_fuse(db, subject_id, "physio-ingest", debounce=True)
@@ -525,6 +591,8 @@ def ingest_clinical_note(req: ClinicalNote, db: Session = Depends(get_session),
     fusion_info = _auto_fuse(db, subject_id, "note-ingest")
     return {"subject_id": subject_id, "reading_id": row.id,
             "status": result.status, "score": result.raw_score, "note": result.note,
+            "component_detail": result.detail,
+            "score_provenance": result.note,
             **fusion_info}
 
 
@@ -576,13 +644,14 @@ def run_fusion(db: Session, subject_id: str, trigger: str = "manual") -> FusionR
     readings = _latest_readings(db, subject_id)
 
     decision = gate.evaluate(readings)
+    assessment = _assessment_summary(decision.usable)
 
     if not decision.passed:
         row = FusionResult(
             subject_id=subject_id, composite=None, tier=None, band="GREY",
             confidence=0.0, modalities_used=len(decision.usable), renormalised=True,
             weights={}, contributions={},
-            harmonisation={"gate": decision.summary()},
+            harmonisation={"gate": decision.summary(), "assessment": assessment},
             reason=decision.reason, trigger=trigger, model_version="gate-blocked")
         db.add(row)
         _audit(db, subject_id, "fusion.blocked", decision.summary())
@@ -592,6 +661,7 @@ def run_fusion(db: Session, subject_id: str, trigger: str = "manual") -> FusionR
     result = fusion_client.fuse(subject_id, decision.usable)
     harmonisation = result.get("harmonisation", {})
     harmonisation["gate"] = decision.summary()
+    harmonisation["assessment"] = assessment
     conf = conformal.predict_set(result.get("composite_score"), _calibration_pairs(db))
     harmonisation["conformal"] = conf.to_wire()
 
@@ -626,11 +696,14 @@ def fusion_run(req: FuseRequest, db: Session = Depends(get_session),
     _auth(authorization)
     subject_id = req.subject_id or _resolve(db, "mrn_hash", identity.hash_mrn(req.mrn or ""))
     row = run_fusion(db, subject_id, req.trigger)
+    assessment = _assessment_for_row(row)
     return {
         "subject_id": subject_id, "composite": row.composite, "tier": row.tier,
         "band": row.band, "confidence": round(row.confidence, 4),
         "modalities_used": row.modalities_used, "weights": row.weights,
         "contributions": row.contributions, "reason": row.reason,
+        "assessment_status": assessment["status"],
+        "missing_modalities": assessment["missing_modalities"],
         "gate": (row.harmonisation or {}).get("gate"),
         **((row.harmonisation or {}).get("conformal") or {}),
         "computed_at": row.computed_at,
@@ -697,15 +770,20 @@ def patient_risk(subject_id: str, db: Session = Depends(get_session)):
     """
     _require_subject(db, subject_id)
     row = _latest_fusion(db, subject_id)
+    assessment = _assessment_for_row(row)
     if not row:
         return {"subject_id": subject_id, "composite": None, "band": "GREY",
-                "message": "no assessment yet", "updated_at": None}
+                "message": "no assessment yet", "updated_at": None,
+                "assessment_status": assessment["status"],
+                "missing_modalities": assessment["missing_modalities"]}
     _audit(db, subject_id, "egress.patient", None)
     db.commit()
     return {"subject_id": subject_id,
             "composite": row.composite, "band": row.band,
             "message": row.reason or "assessment available",
-            "updated_at": row.computed_at}
+            "updated_at": row.computed_at,
+            "assessment_status": assessment["status"],
+            "missing_modalities": assessment["missing_modalities"]}
 
 
 @app.get("/v1/doctor/patients/{subject_id}/timeline", tags=["egress"])
@@ -718,6 +796,7 @@ def doctor_timeline(subject_id: str, limit: int = 20,
     _require_subject(db, subject_id)
 
     latest = _latest_fusion(db, subject_id)
+    assessment = _assessment_for_row(latest)
     readings = _latest_readings(db, subject_id)
     now = dt.datetime.now(dt.timezone.utc)
 
@@ -759,6 +838,8 @@ def doctor_timeline(subject_id: str, limit: int = 20,
         "band": latest.band if latest else "GREY",
         "confidence": round(latest.confidence, 4) if latest else 0.0,
         "reason": latest.reason if latest else "no assessment yet",
+        "assessment_status": assessment["status"],
+        "missing_modalities": assessment["missing_modalities"],
         "weights": latest.weights if latest else {},
         "contributions": latest.contributions if latest else {},
         "gate": (latest.harmonisation or {}).get("gate") if latest else None,
@@ -767,9 +848,22 @@ def doctor_timeline(subject_id: str, limit: int = 20,
                           if k != "gate"} if latest else {},
         "modalities": modality_view,
         "updated_at": latest.computed_at if latest else None,
+        "fusion_result_id": latest.id if latest else None,
+        "modalities_used": latest.modalities_used if latest else 0,
+        "renormalised": bool(latest.renormalised) if latest else False,
         "trend": [{"composite": h.composite, "tier": h.tier, "band": h.band,
+                   "assessment_status": _assessment_for_row(h)["status"],
+                   "missing_modalities": _assessment_for_row(h)["missing_modalities"],
                    "computed_at": h.computed_at, "trigger": h.trigger}
                   for h in reversed(history)],
+
+        # CARE-X: compact form only. The full explanation (weight provenance,
+        # exact counterfactuals, honesty ledger) is on the /explanation endpoint
+        # so it is not re-serialised on every timeline poll.
+        "explanation": carex.explanation_summary(carex.explain_fusion(
+            _carex_fusion_dict(latest), modality_view,
+            _CAREX_THRESHOLDS, _CAREX_REFERENCE_STATUS,
+            _CAREX_BASE_WEIGHTS)),
     }
 
 
@@ -808,6 +902,118 @@ def doctor_evidence(subject_id: str, req: EvidenceRequest,
     return {"subject_id": subject_id, **result.to_wire()}
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# CARE-X — explanation of the fused composite
+# ═════════════════════════════════════════════════════════════════════════════
+def _carex_fusion_dict(row) -> dict:
+    """FusionResult row -> the plain dict CARE-X consumes.
+
+    Kept as an adapter rather than passing the ORM object so the explainer has
+    no SQLAlchemy dependency and stays unit-testable against fixtures.
+    """
+    if row is None:
+        return {}
+    return {
+        "composite": row.composite,
+        "tier": row.tier,
+        "band": row.band,
+        "confidence": row.confidence,
+        "reason": row.reason,
+        "renormalised": row.renormalised,
+        "weights": row.weights or {},
+        "contributions": row.contributions or {},
+        "harmonisation": row.harmonisation or {},
+    }
+
+
+@app.get("/v1/doctor/patients/{subject_id}/explanation", tags=["egress"])
+def doctor_explanation(subject_id: str, db: Session = Depends(get_session),
+                       authorization: Optional[str] = Header(None)):
+    """Why this composite came out the way it did.
+
+    Reads only the stored fusion result — no component is re-called — so the
+    explanation is reproducible months later, when those Spaces may be gone.
+    Deterministic: the same fusion result always yields the same explanation, or
+    a clinician reopening yesterday's assessment would see a different rationale
+    and stop trusting the number.
+    """
+    _auth(authorization)
+    _require_subject(db, subject_id)
+
+    latest = _latest_fusion(db, subject_id)
+    if latest is None:
+        return {"subject_id": subject_id, "assessed": False,
+                "assessment_status": "insufficient",
+                "missing_modalities": list(FUSION_REQUIRED_MODALITIES),
+                "narrative": "No assessment has been produced for this patient yet. "
+                             "This is an absence of evidence, not a low-risk result.",
+                "explainer_version": carex.EXPLAINER_VERSION}
+
+    readings = _latest_readings(db, subject_id)
+    now = dt.datetime.now(dt.timezone.utc)
+    modality_view = {}
+    for modality in ALL_MODALITIES:
+        r = readings.get(modality)
+        if not r:
+            modality_view[modality] = {"status": "absent", "score": None}
+            continue
+        captured = r["captured_at"]
+        if captured.tzinfo is None:
+            captured = captured.replace(tzinfo=dt.timezone.utc)
+        age_min = (now - captured).total_seconds() / 60.0
+        max_age = gate.MAX_AGE_MINUTES.get(modality)
+        modality_view[modality] = {
+            "status": r["status"], "score": r["raw_score"],
+            "confidence": r["confidence"], "coverage": r["coverage"],
+            "age_minutes": round(age_min, 1),
+            "fresh": (max_age is None) or (age_min <= max_age),
+            "model_version": r["model_version"],
+            "excluded": modality in gate.EXCLUDED_MODALITIES,
+        }
+
+    explanation = carex.explain_fusion(
+        _carex_fusion_dict(latest), modality_view,
+        _CAREX_THRESHOLDS, _CAREX_REFERENCE_STATUS, _CAREX_BASE_WEIGHTS)
+
+    _audit(db, subject_id, "egress.explanation",
+           {"fusion_result_id": latest.id, "explainer": carex.EXPLAINER_VERSION})
+    db.commit()
+
+    explanation["subject_id"] = subject_id
+    explanation["fusion_result_id"] = latest.id
+    explanation["computed_at"] = latest.computed_at
+    assessment = _assessment_for_row(latest)
+    explanation["assessment_status"] = assessment["status"]
+    explanation["missing_modalities"] = assessment["missing_modalities"]
+    return explanation
+
+@app.post("/v1/evidence/ask", tags=["egress"])
+def global_evidence(
+    req: EvidenceRequest,
+    db: Session = Depends(get_session),
+    authorization: Optional[str] = Header(None),
+):
+    _auth(authorization)
+
+    result = rag_client.call_rag(req.question)
+
+    _audit(
+        db,
+        None,
+        "rag.global_ask",
+        {
+            "available": result.available,
+            "abstained": result.abstained,
+            "safety_level": result.safety_level,
+            "local_crisis_bypass": getattr(result, "local_crisis_bypass", False),
+            "error": result.error,
+        },
+    )
+    db.commit()
+
+    return result.to_wire()
+
+
 @app.get("/health", tags=["ops"])
 def health():
     return {
@@ -824,5 +1030,6 @@ def health():
 
 
 if __name__ == "__main__":
+    # pyrefly: ignore [missing-import]
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))

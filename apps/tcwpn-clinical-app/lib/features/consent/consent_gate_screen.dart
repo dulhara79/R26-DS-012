@@ -14,7 +14,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../core/design/components.dart';
 import '../../core/design/theme.dart';
 import '../../core/design/tokens.dart';
 import '../../data/local/consent_store.dart';
@@ -239,11 +238,11 @@ class _ConsentGateScreenState extends State<ConsentGateScreen>
               child: const Text('I do not agree'),
             ),
             const SizedBox(height: Ds.s1),
-            Text(
+            const Text(
               'Your acceptance is recorded with a timestamp and a cryptographic '
               'hash of this exact text. It cannot be edited afterwards.',
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 11, color: Ds.inkFaint, height: 1.4),
             ),
           ],

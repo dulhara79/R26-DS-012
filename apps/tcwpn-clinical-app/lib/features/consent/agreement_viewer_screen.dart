@@ -15,8 +15,8 @@ import 'package:intl/intl.dart';
 import '../../core/design/components.dart';
 import '../../core/design/theme.dart';
 import '../../core/design/tokens.dart';
+import '../../data/api/session.dart';
 import '../../data/local/consent_store.dart';
-import '../../data/local/stores.dart';
 import '../../domain/consent.dart';
 import '../auth/login_screen.dart';
 import 'agreement_text.dart';
@@ -85,11 +85,12 @@ class _ReceiptTabState extends State<_ReceiptTab> {
   void initState() {
     super.initState();
     ConsentStore.current().then((r) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _rec = r;
           _loading = false;
         });
+      }
     });
   }
 
@@ -157,7 +158,7 @@ class _ReceiptTabState extends State<_ReceiptTab> {
           ),
         ),
         const SizedBox(height: Ds.s5),
-        SectionLabel('Acceptance receipt'),
+        const SectionLabel('Acceptance receipt'),
         Panel(
           child: Column(
             children: [
@@ -194,7 +195,7 @@ class _ReceiptTabState extends State<_ReceiptTab> {
         ),
         if (!r.isWithdrawn) ...[
           const SizedBox(height: Ds.s6),
-          SectionLabel('Withdrawing'),
+          const SectionLabel('Withdrawing'),
           const InlineNotice(
             icon: Icons.info_outline_rounded,
             text:
@@ -280,7 +281,7 @@ class _ReceiptTabState extends State<_ReceiptTab> {
     if (ok != true || !context.mounted) return;
 
     await ConsentStore.withdraw();
-    await SecureStore.signOut();
+    await Session.signOut();
     if (!context.mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
