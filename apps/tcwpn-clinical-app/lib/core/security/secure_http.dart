@@ -42,11 +42,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
 import 'pinned_certificates.dart';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
 
 /// Disables pinning. For emulator work behind a debugging proxy only.
 ///   --dart-define=DISABLE_TLS_PINNING=true
@@ -92,16 +94,6 @@ class SecureHttp {
   /// Whether a given URL will be pinned. Anything not in [kPinnedHosts] uses
   /// the platform trust store, so every ClinAnx endpoint must be listed.
   static bool isPinned(String url) {
-    // dart:io does not exist in a browser. SecurityContext, HttpClient and
-    // SecureSocket are stubs there that throw UnsupportedError on
-    // construction, so a web build cannot pin at all -- the browser's own
-    // trust store performs TLS validation instead.
-    //
-    // Reporting that honestly here does two things: clientFor() returns a
-    // plain BrowserClient instead of crashing, and Settings stops claiming
-    // a guarantee this build does not provide. Do not 'fix' this by
-    // returning true on web -- there is nothing behind it.
-    if (kIsWeb) return false;
     if (kPinningDisabled) return false;
     final host = Uri.tryParse(url)?.host.toLowerCase();
     if (host == null || host.isEmpty) return false;
@@ -152,21 +144,6 @@ class SecureHttp {
   /// within that CA, and gives Settings something honest to display.
   static Future<PinReport> verifyHost(String host, {int port = 443}) async {
     final now = DateTime.now();
-
-    // Must precede every other branch: SecureSocket.connect and
-    // _pinnedContext() both throw UnsupportedError on web. main.dart calls
-    // verifyAll() at startup, so without this the app dies before it draws.
-    if (kIsWeb) {
-      final r = PinReport(
-        status: PinStatus.disabled,
-        host: host,
-        detail: 'Web build - the browser performs TLS validation. '
-            'Pinning requires the Android or iOS build.',
-        checkedAt: now,
-      );
-      _record(r);
-      return r;
-    }
 
     if (kPinningDisabled) {
       final r = PinReport(
