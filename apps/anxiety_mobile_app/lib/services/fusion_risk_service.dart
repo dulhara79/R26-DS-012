@@ -79,6 +79,10 @@ class FusionRisk {
   }
 }
 
+/// Returns only a usable score produced by the backend fusion model.
+double? officialOverallRisk(FusionRisk? risk) =>
+    risk?.hasScore == true ? risk!.scoreOutOf100 : null;
+
 /// Reads the composite risk produced by the fusion engine.
 ///
 /// This endpoint is intentionally unauthenticated on the backend, so no token

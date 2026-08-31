@@ -13,7 +13,7 @@ import '../services/anxiety_level_update_throttle.dart';
 /// Displays:
 ///   • Aura branding & subtitle
 ///   • Meditation hero image (from assets)
-///   • Overall anxiety status card (combined physiological + phenotyping risk)
+///   • Overall anxiety status card (backend fusion result)
 ///   • Notification bell for anxiety escalation alerts
 class HomePage extends StatefulWidget {
   final String? userId;
@@ -169,21 +169,10 @@ class HomePageState extends State<HomePage> with TickerProviderStateMixin {
 void _onFusionRiskChanged() {
     if (mounted) setState(() {});
 }
-  // ── Combined Risk Logic ─────────────────────────────────────
-  bool get _hasLiveReading =>
-      _chestStrap.hasLiveWornReading && (_lastReading?.isWorn ?? false);
-
-  /// Uses the combined score when it is fresh. If only the chest strap is
-  /// available, that reading becomes the current overall score.
-  double? get _overallRisk {
-    final backendRisk = FusionRiskService.instance.latest.value;
-    if (backendRisk != null && backendRisk.hasScore) {
-      return backendRisk.scoreOutOf100;
-    }
-    final combinedRisk = AnxietyFeedbackService().latestFusionRisk;
-    if (combinedRisk != null) return combinedRisk;
-    return _hasLiveReading ? _lastReading!.riskScore : null;
-}
+  // ── Backend Fusion Risk Logic ───────────────────────────────
+  /// The official overall score must come only from the backend fusion model.
+  double? get _overallRisk =>
+      officialOverallRisk(FusionRiskService.instance.latest.value);
 
   bool get _hasOverallRisk => _overallRisk != null;
 
@@ -212,7 +201,7 @@ void _onFusionRiskChanged() {
 
   String _overallMessage(double score) {
     if (!_hasOverallRisk) {
-      return 'Connect and wear the chest strap to see your current readings.';
+      return 'Your overall result will appear when the fusion assessment is available.';
     }
     if (score <= 20) {
       return 'Your recent readings look settled. Keep doing what helps you feel comfortable.';
