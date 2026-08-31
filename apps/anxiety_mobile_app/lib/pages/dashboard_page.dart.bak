@@ -21,7 +21,6 @@ import '../services/anxiety_feedback_service.dart';
 import '../services/forecast_message_policy.dart';
 import '../services/notification_helper.dart';
 import 'baseline_calibration_page.dart';
-import '../services/fusion_risk_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dashboard Page — Physiological Monitoring
@@ -55,7 +54,8 @@ class _DashboardPageState extends State<DashboardPage>
   List<double> _forecastData = [];
   String _statusMessage = "";
   Timer? _predictionTimer;
-  double _forecastCoverage = 0.0;
+  int _bufferingCountdown = 60;
+  Timer? _bufferingTimer;
   List<Map<String, dynamic>> _historyData = [];
   String _historyStatus = 'loading';
   String _historyMessage = '';
@@ -178,6 +178,7 @@ class _DashboardPageState extends State<DashboardPage>
     );
     _entryController.dispose();
     _predictionTimer?.cancel();
+    _bufferingTimer?.cancel();
     _btStateSubscription?.cancel();
     _readingSubscription?.cancel();
     _forecastScrollController.dispose();
@@ -482,46 +483,22 @@ class _DashboardPageState extends State<DashboardPage>
 
     if (status == 'success') {
       final List? riskForecast = result['risk_forecast'] as List?;
-      final List? forecastHorizons =
-          result['forecast_horizons_minutes'] as List?;
       if (riskForecast == null ||
-          riskForecast.length != 2 ||
-          riskForecast.any(
-            (value) => value is! num || !value.toDouble().isFinite,
-          ) ||
-          forecastHorizons == null ||
-          forecastHorizons.length != 2 ||
-          forecastHorizons.any(
-            (value) => value is! num || !value.toDouble().isFinite,
-          )) {
+          riskForecast.length < 10 ||
+          riskForecast.any((value) => value is! num)) {
         setState(() {
           _predictionStatus = 'error';
           _forecastData = [];
           _currentModelRisk = null;
-          _forecastCoverage = 0.0;
-          _statusMessage =
-              'The +5 and +10 minute forecast is not available right now.';
+          _statusMessage = 'The 10-minute forecast is not available right now.';
         });
         return;
       }
       final parsedForecast = riskForecast
           .cast<num>()
+          .take(10)
           .map((value) => value.toDouble())
           .toList();
-      final parsedHorizons = forecastHorizons
-          .cast<num>()
-          .map((value) => value.toDouble())
-          .toList();
-      if (parsedHorizons[0] != 5.0 || parsedHorizons[1] != 10.0) {
-        setState(() {
-          _predictionStatus = 'error';
-          _forecastData = [];
-          _currentModelRisk = null;
-          _forecastCoverage = 0.0;
-          _statusMessage = 'The forecast horizons are not recognised.';
-        });
-        return;
-      }
       final currentRisk =
           (result['current_risk_index'] as num?)?.toDouble() ??
           (ChestStrapService().hasLiveWornReading
@@ -542,7 +519,6 @@ class _DashboardPageState extends State<DashboardPage>
         _predictionStatus = "success";
         _forecastData = parsedForecast;
         _currentModelRisk = currentRisk;
-        _forecastCoverage = 1.0;
         _statusMessage = message;
       });
       AnxietyFeedbackService().observeForecastResponse(result);
@@ -555,36 +531,54 @@ class _DashboardPageState extends State<DashboardPage>
         });
       }
 
-      // Notify the central backend to fetch C1's latest prediction, then
-      // refresh fusion so the home page does not wait for its polling interval.
+      _bufferingTimer?.cancel();
+      _bufferingTimer = null;
+
+      // ── Send trajectory to fusion model (fire-and-forget) ──────────────
+      // Compute a single physiological risk score = peak scaled value in the
+      // 10-step forecast. The fusion teammate uses this number + the full
+      // trajectory array to assign a weight and produce a final risk decision.
       if (parsedForecast.isNotEmpty && _cachedId.isNotEmpty) {
-        ApiService.submitPhysiologicalWindow(
-          participantId: _cachedId,
-        ).then((sent) {
-          if (sent) FusionRiskService.instance.fetch();
+        final double peakRisk = parsedForecast
+            .map(_scaleForecastValue)
+            .reduce((a, b) => a > b ? a : b);
+        ApiService.sendToFusionModel(
+          userId: _cachedId,
+          trajectory: parsedForecast,
+          physiologicalRiskScore: peakRisk,
+        ).then((fusionResult) {
+          if (fusionResult['success'] == true && mounted) {
+            setState(() {
+              // Store whatever holistic score the fusion model returns
+              // (key name TBC with teammate — defaulting to 'final_risk_score')
+              _fusionRiskScore = (fusionResult['final_risk_score'] as num?)
+                  ?.toDouble();
+              if (_fusionRiskScore != null) {
+                AnxietyFeedbackService().updateFusionRisk(_fusionRiskScore!);
+              }
+            });
+          }
         });
       }
     } else if (status == 'buffering') {
-      final coverage = ((result['coverage'] as num?)?.toDouble() ?? 0.0)
-          .clamp(0.0, 1.0)
-          .toDouble();
       setState(() {
         _predictionStatus = "buffering";
         _forecastData = [];
         _currentModelRisk = null;
         _fusionRiskScore = null;
-        _forecastCoverage = coverage;
         _statusMessage = message;
       });
+      _startBufferingCountdown();
     } else if (status == 'not_calibrated') {
       setState(() {
         _predictionStatus = "not_calibrated";
         _forecastData = [];
         _currentModelRisk = null;
         _fusionRiskScore = null;
-        _forecastCoverage = 0.0;
         _statusMessage = message;
       });
+      _bufferingTimer?.cancel();
+      _bufferingTimer = null;
     } else {
       // API Offline/Error state
       setState(() {
@@ -592,10 +586,30 @@ class _DashboardPageState extends State<DashboardPage>
         _forecastData = [];
         _currentModelRisk = null;
         _fusionRiskScore = null;
-        _forecastCoverage = 0.0;
         _statusMessage = message;
       });
     }
+  }
+
+  void _startBufferingCountdown() {
+    if (_bufferingTimer != null) return;
+    _bufferingCountdown = 60;
+    _bufferingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      // Pause countdown if the strap is not connected!
+      if (!_chestStrapConnected) return;
+
+      setState(() {
+        if (_bufferingCountdown > 0) {
+          _bufferingCountdown--;
+        } else {
+          // Stay at 0, next periodic API fetch will resolve state change
+        }
+      });
+    });
   }
 
   double _scaleForecastValue(double value) {
@@ -843,7 +857,7 @@ class _DashboardPageState extends State<DashboardPage>
       case 'not_calibrated':
         return _buildCalibrationRequiredScreen();
       case 'buffering':
-        return _buildDashboardList(risk);
+        return _buildBufferingScreen();
       case 'error':
       case 'success':
       default:
@@ -952,9 +966,7 @@ class _DashboardPageState extends State<DashboardPage>
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.75),
+              color: Colors.white.withValues(alpha: 0.7),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
@@ -979,19 +991,13 @@ class _DashboardPageState extends State<DashboardPage>
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.tertiaryContainer,
+        color: Colors.amber.shade50,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.5),
-        ),
+        border: Border.all(color: Colors.amber.shade200),
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.wifi_off_rounded,
-            color: Theme.of(context).colorScheme.tertiary,
-            size: 18,
-          ),
+          Icon(Icons.wifi_off_rounded, color: Colors.amber.shade800, size: 18),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -1000,7 +1006,7 @@ class _DashboardPageState extends State<DashboardPage>
                   : _statusMessage,
               style: GoogleFonts.poppins(
                 fontSize: 11,
-                color: Theme.of(context).colorScheme.onTertiaryContainer,
+                color: Colors.amber.shade800,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1015,10 +1021,8 @@ class _DashboardPageState extends State<DashboardPage>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(
-              Theme.of(context).colorScheme.primary,
-            ),
+          const CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(AppTheme.kPrimaryDeep),
           ),
           const SizedBox(height: 20),
           Text(
@@ -1057,12 +1061,12 @@ class _DashboardPageState extends State<DashboardPage>
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.tertiaryContainer,
+                  color: Colors.amber.shade50,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.tune_rounded,
-                  color: Theme.of(context).colorScheme.tertiary,
+                  color: Colors.amber,
                   size: 48,
                 ),
               ),
@@ -1133,14 +1137,12 @@ class _DashboardPageState extends State<DashboardPage>
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: enabled
-                ? Theme.of(context).colorScheme.primaryContainer
-                : Theme.of(context).colorScheme.surfaceContainerHighest,
+            color: enabled ? const Color(0xFFEDE7F6) : Colors.grey.shade100,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: enabled
-                  ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.5)
-                  : Theme.of(context).colorScheme.outlineVariant,
+                  ? const Color(0xFF764BA2).withValues(alpha: 0.35)
+                  : Colors.grey.shade300,
             ),
           ),
           child: Column(
@@ -1375,8 +1377,7 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Widget _buildBufferingScreen() {
-    final progress = _forecastCoverage.clamp(0.0, 1.0).toDouble();
-    final collectedMinutes = (progress * 10).round();
+    final double progress = (60 - _bufferingCountdown) / 60.0;
 
     return Center(
       child: SingleChildScrollView(
@@ -1398,7 +1399,7 @@ class _DashboardPageState extends State<DashboardPage>
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Building Your Forecast',
+                'Connecting to Your Chest Strap',
                 style: GoogleFonts.poppins(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
@@ -1407,7 +1408,7 @@ class _DashboardPageState extends State<DashboardPage>
               ),
               const SizedBox(height: 6),
               Text(
-                'Collecting 10 consecutive one-minute readings',
+                'Collecting your first readings',
                 style: GoogleFonts.poppins(
                   fontSize: 12,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1425,11 +1426,9 @@ class _DashboardPageState extends State<DashboardPage>
                     child: CircularProgressIndicator(
                       value: progress,
                       strokeWidth: 8,
-                      backgroundColor: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        Theme.of(context).colorScheme.primary,
+                      backgroundColor: Colors.grey.shade100,
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        AppTheme.kPrimaryDeep,
                       ),
                     ),
                   ),
@@ -1437,7 +1436,7 @@ class _DashboardPageState extends State<DashboardPage>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '$collectedMinutes/10',
+                        '$_bufferingCountdown',
                         style: GoogleFonts.poppins(
                           fontSize: 32,
                           fontWeight: FontWeight.w800,
@@ -1446,7 +1445,7 @@ class _DashboardPageState extends State<DashboardPage>
                         ),
                       ),
                       Text(
-                        'minutes',
+                        'seconds',
                         style: GoogleFonts.poppins(
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
@@ -1460,9 +1459,7 @@ class _DashboardPageState extends State<DashboardPage>
               const SizedBox(height: 36),
 
               Text(
-                _statusMessage.isEmpty
-                    ? 'Keep the chest strap connected. The forecast will appear after 10 consecutive valid one-minute readings.'
-                    : _statusMessage,
+                'Please sit quietly and breathe normally. Your forecast will appear after one minute of readings.',
                 style: GoogleFonts.poppins(
                   fontSize: 13,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1485,15 +1482,17 @@ class _DashboardPageState extends State<DashboardPage>
                   _buildPipelineStepRow(true, 'Personal resting level ready'),
                   const SizedBox(height: 10),
                   _buildPipelineStepRow(
-                    progress >= 1.0,
-                    'Collecting 10 consecutive valid minutes',
-                    trailing: '$collectedMinutes/10',
+                    _bufferingCountdown == 0,
+                    'Collecting the first minute of readings',
+                    trailing: _bufferingCountdown > 0 ? 'In progress' : null,
                   ),
                   const SizedBox(height: 10),
                   _buildPipelineStepRow(
                     false,
-                    'Preparing the +5 and +10 minute forecast',
-                    trailing: progress >= 1.0 ? 'Connecting...' : 'Pending',
+                    'Preparing your first forecast',
+                    trailing: _bufferingCountdown == 0
+                        ? 'Connecting...'
+                        : 'Pending',
                   ),
                 ],
               ),
@@ -1533,9 +1532,7 @@ class _DashboardPageState extends State<DashboardPage>
             style: GoogleFonts.poppins(
               fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: complete
-                  ? Colors.green
-                  : Theme.of(context).colorScheme.primary,
+              color: complete ? Colors.green : AppTheme.kPrimaryDeep,
             ),
           ),
       ],
@@ -1565,12 +1562,12 @@ class _DashboardPageState extends State<DashboardPage>
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primaryContainer,
+                    color: AppTheme.kPrimaryDeep.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(
+                  child: const Icon(
                     Icons.insights_rounded,
-                    color: Theme.of(context).colorScheme.primary,
+                    color: AppTheme.kPrimaryDeep,
                     size: 20,
                   ),
                 ),
@@ -1589,7 +1586,7 @@ class _DashboardPageState extends State<DashboardPage>
             Icon(
               Icons.hourglass_empty_rounded,
               size: 40,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              color: Colors.grey.shade300,
             ),
             const SizedBox(height: 12),
             Text(
@@ -1600,10 +1597,10 @@ class _DashboardPageState extends State<DashboardPage>
               ),
             ),
             Text(
-              'Your outlook will appear after 10 consecutive valid one-minute readings',
+              'Your 10-minute outlook will appear after one minute of readings',
               style: GoogleFonts.poppins(
                 fontSize: 11,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                color: Colors.grey.shade400,
               ),
             ),
             const SizedBox(height: 40),
@@ -1621,12 +1618,11 @@ class _DashboardPageState extends State<DashboardPage>
                 _scaleForecastValue(forecast.first))
             .clamp(0.0, 100.0)
             .toDouble();
-    const forecastHorizons = <double>[5.0, 10.0];
     final List<FlSpot> spots = [
       FlSpot(0, currentRisk),
       ...List.generate(forecast.length, (index) {
         final yVal = _scaleForecastValue(forecast[index]);
-        return FlSpot(forecastHorizons[index], yVal);
+        return FlSpot((index + 1).toDouble(), yVal);
       }),
     ];
     final forecastSummary = describeForecast(
@@ -2059,26 +2055,25 @@ class _DashboardPageState extends State<DashboardPage>
 
   Widget _buildServiceStrip() {
     final bool isWorn = _currentReading?.isWorn ?? false;
-    final colors = Theme.of(context).colorScheme;
 
-    Color bgColor = colors.errorContainer;
-    Color borderColor = colors.error.withValues(alpha: 0.5);
-    Color dotColor = colors.error;
-    Color textColor = colors.onErrorContainer;
+    Color bgColor = const Color(0xFFFFEBEE);
+    Color borderColor = Colors.red.shade200;
+    Color dotColor = Colors.red;
+    Color textColor = Colors.red.shade800;
     String statusText = 'Chest Strap Disconnected';
 
     if (_chestStrapConnected) {
       if (isWorn) {
-        bgColor = colors.tertiaryContainer;
-        borderColor = colors.tertiary.withValues(alpha: 0.5);
-        dotColor = colors.tertiary;
-        textColor = colors.onTertiaryContainer;
+        bgColor = const Color(0xFFE8F5E9);
+        borderColor = Colors.green.shade200;
+        dotColor = Colors.green;
+        textColor = Colors.green.shade800;
         statusText = 'Chest strap connected and active';
       } else {
-        bgColor = colors.secondaryContainer;
-        borderColor = colors.secondary.withValues(alpha: 0.5);
-        dotColor = colors.secondary;
-        textColor = colors.onSecondaryContainer;
+        bgColor = const Color(0xFFFFF3E0);
+        borderColor = Colors.orange.shade300;
+        dotColor = Colors.orange;
+        textColor = Colors.orange.shade900;
         statusText = 'Chest strap connected. Please put it on.';
       }
     }
@@ -2118,19 +2113,15 @@ class _DashboardPageState extends State<DashboardPage>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.tertiaryContainer,
+          color: Colors.orange.shade50,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: Theme.of(
-              context,
-            ).colorScheme.tertiary.withValues(alpha: 0.5),
-          ),
+          border: Border.all(color: Colors.orange.shade200),
         ),
         child: Row(
           children: [
             Icon(
               Icons.battery_alert_rounded,
-              color: Theme.of(context).colorScheme.tertiary,
+              color: Colors.orange.shade700,
               size: 18,
             ),
             const SizedBox(width: 10),
@@ -2139,13 +2130,13 @@ class _DashboardPageState extends State<DashboardPage>
                 'Battery settings may stop background updates. Tap to fix this.',
                 style: GoogleFonts.poppins(
                   fontSize: 11,
-                  color: Theme.of(context).colorScheme.onTertiaryContainer,
+                  color: Colors.orange.shade800,
                 ),
               ),
             ),
             Icon(
               Icons.chevron_right_rounded,
-              color: Theme.of(context).colorScheme.tertiary,
+              color: Colors.orange.shade400,
               size: 18,
             ),
           ],
@@ -2160,17 +2151,15 @@ class _DashboardPageState extends State<DashboardPage>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.errorContainer,
+          color: Colors.red.shade50,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.error.withValues(alpha: 0.5),
-          ),
+          border: Border.all(color: Colors.red.shade200),
         ),
         child: Row(
           children: [
             Icon(
               Icons.notifications_off_rounded,
-              color: Theme.of(context).colorScheme.error,
+              color: Colors.red.shade700,
               size: 18,
             ),
             const SizedBox(width: 10),
@@ -2179,7 +2168,7 @@ class _DashboardPageState extends State<DashboardPage>
                 'Anxiety check-in notifications are turned off. Tap to turn them on.',
                 style: GoogleFonts.poppins(
                   fontSize: 11,
-                  color: Theme.of(context).colorScheme.onErrorContainer,
+                  color: Colors.red.shade800,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -2638,11 +2627,7 @@ class _DashboardPageState extends State<DashboardPage>
       ),
       child: Column(
         children: [
-          Icon(
-            Icons.show_chart_rounded,
-            size: 48,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+          Icon(Icons.show_chart_rounded, size: 48, color: Colors.grey.shade300),
           const SizedBox(height: 12),
           Text(
             'Historical trends will appear here',
@@ -2657,7 +2642,7 @@ class _DashboardPageState extends State<DashboardPage>
             'Keep using Aura with your chest strap to build your history.',
             style: GoogleFonts.poppins(
               fontSize: 12,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              color: Colors.grey.shade400,
             ),
             textAlign: TextAlign.center,
           ),
