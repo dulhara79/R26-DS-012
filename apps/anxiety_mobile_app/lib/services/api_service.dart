@@ -306,12 +306,10 @@ class ApiService {
     }
   }
 
-  /// Sends a physiological feature window for C1 scoring.
+  /// Notifies the central backend to fetch C1's latest prediction.
   static Future<bool> submitPhysiologicalWindow({
     required String participantId,
-    required Map<String, double> features,
   }) async {
-    final now = DateTime.now().toUtc();
     try {
       final res = await http
           .post(
@@ -319,10 +317,7 @@ class ApiService {
             headers: _backendHeaders,
             body: jsonEncode({
               'app_user_id': participantId,
-              'window_start': now.subtract(const Duration(seconds: 60)).toIso8601String(),
-              'window_end': now.toIso8601String(),
-              'sampling_hz': 1,
-              'features': features,
+              'device_user_id': participantId,
             }),
           )
           .timeout(const Duration(seconds: 20));

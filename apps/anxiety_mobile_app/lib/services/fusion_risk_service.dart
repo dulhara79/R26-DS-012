@@ -28,15 +28,29 @@ class FusionRisk {
 
   final DateTime? updatedAt;
 
+  /// Whether the composite used two (provisional) or all three (complete)
+  /// fusion modalities. C2 is intentionally excluded from this count.
+  final String assessmentStatus;
+
+  final List<String> missingModalities;
+
   const FusionRisk({
     required this.composite,
     required this.band,
     this.message,
     this.updatedAt,
+    this.assessmentStatus = 'insufficient',
+    this.missingModalities = const [],
   });
 
   /// True only when the backend actually produced a usable score.
   bool get hasScore => composite != null && band != 'GREY';
+
+  String get assessmentLabel => assessmentStatus == 'complete'
+      ? 'Complete assessment'
+      : assessmentStatus == 'provisional'
+      ? 'Provisional assessment'
+      : 'Assessment incomplete';
 
   /// The gauge on the home page works on a 0..100 scale, but the backend
   /// composite is 0..1. Converting here, once, keeps the mistake from being
@@ -56,9 +70,18 @@ class FusionRisk {
       band: json['band']?.toString() ?? 'GREY',
       message: json['message']?.toString(),
       updatedAt: parsedUpdatedAt,
+      assessmentStatus: json['assessment_status']?.toString() ?? 'insufficient',
+      missingModalities:
+          (json['missing_modalities'] as List<dynamic>? ?? const <dynamic>[])
+          .map((value) => value.toString())
+          .toList(growable: false),
     );
   }
 }
+
+/// Returns only a usable score produced by the backend fusion model.
+double? officialOverallRisk(FusionRisk? risk) =>
+    risk?.hasScore == true ? risk!.scoreOutOf100 : null;
 
 /// Reads the composite risk produced by the fusion engine.
 ///
