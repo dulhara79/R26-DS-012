@@ -230,6 +230,10 @@ print(f"  reason : {res['reason']}")
 check("no tier from demographics alone", res["tier"] is None)
 check("band is GREY not GREEN", res["band"] == "GREY")
 check("a reason is recorded", bool(res["reason"]))
+check("a blocked one-score assessment is marked insufficient",
+      res.get("assessment_status") == "insufficient" and
+      res.get("missing_modalities") == ["c1_physiological", "c3_clinical_nlp"],
+      str(res))
 
 r = client.post("/v1/ingest/contextual", json={
     "app_user_id": "phone-aaa", "gad7_items": [0, 1, 2]})
@@ -254,6 +258,12 @@ section("6 · Full fusion once real modalities arrive")
 r = client.post("/v1/ingest/physiological", json={"app_user_id": "phone-aaa"})
 check("physiological ingest 200", r.status_code == 200, r.text)
 check("physio score stored raw (0-100 scale)", r.json()["score"] == 41.8)
+
+partial = client.post("/v1/fusion/run", json={"subject_id": P1,
+                                               "trigger": "two-score-check"}).json()
+check("two-score fusion is marked provisional",
+      partial.get("assessment_status") == "provisional" and
+      partial.get("missing_modalities") == ["c3_clinical_nlp"], str(partial))
 
 r = client.post("/v1/clinical-notes", json={
     "subject_id": P1, "note_text": "Patient reports persistent worry, poor sleep, "
@@ -281,6 +291,9 @@ check("composite in [0,1]", 0.0 <= (res["composite"] or -1) <= 1.0)
 check("weights sum to 1", abs(sum((res["weights"] or {}).values()) - 1.0) < 1e-3)
 check("behavioural weight is exactly 0", (res["weights"] or {}).get("c2_behavioral", 0) == 0.0)
 check("three modalities used", res["modalities_used"] == 3)
+check("three-score fusion is marked complete",
+      res.get("assessment_status") == "complete" and
+      res.get("missing_modalities") == [], str(res))
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -434,12 +447,14 @@ check("errored modality excluded from composite",
 check("tier still produced from the rest", r["tier"] is not None)
 _C1_STATUS[0] = "ok"
 client.post("/v1/ingest/physiological", json={"app_user_id": "phone-aaa"})
+client.post("/v1/fusion/run", json={"subject_id": P1, "trigger": "egress-check"})
 
 
 # ═════════════════════════════════════════════════════════════════════════════
 section("11 · Egress — two views, one source of truth")
 pat = client.get(f"/v1/patients/{P1}/risk").json()
 doc = client.get(f"/v1/doctor/patients/{P1}/timeline").json()
+explanation = client.get(f"/v1/doctor/patients/{P1}/explanation").json()
 print(f"  patient view keys : {sorted(pat)}")
 print(f"  clinician view keys: {sorted(doc)}")
 check("patient sees composite + band", "composite" in pat and "band" in pat)
@@ -450,6 +465,13 @@ check("clinician sees freshness", "age_minutes" in doc["modalities"]["c4_demogra
 check("clinician sees the gate decision", doc.get("gate") is not None)
 check("clinician sees a trend history", len(doc.get("trend", [])) >= 3)
 check("same composite in both views", pat["composite"] == doc["composite"])
+check("patient and clinician views share the complete-assessment status",
+      pat.get("assessment_status") == doc.get("assessment_status") == "complete")
+check("patient and clinician views share missing modalities",
+      pat.get("missing_modalities") == doc.get("missing_modalities") == [])
+check("explanation shares the complete-assessment status",
+      explanation.get("assessment_status") == "complete" and
+      explanation.get("missing_modalities") == [])
 
 note_blob = str(doc)
 check("raw clinical note text never leaves via egress",

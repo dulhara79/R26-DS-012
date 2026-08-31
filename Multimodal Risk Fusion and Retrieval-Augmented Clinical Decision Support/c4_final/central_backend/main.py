@@ -30,6 +30,7 @@ from db_models import (AuditLog, FusionResult, ModalityReading, PairingCode,
 
 API_TOKEN = os.getenv("BACKEND_API_TOKEN", "")
 ALL_MODALITIES = ["c1_physiological", "c2_behavioral", "c3_clinical_nlp", "c4_demographic"]
+FUSION_REQUIRED_MODALITIES = ("c1_physiological", "c3_clinical_nlp", "c4_demographic")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -364,6 +365,29 @@ def _minutes_since_last_fusion(db: Session, subject_id: str) -> Optional[float]:
     return (dt.datetime.now(dt.timezone.utc) - last).total_seconds() / 60.0
 
 
+def _assessment_summary(usable_modalities) -> dict:
+    used = set(usable_modalities or ()) & set(FUSION_REQUIRED_MODALITIES)
+    missing = [modality for modality in FUSION_REQUIRED_MODALITIES if modality not in used]
+    if not missing:
+        status = "complete"
+    elif len(used) >= gate.MIN_USABLE_MODALITIES:
+        status = "provisional"
+    else:
+        status = "insufficient"
+    return {"status": status, "missing_modalities": missing}
+
+
+def _assessment_for_row(row: Optional[FusionResult]) -> dict:
+    if row is None:
+        return _assessment_summary(())
+    harmonisation = row.harmonisation or {}
+    stored = harmonisation.get("assessment")
+    if isinstance(stored, dict) and stored.get("status"):
+        return stored
+    gate_summary = harmonisation.get("gate") or {}
+    return _assessment_summary(gate_summary.get("usable_modalities", ()))
+
+
 def _auto_fuse(db: Session, subject_id: str, trigger: str,
                debounce: bool = False) -> dict:
     """Run fusion after an ingest. Never lets a fusion failure fail the ingest —
@@ -377,9 +401,12 @@ def _auto_fuse(db: Session, subject_id: str, trigger: str,
                                               f"threshold {AUTO_FUSION_DEBOUNCE_MIN:g} min")}
     try:
         row = run_fusion(db, subject_id, trigger)
+        assessment = _assessment_for_row(row)
         return {"fusion_triggered": True,
                 "fusion": {"composite": row.composite, "tier": row.tier,
-                           "band": row.band, "reason": row.reason}}
+                           "band": row.band, "reason": row.reason,
+                           "assessment_status": assessment["status"],
+                           "missing_modalities": assessment["missing_modalities"]}}
     except Exception as exc:                     # noqa: BLE001
         return {"fusion_triggered": False,
                 "fusion_error": f"{type(exc).__name__}: {exc}"[:160]}
@@ -617,13 +644,14 @@ def run_fusion(db: Session, subject_id: str, trigger: str = "manual") -> FusionR
     readings = _latest_readings(db, subject_id)
 
     decision = gate.evaluate(readings)
+    assessment = _assessment_summary(decision.usable)
 
     if not decision.passed:
         row = FusionResult(
             subject_id=subject_id, composite=None, tier=None, band="GREY",
             confidence=0.0, modalities_used=len(decision.usable), renormalised=True,
             weights={}, contributions={},
-            harmonisation={"gate": decision.summary()},
+            harmonisation={"gate": decision.summary(), "assessment": assessment},
             reason=decision.reason, trigger=trigger, model_version="gate-blocked")
         db.add(row)
         _audit(db, subject_id, "fusion.blocked", decision.summary())
@@ -633,6 +661,7 @@ def run_fusion(db: Session, subject_id: str, trigger: str = "manual") -> FusionR
     result = fusion_client.fuse(subject_id, decision.usable)
     harmonisation = result.get("harmonisation", {})
     harmonisation["gate"] = decision.summary()
+    harmonisation["assessment"] = assessment
     conf = conformal.predict_set(result.get("composite_score"), _calibration_pairs(db))
     harmonisation["conformal"] = conf.to_wire()
 
@@ -667,11 +696,14 @@ def fusion_run(req: FuseRequest, db: Session = Depends(get_session),
     _auth(authorization)
     subject_id = req.subject_id or _resolve(db, "mrn_hash", identity.hash_mrn(req.mrn or ""))
     row = run_fusion(db, subject_id, req.trigger)
+    assessment = _assessment_for_row(row)
     return {
         "subject_id": subject_id, "composite": row.composite, "tier": row.tier,
         "band": row.band, "confidence": round(row.confidence, 4),
         "modalities_used": row.modalities_used, "weights": row.weights,
         "contributions": row.contributions, "reason": row.reason,
+        "assessment_status": assessment["status"],
+        "missing_modalities": assessment["missing_modalities"],
         "gate": (row.harmonisation or {}).get("gate"),
         **((row.harmonisation or {}).get("conformal") or {}),
         "computed_at": row.computed_at,
@@ -738,15 +770,20 @@ def patient_risk(subject_id: str, db: Session = Depends(get_session)):
     """
     _require_subject(db, subject_id)
     row = _latest_fusion(db, subject_id)
+    assessment = _assessment_for_row(row)
     if not row:
         return {"subject_id": subject_id, "composite": None, "band": "GREY",
-                "message": "no assessment yet", "updated_at": None}
+                "message": "no assessment yet", "updated_at": None,
+                "assessment_status": assessment["status"],
+                "missing_modalities": assessment["missing_modalities"]}
     _audit(db, subject_id, "egress.patient", None)
     db.commit()
     return {"subject_id": subject_id,
             "composite": row.composite, "band": row.band,
             "message": row.reason or "assessment available",
-            "updated_at": row.computed_at}
+            "updated_at": row.computed_at,
+            "assessment_status": assessment["status"],
+            "missing_modalities": assessment["missing_modalities"]}
 
 
 @app.get("/v1/doctor/patients/{subject_id}/timeline", tags=["egress"])
@@ -759,6 +796,7 @@ def doctor_timeline(subject_id: str, limit: int = 20,
     _require_subject(db, subject_id)
 
     latest = _latest_fusion(db, subject_id)
+    assessment = _assessment_for_row(latest)
     readings = _latest_readings(db, subject_id)
     now = dt.datetime.now(dt.timezone.utc)
 
@@ -800,6 +838,8 @@ def doctor_timeline(subject_id: str, limit: int = 20,
         "band": latest.band if latest else "GREY",
         "confidence": round(latest.confidence, 4) if latest else 0.0,
         "reason": latest.reason if latest else "no assessment yet",
+        "assessment_status": assessment["status"],
+        "missing_modalities": assessment["missing_modalities"],
         "weights": latest.weights if latest else {},
         "contributions": latest.contributions if latest else {},
         "gate": (latest.harmonisation or {}).get("gate") if latest else None,
@@ -812,6 +852,8 @@ def doctor_timeline(subject_id: str, limit: int = 20,
         "modalities_used": latest.modalities_used if latest else 0,
         "renormalised": bool(latest.renormalised) if latest else False,
         "trend": [{"composite": h.composite, "tier": h.tier, "band": h.band,
+                   "assessment_status": _assessment_for_row(h)["status"],
+                   "missing_modalities": _assessment_for_row(h)["missing_modalities"],
                    "computed_at": h.computed_at, "trigger": h.trigger}
                   for h in reversed(history)],
 
@@ -901,6 +943,8 @@ def doctor_explanation(subject_id: str, db: Session = Depends(get_session),
     latest = _latest_fusion(db, subject_id)
     if latest is None:
         return {"subject_id": subject_id, "assessed": False,
+                "assessment_status": "insufficient",
+                "missing_modalities": list(FUSION_REQUIRED_MODALITIES),
                 "narrative": "No assessment has been produced for this patient yet. "
                              "This is an absence of evidence, not a low-risk result.",
                 "explainer_version": carex.EXPLAINER_VERSION}
@@ -938,6 +982,9 @@ def doctor_explanation(subject_id: str, db: Session = Depends(get_session),
     explanation["subject_id"] = subject_id
     explanation["fusion_result_id"] = latest.id
     explanation["computed_at"] = latest.computed_at
+    assessment = _assessment_for_row(latest)
+    explanation["assessment_status"] = assessment["status"]
+    explanation["missing_modalities"] = assessment["missing_modalities"]
     return explanation
 
 @app.post("/v1/evidence/ask", tags=["egress"])
