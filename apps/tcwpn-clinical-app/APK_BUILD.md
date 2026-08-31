@@ -52,6 +52,23 @@ flutter build apk --debug `
   --dart-define=AUTH_SALT=$ENV:AUTH_SALT `
   --dart-define=AUTH_LOCAL=$env:AUTH_LOCAL`
 ```
+## 3. Chrome Run
+
+```bash
+set -a
+source .env
+set +a
+```
+
+```bash
+flutter run -d chrome `
+  --dart-define=BACKEND_BASE="$BACKEND_BASE" `
+  --dart-define=BACKEND_TOKEN="$BACKEND_TOKEN" `
+  --dart-define=TCWPN_BASE="$TCWPN_BASE" `
+  --dart-define=DEMO_DATA=false `
+  --dart-define=AUTH_SALT="$AUTH_SALT" `
+  --dart-define=AUTH_LOCAL="$AUTH_LOCAL" `
+```
 
 ## 4. Release APK
 
