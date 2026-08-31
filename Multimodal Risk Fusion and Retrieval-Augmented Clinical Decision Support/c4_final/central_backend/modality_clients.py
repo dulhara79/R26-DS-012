@@ -6,13 +6,9 @@ owns ingestion and calls each component's /predict (steps 11, 15, 19, 24); the
 Fusion Service only fuses. That separation matters because it means the fusion
 layer can be re-run over stored readings at any time without re-calling anyone.
 
-Two contract generations are handled for C1 and C3, because the frozen service
-contract (R26-DS-012_service_contracts.md) describes the TARGET shape each Space
-is meant to converge on, which is not necessarily what is live today:
+The adapters follow the contracts exposed by the live component services:
 
-    c1_physiological  target: POST /predict {window, features} -> score [0,1]
-                              + status (ok|warming_up|poor_signal|error)
-                      legacy: GET  /predict/{user_id} -> current_risk_index [0,100]
+    c1_physiological  GET /predict/{user_id} -> current_risk_index [0,100]
 
     c2_behavioral     excluded — stored, never fused, no Space called
 
@@ -23,11 +19,6 @@ is meant to converge on, which is not necessarily what is live today:
 
     c4_demographic    POST /fusion_component -> score [0,1] + confidence + coverage
                       (fully under our control — see hf_space/app.py)
-
-Each adapter tries the target contract first and falls back to the legacy shape
-only where the two are structurally different (C1's GET vs POST). Once a
-component ships the target contract, its legacy branch becomes dead code that
-can be deleted — it is kept isolated in its own function for exactly that reason.
 
 Rule that governs all of them: A COMPONENT THAT DOES NOT ANSWER IS MISSING, NOT
 ZERO. A timeout is recorded with status='error' and no score, never as 0.0 —
@@ -226,58 +217,8 @@ def _parse_captured_at(value, fallback: dt.datetime) -> dt.datetime:
         return fallback
 
 
-# ── C1 physiological ─────────────────────────────────────────────────────────
-def _call_c1_target_contract(client: httpx.Client, subject_id: str,
-                             window: dict) -> Optional[ComponentResult]:
-    """POST /predict per the frozen contract. Returns None (not an error result)
-    on HTTP 404 specifically, which is the signal to try the legacy endpoint —
-    every other failure is a real error and is returned as such."""
-    r = client.post(f"{C1_BASE}/predict", headers=_headers(C1_TOKEN),
-                    json={"subject_id": subject_id, **window}, timeout=TIMEOUT_S)
-    if r.status_code == 404:
-        return None
-    if r.status_code != 200:
-        return ComponentResult(status="error", note=f"HTTP {r.status_code}")
-
-    body = r.json()
-    mismatch = verify_subject_echo(subject_id, body.get("subject_id"), "C1")
-    if mismatch:
-        return ComponentResult(status="error", note=mismatch, detail=body)
-    now = dt.datetime.now(dt.timezone.utc)
-    status = body.get("status", "ok" if body.get("score") is not None else "error")
-
-    # baseline_ready is the authoritative override: a personal baseline that
-    # hasn't converged makes the score noise regardless of what `status` says.
-    if body.get("baseline_ready") is False:
-        status = "warming_up"
-
-    score = body.get("score")
-    raw_score = float(score) if (status == "ok" and score is not None) else None
-
-    # Confidence: prefer signal_quality (a real published field in the target
-    # contract) over the old distance-from-threshold proxy.
-    if body.get("signal_quality") is not None:
-        confidence = float(body["signal_quality"])
-    else:
-        err, thr = body.get("reconstruction_error"), body.get("threshold")
-        confidence = 0.6
-        if err is not None and thr:
-            confidence = float(min(max(1.0 - abs(err - thr) / max(thr, 1e-6), 0.3), 0.9))
-
-    seen, required = body.get("baseline_windows_seen"), body.get("baseline_windows_required")
-    coverage = min(seen / required, 1.0) if (seen and required) else 1.0
-
-    return ComponentResult(
-        raw_score=raw_score, status=status, confidence=confidence, coverage=coverage,
-        model_version=body.get("model_version", "c1"), detail=body,
-        note=None if status == "ok" else
-             f"{status}" + (f" ({body.get('baseline_windows_seen')}/{body.get('baseline_windows_required')} windows)"
-                            if status == "warming_up" and body.get("baseline_windows_required") else ""),
-        captured_at=_parse_captured_at(body.get("captured_at"), now))
-
-
 def _call_c1_legacy(client: httpx.Client, user_id: str) -> ComponentResult:
-    """GET /predict/{user_id} — five corrections from Dewdu's integration note.
+    """GET /predict/{user_id} — the live C1 contract.
 
     1. STATUS MAPPING: not_calibrated/buffering -> warming_up, stale -> poor_signal
     2. captured_at IS latest_reading_at, not the time we fetched the response
@@ -328,31 +269,20 @@ def _call_c1_legacy(client: httpx.Client, user_id: str) -> ComponentResult:
         captured_at=captured)
 
 
-def call_c1(subject_id: str, window: Optional[dict] = None,
+def call_c1(user_id: str, window: Optional[dict] = None,
             client: Optional[httpx.Client] = None) -> ComponentResult:
-    """Target contract first (if `window` supplied), legacy GET as fallback.
+    """Fetch C1's latest prediction for its participant/device user id.
 
-    `window` should carry window_start, window_end, sampling_hz, features — the
-    same fields the ingestion endpoint receives from the chest strap. Omit it to
-    go straight to the legacy path (e.g. in a demo where the app only sends a
-    bare tick).
+    ``window`` remains accepted for compatibility with older callers, but C1
+    receives its complete sensor features through its own ``/ingest`` endpoint.
     """
     if not C1_BASE:
         return ComponentResult(status="error", note="C1 not configured")
     own = client is None
     client = client or httpx.Client()
     try:
-        if window:
-            try:
-                result = _call_c1_target_contract(client, subject_id, window)
-            except httpx.TimeoutException:
-                return ComponentResult(status="error", note=f"timeout {TIMEOUT_S}s (Space waking?)")
-            if result is not None:
-                return result
-            # target contract returned 404 -> component hasn't shipped it yet, fall through
-
         try:
-            return _call_c1_legacy(client, subject_id)
+            return _call_c1_legacy(client, user_id)
         except httpx.TimeoutException:
             return ComponentResult(status="error", note=f"timeout {TIMEOUT_S}s (Space waking?)")
     except Exception as exc:                                # noqa: BLE001

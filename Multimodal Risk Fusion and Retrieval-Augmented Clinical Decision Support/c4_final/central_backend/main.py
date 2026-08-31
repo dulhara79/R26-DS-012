@@ -401,10 +401,8 @@ class PhysiologicalWindow(BaseModel):
     subject_id: Optional[str] = None
     device_user_id: Optional[str] = Field(
         None, description="id the chest strap streams under; defaults to subject_id")
-    # Target-contract fields (R26-DS-012_service_contracts.md §2). All optional:
-    # omit them and the client falls back to the legacy GET endpoint that's
-    # actually live today. Once C1 ships the target contract, the patient app
-    # should start sending these on every 60s window.
+    # Kept optional for compatibility with older patient-app requests. C1 gets
+    # its complete sensor feature windows directly through its own /ingest API.
     window_start: Optional[dt.datetime] = None
     window_end: Optional[dt.datetime] = None
     sampling_hz: Optional[int] = None
@@ -420,22 +418,14 @@ class PhysiologicalWindow(BaseModel):
 @app.post("/v1/ingest/physiological", tags=["ingestion"])
 def ingest_physiological(req: PhysiologicalWindow, db: Session = Depends(get_session),
                          authorization: Optional[str] = Header(None)):
-    """Steps 10-13. Chest-strap window, every 60 seconds."""
+    """Fetch and store C1's latest prediction for this participant."""
     _auth(authorization)
     subject_id = req.subject_id or _resolve(db, "app_user_id", req.app_user_id or "")
     _require_subject(db, subject_id)
 
-    window = None
-    if req.features:
-        window = {
-            "window_start": req.window_start.isoformat() if req.window_start else None,
-            "window_end": req.window_end.isoformat() if req.window_end else None,
-            "sampling_hz": req.sampling_hz,
-            "features": req.features,
-        }
-
-    result = mc.call_c1(req.device_user_id or _external_id(db, subject_id, "c1_physiological"),
-                        window=window)
+    c1_user_id = (req.device_user_id or req.app_user_id or
+                  _external_id(db, subject_id, "c1_physiological"))
+    result = mc.call_c1(c1_user_id)
     row = _store(db, subject_id, "c1_physiological", result)
     db.commit()
     fusion_info = _auto_fuse(db, subject_id, "physio-ingest", debounce=True)
@@ -574,6 +564,8 @@ def ingest_clinical_note(req: ClinicalNote, db: Session = Depends(get_session),
     fusion_info = _auto_fuse(db, subject_id, "note-ingest")
     return {"subject_id": subject_id, "reading_id": row.id,
             "status": result.status, "score": result.raw_score, "note": result.note,
+            "component_detail": result.detail,
+            "score_provenance": result.note,
             **fusion_info}
 
 
