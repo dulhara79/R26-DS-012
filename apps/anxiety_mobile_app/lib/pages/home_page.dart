@@ -284,7 +284,6 @@ void _onFusionRiskChanged() {
     final risk = _overallRisk ?? 0.0;
     final riskCol = _hasOverallRisk ? _overallColor(risk) : Colors.grey;
     final label = _labelForScore(_overallRisk);
-    final backendRisk = FusionRiskService.instance.latest.value;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -517,19 +516,6 @@ void _onFusionRiskChanged() {
                                           color: Colors.white,
                                         ),
                                       ),
-                                      if (backendRisk?.hasScore == true) ...[
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          backendRisk!.assessmentLabel,
-                                          style: GoogleFonts.poppins(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.white.withValues(
-                                              alpha: 0.8,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
                                     ],
                                   ),
                                 ),
