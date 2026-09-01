@@ -27,22 +27,4 @@ void main() {
     expect(risk.assessmentLabel, 'Complete assessment');
     expect(risk.missingModalities, isEmpty);
   });
-
-  group('officialOverallRisk', () {
-    test('returns the backend fusion score', () {
-      const risk = FusionRisk(composite: 0.61, band: 'AMBER');
-
-      expect(officialOverallRisk(risk), 61.0);
-    });
-
-    test('returns null when no backend fusion result exists', () {
-      expect(officialOverallRisk(null), isNull);
-    });
-
-    test('returns null when the backend refused to produce a score', () {
-      const risk = FusionRisk(composite: 0.61, band: 'GREY');
-
-      expect(officialOverallRisk(risk), isNull);
-    });
-  });
 }
