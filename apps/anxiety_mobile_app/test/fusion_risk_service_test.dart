@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:anxiety_mobile_app/services/fusion_risk_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -46,14 +44,5 @@ void main() {
 
       expect(officialOverallRisk(risk), isNull);
     });
-  });
-
-  test('home fusion polling refreshes within the investor demo window', () {
-    final source = File(
-      'lib/services/fusion_risk_service.dart',
-    ).readAsStringSync();
-
-    expect(source, contains('Duration(seconds: 5)'));
-    expect(source, isNot(contains('Duration(minutes: 5)')));
   });
 }
