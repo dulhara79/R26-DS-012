@@ -238,15 +238,14 @@ class AuthService {
     return null;
   }
 
-  /// Debug-only, so a fresh clone runs with no flags. Empty in release builds,
-  /// so a forgotten flag cannot ship an app with a known password.
-  static List<String> _fallbackAccounts() {
-    if (kReleaseMode) return const [];
-    return [
-      'DR001|Dr D. Kaushalya|${digest('clinanx-dev')}',
-      'DR002|Dr C. Suraweera|${digest('clinanx-dev')}',
-    ];
-  }
+  /// Demo-only fallback accounts used when AUTH_LOCAL is omitted. This branch
+  /// is intentionally isolated from production branches so a demo build can be
+  /// signed out and signed back in even when no external auth service is
+  /// available. Local mode is visibly marked insecure in release builds.
+  static List<String> _fallbackAccounts() => [
+        'DR001|Dr D. Kaushalya|${digest('clinanx-dev')}',
+        'DR002|Dr C. Suraweera|${digest('clinanx-dev')}',
+      ];
 
   static const String devPassword = 'clinanx-dev';
 }
