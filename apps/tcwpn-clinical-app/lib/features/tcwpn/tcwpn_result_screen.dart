@@ -21,8 +21,10 @@ import 'package:provider/provider.dart';
 import '../../core/design/components.dart';
 import '../../core/design/theme.dart';
 import '../../core/design/tokens.dart';
+import '../../data/api/api_client.dart';
 import '../../domain/models.dart';
 import '../../state/controllers.dart';
+import '../fusion/fusion_detail_screen.dart';
 import 'note_analysis_screen.dart';
 
 class TcwpnResultScreen extends StatefulWidget {
@@ -35,22 +37,33 @@ class TcwpnResultScreen extends StatefulWidget {
 
 class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
   late ClinicalNote _note = widget.note;
+  bool _busy = false;
+
+  /// Every number on this screen arrives over the network. A missing or
+  /// non-finite value must read as "not reported"; it must not reach a paint.
+  static String _fixed(double? v, int places) =>
+      (v == null || !v.isFinite) ? '\u2014' : v.toStringAsFixed(places);
+
+  /// Fraction for a progress bar, always in 0..1.
+  ///
+  /// A non-finite value produces a NaN rect, and `Canvas.drawRect` asserts on
+  /// those in debug builds — a red error screen caused by a weight the service
+  /// simply did not send.
+  static double _frac(double v, double max) {
+    if (!v.isFinite || !max.isFinite || max <= 0) return 0;
+    return (v / max).clamp(0.0, 1.0);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final r = _note.result;
-    if (r == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Clinical note')),
-        body: const EmptyState(
-          icon: Icons.pending_outlined,
-          title: 'Not analysed yet',
-          body: 'This note is saved as a draft. Analyse it to produce a score.',
-        ),
-      );
-    }
+    // watch, not read: analyseStoredNote refreshes fusion immediately after the
+    // ingest returns, and the composite panel below has to repaint when it
+    // lands rather than showing "no composite" until the screen is reopened.
+    final chart = context.watch<ChartController>();
 
-    final chart = context.read<ChartController>();
+    final r = _note.result;
+    if (r == null) return _noAssessment(context, chart);
+
     final band = AlertBandX.fromScore(r.calibratedProbability);
 
     return Scaffold(
@@ -107,6 +120,24 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
             ),
             const SizedBox(height: Ds.s4),
           ],
+          SectionLabel(
+            'Framework composite',
+            trailing: chart.fusion == null ? null : 'Full breakdown',
+            onTrailing: chart.fusion == null
+                ? null
+                : () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => FusionDetailScreen(
+                          fusion: chart.fusion!,
+                          patient: chart.patient,
+                          latestNote: _note,
+                        ),
+                      ),
+                    ),
+          ),
+          _fusionPanel(chart),
+          const SizedBox(height: Ds.s5),
           const SectionLabel('Decision'),
           _decisionPanel(r),
           const SizedBox(height: Ds.s5),
@@ -140,6 +171,136 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
     );
   }
 
+  // ── No assessment ─────────────────────────────────────────────────────────
+
+  /// The note carries no assessment. Two situations that must not share a
+  /// screen: a draft the clinician deliberately parked, and a note that WAS
+  /// submitted and came back without one.
+  ///
+  /// The second case is not an exception anywhere. `POST /v1/clinical-notes`
+  /// answers 200 with `component_detail` absent whenever call_c3 failed or the
+  /// support bank was unusable (central_backend/main.py), so no ApiException is
+  /// raised and the editor's "Analysis unavailable" dialog never fires. This
+  /// screen is where that outcome lands. It previously described the note as an
+  /// un-submitted draft — which is false, and it discarded the backend's own
+  /// explanation, leaving the clinician with a dead end and no retry.
+  Widget _noAssessment(BuildContext context, ChartController chart) {
+    final failed = _note.status == ClinicalNoteStatus.analysisFailed;
+    final reason = _note.lastAnalysisError ?? chart.error;
+    final provenance = chart.lastIngest?.scoreProvenance;
+    final status = chart.lastIngest?.status;
+
+    return WorkingOverlay(
+      active: _busy,
+      message: 'Running TC-WPN.\nA cold model can take up to a minute to wake.',
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(failed ? 'No assessment returned' : 'Clinical note'),
+          actions: [
+            IconButton(
+              tooltip: 'Edit note',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: () => Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ChangeNotifierProvider.value(
+                    value: chart,
+                    child: NoteAnalysisScreen(existing: _note),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(Ds.s4, Ds.s4, Ds.s4, Ds.s10),
+          children: [
+            InlineNotice(
+              icon: failed
+                  ? Icons.report_problem_outlined
+                  : Icons.pending_outlined,
+              tone: failed ? Ds.amber : null,
+              text: failed
+                  ? 'This note reached the backend and was stored. The clinical '
+                      'model did not return an assessment for it. Nothing you '
+                      'wrote has been lost.'
+                  : 'This note is saved as a draft on this device. It has not '
+                      'been submitted.',
+            ),
+            if (failed) ...[
+              const SizedBox(height: Ds.s5),
+              const SectionLabel('What the service reported'),
+              Panel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Verbatim. A paraphrase here would cost the study team the
+                    // one string that tells them which service failed.
+                    Text(
+                      reason ?? 'No reason was returned.',
+                      style: const TextStyle(
+                          fontSize: 12.5, color: Ds.ink, height: 1.5),
+                    ),
+                    if (status != null) ...[
+                      const SizedBox(height: Ds.s3),
+                      _kv('Component status', status),
+                    ],
+                    if (provenance != null) _kv('Backend note', provenance),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: Ds.s5),
+            ElevatedButton.icon(
+              onPressed: _busy ? null : () => _retry(chart),
+              icon: const Icon(Icons.refresh_rounded, size: 19),
+              label: Text(failed ? 'Try analysis again' : 'Analyse note'),
+            ),
+            const SizedBox(height: Ds.s5),
+            const SectionLabel('Framework composite'),
+            _fusionPanel(chart),
+            const SizedBox(height: Ds.s5),
+            const SectionLabel('Submitted note'),
+            Panel(
+              child: Text(
+                _note.text,
+                style:
+                    const TextStyle(fontSize: 13.5, height: 1.6, color: Ds.ink),
+              ),
+            ),
+            const SizedBox(height: Ds.s5),
+            const DecisionSupportNotice(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _retry(ChartController chart) async {
+    setState(() => _busy = true);
+    try {
+      final updated = await chart.analyseStoredNote(_note.id);
+      if (!mounted) return;
+      setState(() {
+        _note = updated;
+        _busy = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      // Nothing below the gateway is allowed to reach the framework as an
+      // unhandled async error and leave the overlay spinning forever.
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Analysis could not be started.')),
+      );
+    }
+  }
+
   // ── Headline ──────────────────────────────────────────────────────────────
 
   Widget _headline(TcwpnResult r, AlertBand band) => Panel(
@@ -156,22 +317,33 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('CLINICAL-NOTE RISK', style: AppTheme.eyebrow),
+                      // Named by what the service SAID about the number, not by
+                      // the field it arrived under. The live deployment sends
+                      // `probability` with calibration_status=uncalibrated.
+                      Text(r.probabilityLabel, style: AppTheme.eyebrow),
                       const SizedBox(height: 2),
                       Text(
-                        r.calibratedProbability.toStringAsFixed(4),
+                        _fixed(r.calibratedProbability, 4),
                         style: AppTheme.data(
                             size: 38, weight: FontWeight.w600, color: band.fg),
                       ),
-                      const SizedBox(height: Ds.s1),
-                      Text(
-                        r.prediction,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: band.fg,
-                          letterSpacing: 0.2,
-                        ),
+                      const SizedBox(height: Ds.s2),
+                      Wrap(
+                        spacing: Ds.s2,
+                        runSpacing: Ds.s2,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          _severityChip(band),
+                          Text(
+                            r.prediction,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: band.fg,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -182,6 +354,32 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
             const SizedBox(height: Ds.s4),
             _thresholdRule(r, band),
           ],
+        ),
+      );
+
+  /// The severity word for THIS MODALITY's score.
+  ///
+  /// Bands at 0.25 / 0.50 / 0.75 via AlertBandX.fromScore, which the design
+  /// tokens already document as the split for a single modality shown in
+  /// isolation. It is NOT the fusion service's split (0.33 / 0.66 into
+  /// Low/Medium/High) and it deliberately uses a different word list, so the
+  /// two numbers on this screen can never be read as the same quantity.
+  Widget _severityChip(AlertBand band) => Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: Ds.s3, vertical: 4),
+        decoration: BoxDecoration(
+          color: band.fg.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(Ds.rPill),
+          border: Border.all(color: band.fg.withValues(alpha: 0.35)),
+        ),
+        child: Text(
+          band.severityLabel.toUpperCase(),
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w700,
+            color: band.fg,
+            letterSpacing: 0.6,
+          ),
         ),
       );
 
@@ -217,7 +415,7 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
                       child: TweenAnimationBuilder<double>(
                         tween: Tween(
                             begin: 0,
-                            end: r.calibratedProbability.clamp(0.0, 1.0) * w),
+                            end: _frac(r.calibratedProbability, 1.0) * w),
                         duration: Ds.med,
                         curve: Curves.easeOutCubic,
                         builder: (_, v, __) => Container(
@@ -231,7 +429,7 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
                       ),
                     ),
                     Positioned(
-                      left: (r.threshold.clamp(0.0, 1.0) * w) - 1,
+                      left: (_frac(r.threshold, 1.0) * w) - 1,
                       top: 0,
                       child: Container(width: 2, height: 22, color: Ds.ink),
                     ),
@@ -244,7 +442,7 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
                   Text('0.0',
                       style: AppTheme.data(size: 10, color: Ds.inkMuted)),
                   const Spacer(),
-                  Text('threshold ${r.threshold.toStringAsFixed(4)}',
+                  Text('threshold ${_fixed(r.threshold, 4)}',
                       style: AppTheme.data(size: 10, color: Ds.ink)),
                   const Spacer(),
                   Text('1.0',
@@ -256,6 +454,173 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
         },
       );
 
+  // ── Framework composite ───────────────────────────────────────────────────
+
+  /// The composite, as the FUSION SERVICE computed it. Nothing on this panel is
+  /// re-derived on the device.
+  ///
+  /// The composite and the score above it are two different quantities on two
+  /// different scales: the fusion service bands three ways at 0.33 / 0.66 into
+  /// Low / Medium / High (fusion_service/fusion.py, BANDS), and it returns both
+  /// `tier` and `band` so neither has to be guessed. Putting them on one screen
+  /// is what a clinician asked for; keeping their vocabularies apart is what
+  /// stops it being misleading.
+  ///
+  /// A null composite is a BLOCKED GATE, not low risk — fewer than two usable
+  /// modalities, or no time-varying one. FusionBar renders the server's own
+  /// gate reason in that case rather than a number.
+  Widget _fusionPanel(ChartController chart) {
+    final f = chart.fusion;
+    final ingest = chart.lastIngest;
+
+    if (f == null) {
+      final reason = ingest?.fusionError ?? ingest?.fusionSkippedReason;
+      return Panel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'No composite has been read for this patient.',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              reason ??
+                  'The clinical-note reading above is stored on the backend and '
+                      'joins the composite the next time fusion runs. A '
+                      'composite needs at least two usable modalities.',
+              style: const TextStyle(
+                  fontSize: 12.5, color: Ds.inkMuted, height: 1.45),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // TC-WPN's own slice of the composite, so the clinician can see what the
+    // note they are reading actually contributed.
+    ComponentContribution? notes;
+    for (final c in f.contributions) {
+      if (c.key == Modality.c3ClinicalNlp) notes = c;
+    }
+
+    // A composite computed BEFORE this assessment does not contain it. One
+    // second of tolerance: the fusion row and the reading are written by
+    // different code paths inside the same request.
+    final analysedAt = _note.analysedAt;
+    final predatesThisNote = analysedAt != null &&
+        f.updatedAt != null &&
+        analysedAt.difference(f.updatedAt!).inSeconds > 1;
+
+    return Column(
+      children: [
+        Panel(
+          padding: const EdgeInsets.all(Ds.s5),
+          child: FusionBar(
+            composite: f.compositeScore,
+            band: f.band,
+            renormalised: f.renormalised,
+            blockedReason: f.reason,
+            segments: [
+              for (final c in f.contributions)
+                FusionSegment(
+                  key: c.key,
+                  label: c.label,
+                  contribution: c.contribution,
+                  weight: c.weight,
+                  score: c.score,
+                  excluded: c.excluded,
+                  unavailableReason: c.note,
+                  color: FusionBar.palette[c.key] ?? Ds.brand,
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: Ds.s3),
+        Panel(
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Readout(
+                      label: 'COMPOSITE',
+                      value: f.compositeLabel,
+                      valueColor: f.band.fg,
+                    ),
+                  ),
+                  Expanded(
+                    child: Readout(
+                      label: 'TIER',
+                      // The server's tier verbatim. Never re-derived from the
+                      // composite here — the edges are the fusion service's.
+                      value: f.tier ?? '\u2014',
+                      valueColor: f.band.fg,
+                    ),
+                  ),
+                  Expanded(
+                    child: Readout(
+                      label: 'MODALITIES',
+                      value: '${f.modalitiesUsed} of ${Modality.all.length}',
+                    ),
+                  ),
+                ],
+              ),
+              if (notes != null) ...[
+                const SizedBox(height: Ds.s4),
+                const Divider(),
+                const SizedBox(height: Ds.s3),
+                _kv(
+                  'This modality',
+                  notes.contribution == null
+                      ? 'not in the composite'
+                      : '${_fixed(notes.score, 3)} × weight '
+                          '${_fixed(notes.weight, 2)} = '
+                          '${_fixed(notes.contribution, 3)}',
+                ),
+                if (notes.note != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      notes.note!,
+                      style: const TextStyle(
+                          fontSize: 11.5, color: Ds.inkFaint, height: 1.4),
+                    ),
+                  ),
+              ],
+              const SizedBox(height: Ds.s3),
+              _kv('Assessment', f.assessmentLabel),
+              _kv(
+                'Computed',
+                f.updatedAt == null
+                    ? '\u2014'
+                    : DateFormat('d MMM y · HH:mm').format(f.updatedAt!),
+              ),
+            ],
+          ),
+        ),
+        if (predatesThisNote) ...[
+          const SizedBox(height: Ds.s3),
+          const InlineNotice(
+            icon: Icons.history_rounded,
+            tone: Ds.amber,
+            text: 'This composite was computed before the assessment above, so '
+                'it does not include this note. Re-run fusion from the patient '
+                'chart to fold it in.',
+          ),
+        ],
+        if (chart.fusionFromCache) ...[
+          const SizedBox(height: Ds.s3),
+          const InlineNotice(
+            icon: Icons.cloud_off_rounded,
+            text: 'Showing the last composite this device received. It has not '
+                'been re-read from the backend in this session.',
+          ),
+        ],
+      ],
+    );
+  }
+
   // ── Decision detail ───────────────────────────────────────────────────────
 
   Widget _decisionPanel(TcwpnResult r) => Panel(
@@ -266,7 +631,7 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
                 Expanded(
                   child: Readout(
                     label: 'RAW SCORE',
-                    value: r.riskScore.toStringAsFixed(4),
+                    value: _fixed(r.riskScore, 4),
                   ),
                 ),
                 Expanded(
@@ -278,7 +643,7 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
                 Expanded(
                   child: Readout(
                     label: 'ENTROPY',
-                    value: r.entropy.isNaN ? '—' : r.entropy.toStringAsFixed(3),
+                    value: _fixed(r.entropy, 3),
                   ),
                 ),
               ],
@@ -312,7 +677,7 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
                   const SizedBox(width: Ds.s2),
                   Expanded(
                     child: Text(
-                      'Expected calibration error ${r.ece!.toStringAsFixed(3)} — '
+                      'Expected calibration error ${_fixed(r.ece, 3)} \u2014 '
                       'how closely the model\'s stated confidence matched reality '
                       'in validation.',
                       style: const TextStyle(
@@ -328,7 +693,8 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
 
   Widget _distanceRow(String label, double d, double other, Color tone) {
     final total = d + other;
-    final frac = total == 0 ? 0.5 : d / total;
+    // A non-finite distance from the service must not become a NaN rect.
+    final frac = (!total.isFinite || total == 0) ? 0.5 : _frac(d, total);
     return Row(
       children: [
         SizedBox(
@@ -340,7 +706,7 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(3),
             child: LinearProgressIndicator(
-              value: 1 - frac,
+              value: (1 - frac).clamp(0.0, 1.0),
               minHeight: 6,
               backgroundColor: Ds.surfaceSunken,
               valueColor: AlwaysStoppedAnimation(tone),
@@ -348,7 +714,7 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
           ),
         ),
         const SizedBox(width: Ds.s3),
-        Text(d.toStringAsFixed(3), style: AppTheme.data(size: 11.5)),
+        Text(_fixed(d, 3), style: AppTheme.data(size: 11.5)),
       ],
     );
   }
@@ -365,11 +731,20 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
       );
     }
 
-    final weighted = r.hasAttribution;
-    final spans = [...r.spans];
-    if (weighted) spans.sort((a, b) => b.weight.compareTo(a.weight));
+    // Rank only the spans that actually carry a finite weight. A service that
+    // sends a mixed list — some weighted, some not — used to put every span
+    // through the weighted branch, and the unweighted ones produced a NaN bar
+    // fraction. Canvas.drawRect asserts on a NaN rect in debug builds, so a
+    // missing weight became a red error screen. The unweighted remainder is
+    // rendered below as plain chips, which is what it is.
+    final ranked = r.spans.where((s) => s.hasWeight && s.weight.isFinite).toList()
+      ..sort((a, b) => b.weight.compareTo(a.weight));
+    final plain = r.spans.where((s) => !(s.hasWeight && s.weight.isFinite));
+
+    final weighted = ranked.isNotEmpty;
+    final spans = weighted ? ranked : r.spans.toList();
     final maxW = weighted
-        ? spans.map((s) => s.weight).fold<double>(0, (a, b) => a > b ? a : b)
+        ? ranked.map((s) => s.weight).fold<double>(0, (a, b) => a > b ? a : b)
         : 1.0;
 
     return Panel(
@@ -401,7 +776,7 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
                                     fontSize: 13, fontWeight: FontWeight.w500)),
                           ),
                           const SizedBox(width: Ds.s3),
-                          Text(s.weight.toStringAsFixed(3),
+                          Text(_fixed(s.weight, 3),
                               style:
                                   AppTheme.data(size: 11, color: Ds.inkMuted)),
                         ],
@@ -410,8 +785,7 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
                       ClipRRect(
                         borderRadius: BorderRadius.circular(3),
                         child: TweenAnimationBuilder<double>(
-                          tween: Tween(
-                              begin: 0, end: maxW == 0 ? 0 : s.weight / maxW),
+                          tween: Tween(begin: 0, end: _frac(s.weight, maxW)),
                           duration: Ds.med,
                           curve: Curves.easeOutCubic,
                           builder: (_, v, __) => LinearProgressIndicator(
@@ -445,6 +819,38 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
                       ))
                   .toList(),
             ),
+          // A mixed response is not an error, but the two halves mean different
+          // things and must not share a ranking.
+          if (weighted && plain.isNotEmpty) ...[
+            const SizedBox(height: Ds.s3),
+            const Divider(),
+            const SizedBox(height: Ds.s3),
+            const Text(
+              'The service also flagged these phrases without an attention '
+              'weight. They are unranked.',
+              style:
+                  TextStyle(fontSize: 11.5, color: Ds.inkFaint, height: 1.45),
+            ),
+            const SizedBox(height: Ds.s3),
+            Wrap(
+              spacing: Ds.s2,
+              runSpacing: Ds.s2,
+              children: plain
+                  .map((s) => Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: Ds.s3, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Ds.surfaceSunken,
+                          borderRadius: BorderRadius.circular(Ds.rPill),
+                          border: Border.all(color: Ds.hairline),
+                        ),
+                        child: Text(s.text,
+                            style: const TextStyle(
+                                fontSize: 12.5, color: Ds.inkMuted)),
+                      ))
+                  .toList(),
+            ),
+          ],
         ],
       ),
     );
@@ -496,7 +902,7 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
                           ),
                         ),
                         const SizedBox(width: Ds.s3),
-                        Text(s.combinedWeight.toStringAsFixed(3),
+                        Text(_fixed(s.combinedWeight, 3),
                             style: AppTheme.data(
                                 size: 11.5, weight: FontWeight.w600)),
                       ],
@@ -505,7 +911,7 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(3),
                       child: LinearProgressIndicator(
-                        value: maxW == 0 ? 0 : s.combinedWeight / maxW,
+                        value: _frac(s.combinedWeight, maxW),
                         minHeight: 4,
                         backgroundColor: Ds.surfaceSunken,
                         valueColor: AlwaysStoppedAnimation(
@@ -540,7 +946,7 @@ class _TcwpnResultScreenState extends State<TcwpnResultScreen> {
           color: Ds.surfaceSunken,
           borderRadius: BorderRadius.circular(Ds.rSm),
         ),
-        child: Text('$label ${v.toStringAsFixed(2)}',
+        child: Text('$label ${_fixed(v, 2)}',
             style: AppTheme.data(size: 10, color: Ds.inkMuted)),
       );
 

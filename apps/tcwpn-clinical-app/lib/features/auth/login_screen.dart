@@ -16,6 +16,7 @@ import '../../core/design/components.dart';
 import '../../core/design/theme.dart';
 import '../../core/design/tokens.dart';
 import '../../data/api/auth_service.dart';
+import '../../data/api/session.dart';
 import '../../data/local/consent_store.dart';
 import '../../data/local/stores.dart';
 import '../shell.dart';
@@ -218,6 +219,10 @@ class _LoginScreenState extends State<LoginScreen> {
         clinicianName: session.displayName,
         token: session.token,
       );
+      Session.set(
+        token: session.token,
+        clinicianId: session.clinicianId,
+      );
       // Links the acceptance record to the clinician. One-way: fills a null
       // field only, never overwrites.
       await ConsentStore.attachClinician(session.clinicianId);
@@ -293,7 +298,7 @@ class _DevHint extends StatelessWidget {
                 style: AppTheme.data(size: 12, weight: FontWeight.w600)),
             const SizedBox(height: Ds.s2),
             const Text(
-              'Debug builds only. Never present in a release build.',
+              'Demo/local credentials. Never use this branch with real patient data.',
               style: TextStyle(fontSize: 11, color: Ds.inkFaint),
             ),
           ],
