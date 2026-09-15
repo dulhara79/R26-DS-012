@@ -25,7 +25,9 @@ enum ApiFailure {
   offline,
   timeout,
   unauthorized,
+  forbidden,
   notFound,
+  conflict,
   validation,
   server,
   malformed,
@@ -61,23 +63,17 @@ class ApiException implements Exception {
           'No network connection. The note is saved on this device and can be analysed once you are back online.',
         ApiFailure.timeout =>
           'The model did not respond in time. This usually means the service is starting up — try again in a moment.',
-        // 401 from the model service after a successful sign-in almost always
-        // means the 12-hour session has lapsed, not that the device was never
-        // authorised. Telling a clinician to "contact the study administrator"
-        // when they simply need to sign in again wastes everyone's time.
         ApiFailure.unauthorized =>
           'Your session has expired. Sign out and sign in again. If that does '
               'not help, contact the study team.',
-        // A 404 here is an APP-SIDE or DEPLOYMENT fault: the route this build
-        // asks for is not the route the running service serves. A clinician can
-        // do nothing about that, and telling them to "check the service address
-        // in Settings" invites them to edit a value that is compiled in. Say
-        // what is true — it is broken, it is not their doing, and their work is
-        // intact — and give the study team the one word they need.
+        ApiFailure.forbidden =>
+          'You are signed in, but you do not have permission to access this patient or action.',
         ApiFailure.notFound =>
           'The clinical service could not be reached at the address this app was '
               'built with. Nothing you entered has been lost. Please report this '
               'to the study team (routing error).',
+        ApiFailure.conflict =>
+          'This record changed on the server. Refresh to see the current state before trying again.',
         ApiFailure.notConfigured =>
           'This build has no clinical service configured, so nothing can be '
               'analysed. Your work is saved on this device. The study team needs '
@@ -88,9 +84,6 @@ class ApiException implements Exception {
               'the server; your note is still safe on this device.',
         ApiFailure.malformed =>
           'The service returned a response this app could not read. Report this with the time it happened.',
-        // Deliberately specific. "Check your connection" would send a clinician
-        // on a hospital network with an inspecting proxy chasing the wrong
-        // problem for an hour.
         ApiFailure.insecureConnection =>
           'The connection was refused because the server\'s security '
               'certificate could not be verified. This network may be '
@@ -117,17 +110,9 @@ class ApiClient {
 
   /// Supplies the bearer token for this service, evaluated per request.
   ///
-  /// Different services want different credentials, and sending the wrong one
-  /// is a silent 401 rather than a visible error:
-  ///
-  ///   Central Backend — a single shared app token (main.py::_auth compares the
-  ///                     header against one static BACKEND_API_TOKEN). The
-  ///                     clinician's JWT is NOT what it checks.
-  ///   auth service    — the clinician's session JWT.
-  ///   TC-WPN /health  — no credential; /health is unauthenticated.
-  ///
-  /// Defaults to the session JWT when signed in, and to no Authorization header
-  /// otherwise.
+  /// Defaults to the clinician session token when signed in, and to no
+  /// Authorization header otherwise. Service-specific clients may override the
+  /// callback when a verified contract requires a different credential.
   final String Function() _bearer;
 
   /// The client is chosen by base URL: a host in the pin set gets a client
@@ -140,16 +125,10 @@ class ApiClient {
       : _http = client ?? SecureHttp.clientFor(baseUrl),
         _bearer = bearer ?? _defaultBearer;
 
-  /// No privileged service token ships in the APK. Anything inside an APK is
-  /// extractable, and the only call this app makes without a session is the
-  /// TC-WPN /health warm-up, which needs no credential at all. A gateway that
-  /// genuinely needs a token now passes one explicitly through the `bearer`
-  /// constructor argument, which puts every credential at its call site.
   static String _defaultBearer() => Session.isActive ? Session.token! : '';
 
   /// Omits Authorization entirely when there is no credential, rather than
-  /// sending `Bearer ` with an empty value — an empty bearer is a 401 that
-  /// reads like a wrong password instead of like a missing session.
+  /// sending `Bearer ` with an empty value.
   Map<String, String> get _headers {
     final bearer = _bearer();
     return {
@@ -215,9 +194,6 @@ class ApiClient {
     } on TimeoutException {
       throw ApiException(kind: ApiFailure.timeout, endpoint: endpoint);
     } on HandshakeException catch (e) {
-      // Must precede SocketException: HandshakeException is not a subtype, but
-      // treating a pin failure as "you are offline" would hide an active
-      // interception attempt behind a routine-looking message.
       throw ApiException(
         kind: ApiFailure.insecureConnection,
         endpoint: endpoint,
@@ -243,8 +219,10 @@ class ApiClient {
     if (res.statusCode >= 400) {
       throw ApiException(
         kind: switch (res.statusCode) {
-          401 || 403 => ApiFailure.unauthorized,
+          401 => ApiFailure.unauthorized,
+          403 => ApiFailure.forbidden,
           404 => ApiFailure.notFound,
+          409 => ApiFailure.conflict,
           422 || 400 => ApiFailure.validation,
           >= 500 => ApiFailure.server,
           _ => ApiFailure.unknown,
