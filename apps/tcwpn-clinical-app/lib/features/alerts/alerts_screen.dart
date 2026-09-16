@@ -15,7 +15,7 @@ import '../../core/design/tokens.dart';
 import '../../data/local/stores.dart';
 import '../../domain/models.dart';
 import '../../state/controllers.dart';
-import '../shell.dart';
+import '../patients/patients_screen.dart';
 
 class AlertsScreen extends StatelessWidget {
   const AlertsScreen({super.key});
