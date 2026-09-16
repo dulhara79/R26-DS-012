@@ -1,0 +1,17 @@
+{
+  "id": "evt-001",
+  "subject_id": "subject-001",
+  "fusion_result_id": 123,
+  "forecast_result_id": "fcst-001",
+  "event_type": "acute_escalation_forecast",
+  "severity": "high",
+  "reason": "Forecast crossed versioned escalation policy",
+  "forecast_horizon": 10,
+  "status": "RESOLVED",
+  "created_at": "2026-09-15T10:01:00Z",
+  "acknowledged_at": "2026-09-15T10:03:00Z",
+  "acknowledged_by": "DR001",
+  "resolved_at": "2026-09-15T10:15:00Z",
+  "resolved_by": "DR001",
+  "policy_version": "escalation-v1"
+}
