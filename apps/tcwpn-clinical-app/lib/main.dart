@@ -18,6 +18,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'core/design/theme.dart';
+import 'core/notifications/flutter_attention_notification_gateway.dart';
 import 'core/security/secure_http.dart';
 import 'core/design/tokens.dart';
 import 'data/api/session.dart';
@@ -39,6 +40,16 @@ Future<void> main() async {
     statusBarIconBrightness: Brightness.dark,
     statusBarBrightness: Brightness.light,
   ));
+
+  // Initialize the local-notification transport before the app tree exists so
+  // a notification launch can be recorded as a pending event id. Permission is
+  // requested later, only after a clinician reaches the authenticated shell.
+  try {
+    await attentionNotificationGateway.initialize();
+  } catch (_) {
+    // Notification transport must never block consent, sign-in, or access to
+    // the persistent server Activity view. Phase 6 can retry after next launch.
+  }
 
   // Verify the certificate chain before anything else touches the network.
   // Non-blocking: a failure does not prevent launch, because the clinician
