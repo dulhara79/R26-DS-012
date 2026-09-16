@@ -17,9 +17,14 @@
 //   • sign-in     — set from the login response
 //   • sign-out    — cleared
 //
+// The same lifecycle binds the local clinical-cache namespace. That prevents a
+// second clinician signing into the same device from inheriting the previous
+// clinician's SharedPreferences-backed roster/cache.
+//
 // It is deliberately NOT persisted here. SecureStore remains the only place the
 // token is written to disk.
 
+import '../local/clinician_storage_scope.dart';
 import '../local/stores.dart';
 
 class Session {
@@ -35,11 +40,19 @@ class Session {
   static void set({required String token, String? clinicianId}) {
     _token = token;
     _clinicianId = clinicianId;
+
+    final id = clinicianId?.trim() ?? '';
+    if (id.isEmpty) {
+      ClinicianStorageScope.clear();
+    } else {
+      ClinicianStorageScope.bind(id);
+    }
   }
 
   static void clear() {
     _token = null;
     _clinicianId = null;
+    ClinicianStorageScope.clear();
   }
 
   static Future<void> signOut() async {
