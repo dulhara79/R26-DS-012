@@ -1,125 +1,100 @@
-# Building the ClinAnx APK
+# Building ClinAnx — Handbook Phase 8
 
-> **The previous version of this file was wrong and produced a broken APK.**
-> It passed `FUSION_BASE`, `C1_BASE`, `C2_BASE`, `C3_BASE` and `HF_TOKEN`, none
-> of which `Env` reads any more, and it never passed `BACKEND_BASE`. Following
-> it built an app whose Central Backend URL was the empty string: every clinical
-> call failed at `ApiClient._send` with "No base URL configured for this
-> service." Delete any local script that still carries those defines.
+This guide follows the `R26-DS-012 System Integration Implementation Handbook` hardening rules.
 
----
+## Security boundary
 
-## 1. Defines
+ClinAnx **must not** contain a reusable Central Backend/service credential. Central Backend requests use the signed-in clinician session bearer. Service-to-service secrets belong on the Central Backend.
 
-| Define | Required | Value |
-|---|---|---|
-| `BACKEND_BASE` | **yes** | Central Backend base URL, no trailing slash |
-| `BACKEND_TOKEN` | **yes** | matches `BACKEND_API_TOKEN` server-side |
-| `TCWPN_BASE` | no | TC-WPN Space — `/health` warm-up only |
-| `AUTH_BASE` | no | clinician auth service; omit for local demo mode |
-| `AUTH_SALT` | no | local-mode password salt |
-| `AUTH_LOCAL` | no | local-mode account table |
-| `DEMO_DATA` | no | **`false` for any build that touches real patients** |
-| `DISABLE_TLS_PINNING` | no | emulator behind a debugging proxy only; never ship |
+Remote application-facing endpoints that can carry participant/clinical data must use HTTPS. Plain HTTP is permitted only for loopback development (`localhost`, `127.0.0.1`, `::1`).
 
-Anything else you may remember — `FUSION_BASE`, `C1_BASE`, `C2_BASE`, `C3_BASE`,
-`C4_BASE`, `CARE_RAG_BASE`, `HF_TOKEN` — is not configuration for this app. The
-backend owns every one of those services.
+## Required / supported defines
 
-## 2. Launcher icons
+| Define | Research/study build | Purpose |
+|---|---:|---|
+| `BACKEND_BASE` | required | Central Backend URL; HTTPS for remote hosts |
+| `AUTH_BASE` | required for real participant use | clinician authentication service |
+| `APP_VERSION` | required for reproducible release | version displayed in research build identity |
+| `BUILD_ENVIRONMENT` | required for reproducible release | e.g. `demo`, `study`, `staging` |
+| `BUILD_REVISION` | required for reproducible release | Git commit/revision |
+| `DEMO_DATA` | must be `false` for participant use | explicit synthetic fixture opt-in |
+| `TCWPN_BASE` | optional | unauthenticated `/health` warm-up only |
+| `PUSH_FIREBASE_SLOT` | optional, default `primary` | `primary` or `secondary` DR build slot |
+| `FIREBASE_PRIMARY_*` | required for primary push build | Firebase FCM routing configuration |
+| `FIREBASE_SECONDARY_*` | required for secondary DR build | Firebase FCM routing configuration |
+| `AUTH_SALT`, `AUTH_LOCAL` | demo/dev only | local demonstration authentication |
 
-```bash
-flutter pub get
-dart run flutter_launcher_icons
-```
+Do **not** add `BACKEND_TOKEN`, model tokens, service-account private keys, passwords, or backend service credentials to a mobile build.
 
-## 3. Debug APK
+## Primary release build (PowerShell)
 
-```bash
- Get-Content .env | Where-Object { $_ -match '=' -and $_ -notmatch '^#' } | ForEach-Object {                                                                                               
-     $name, $value = $_.Split('=', 2)                                      
-     $cleanValue = $value.Trim().Trim("'").Trim('"')
-     Set-Item -Path "Env:\$($name.Trim())" -Value $cleanValue
- } 
-```
+```powershell
+$REVISION = git rev-parse --short HEAD
 
-```bash
-flutter build apk --debug `
-  --dart-define=BACKEND_BASE=$env:BACKEND_BASE `
-  --dart-define=BACKEND_TOKEN=$env:BACKEND_TOKEN `
-  --dart-define=TCWPN_BASE=$env:TCWPN_BASE `
-  --dart-define=DEMO_DATA=false `
-  --dart-define=AUTH_SALT=$ENV:AUTH_SALT `
-  --dart-define=AUTH_LOCAL=$env:AUTH_LOCAL`
-```
-## 3. Chrome Run
-
-```bash
-set -a
-source .env
-set +a
-```
-
-```bash
-flutter run -d chrome `
-  --dart-define=BACKEND_BASE="$BACKEND_BASE" `
-  --dart-define=BACKEND_TOKEN="$BACKEND_TOKEN" `
-  --dart-define=TCWPN_BASE="$TCWPN_BASE" `
-  --dart-define=DEMO_DATA=false `
-  --dart-define=AUTH_SALT="$AUTH_SALT" `
-  --dart-define=AUTH_LOCAL="$AUTH_LOCAL" `
-```
-
-## 4. Release APK
-
-```bash
- Get-Content .env | Where-Object { $_ -match '=' -and $_ -notmatch '^#' } | ForEach-Object {                                                                                               
-     $name, $value = $_.Split('=', 2)                                      
-     $cleanValue = $value.Trim().Trim("'").Trim('"')
-     Set-Item -Path "Env:\$($name.Trim())" -Value $cleanValue
- } 
-```
-
-```bash
 flutter build apk --release `
   --dart-define=BACKEND_BASE=$env:BACKEND_BASE `
-  --dart-define=BACKEND_TOKEN=$env:BACKEND_TOKEN `
+  --dart-define=AUTH_BASE=$env:AUTH_BASE `
   --dart-define=TCWPN_BASE=$env:TCWPN_BASE `
+  --dart-define=APP_VERSION=1.0.0+1 `
+  --dart-define=BUILD_ENVIRONMENT=study `
+  --dart-define=BUILD_REVISION=$REVISION `
   --dart-define=DEMO_DATA=false `
-  --dart-define=AUTH_SALT=r26-ds012-local-salt `
-  --dart-define=AUTH_LOCAL=$env:AUTH_LOCAL`
+  --dart-define=PUSH_FIREBASE_SLOT=primary `
+  --dart-define=FIREBASE_PRIMARY_API_KEY=$env:FIREBASE_PRIMARY_API_KEY `
+  --dart-define=FIREBASE_PRIMARY_APP_ID=$env:FIREBASE_PRIMARY_APP_ID `
+  --dart-define=FIREBASE_PRIMARY_SENDER_ID=$env:FIREBASE_PRIMARY_SENDER_ID `
+  --dart-define=FIREBASE_PRIMARY_PROJECT_ID=$env:FIREBASE_PRIMARY_PROJECT_ID
 ```
 
-Output: `build/app/outputs/flutter-apk/app-release.apk`
+## Secondary Firebase disaster-recovery build
 
-PowerShell uses a backtick for line continuation; the defines are identical.
+Build a separate APK/app package with the secondary slot selected:
 
-### Keeping the token out of your shell history
+```powershell
+$REVISION = git rev-parse --short HEAD
 
-Read it from the environment (`$BACKEND_TOKEN` above) or from a file:
-
-```bash
-flutter build apk --release --dart-define-from-file=dart_defines.json
+flutter build apk --release `
+  --dart-define=BACKEND_BASE=$env:BACKEND_BASE `
+  --dart-define=AUTH_BASE=$env:AUTH_BASE `
+  --dart-define=APP_VERSION=1.0.0+1 `
+  --dart-define=BUILD_ENVIRONMENT=study-dr `
+  --dart-define=BUILD_REVISION=$REVISION `
+  --dart-define=DEMO_DATA=false `
+  --dart-define=PUSH_FIREBASE_SLOT=secondary `
+  --dart-define=FIREBASE_SECONDARY_API_KEY=$env:FIREBASE_SECONDARY_API_KEY `
+  --dart-define=FIREBASE_SECONDARY_APP_ID=$env:FIREBASE_SECONDARY_APP_ID `
+  --dart-define=FIREBASE_SECONDARY_SENDER_ID=$env:FIREBASE_SECONDARY_SENDER_ID `
+  --dart-define=FIREBASE_SECONDARY_PROJECT_ID=$env:FIREBASE_SECONDARY_PROJECT_ID
 ```
 
-`dart_defines.json` is a flat JSON object of the same keys. Copy it from
-`.env.example`, fill it in, and confirm it is gitignored — it is not committed,
-and it must never be.
+The secondary project is **not** a runtime API-key swap. FCM registration tokens are project-specific. Runtime resilience remains: server-persisted AttentionEvents + FCM when available + polling fallback.
 
-## 5. Before you ship a release build
+## Demo/local-auth build
 
-- `BACKEND_TOKEN` came from the environment, not from a source file.
-- `DEMO_DATA=false`, so the seeded demonstration patient is gone.
-- `DISABLE_TLS_PINNING` is **not** set.
-- `kPinnedHosts` in `lib/core/security/pinned_certificates.dart` includes your
-  Central Backend host, and `kPinsReviewBy` is a real date. As of this writing
-  it lists only the TC-WPN Space, which carries nothing but a health ping, while
-  the backend that carries every note is unpinned. Regenerate with
-  `python tool/pin_certs.py`.
-- `git grep -nE "hf_[A-Za-z0-9]{20,}|BACKEND_TOKEN\s*=\s*['\"]"` returns nothing.
+Local accounts are for synthetic/demo use only. Do not use this mode with real participant data.
 
-## 6. Verify the build is actually talking to the backend
+```powershell
+$REVISION = git rev-parse --short HEAD
+flutter build apk --debug `
+  --dart-define=BACKEND_BASE=$env:BACKEND_BASE `
+  --dart-define=AUTH_LOCAL=$env:AUTH_LOCAL `
+  --dart-define=AUTH_SALT=$env:AUTH_SALT `
+  --dart-define=APP_VERSION=1.0.0+1 `
+  --dart-define=BUILD_ENVIRONMENT=demo `
+  --dart-define=BUILD_REVISION=$REVISION `
+  --dart-define=DEMO_DATA=true
+```
 
-Install the APK, open **Settings**, and check the Central Backend health row. If
-it reads "No base URL configured", `BACKEND_BASE` did not reach the build —
-almost always a quoting problem in the shell, not a backend fault.
+## Before a research/study release
+
+1. `flutter test` passes.
+2. `flutter analyze` reports no issues.
+3. `BACKEND_BASE` and `AUTH_BASE` use HTTPS remote URLs.
+4. `DEMO_DATA=false`.
+5. `BUILD_REVISION` matches the commit used to build the APK/app.
+6. Settings/research build information identifies the correct environment/backend/Firebase slot without displaying secrets.
+7. Primary and secondary Firebase builds use their matching project configuration.
+8. No reusable backend/model credential is compiled into the app.
+9. The Phase 8 usability checklist is executed with synthetic/demo participants before research release.
+
+Output for Android release: `build/app/outputs/flutter-apk/app-release.apk`.

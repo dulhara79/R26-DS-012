@@ -1,32 +1,16 @@
 // lib/data/api/session.dart
-//
-// The clinician's bearer token, held in memory for the life of the process.
-//
-// WHY THIS EXISTS
-// ---------------
-// ApiClient was sending `Env.hfToken` — the HuggingFace token baked in at build
-// time — as its Authorization header. That is a deploy credential, not a user
-// credential. The clinician's session JWT sat in SecureStore and was never
-// attached to anything, so /predict arrived unauthenticated and the Space
-// rejected it with 401.
-//
-// Reading SecureStore on every request would mean a platform-channel round trip
-// per call, so the token is cached here and kept in step at three points:
-//
-//   • app start   — primed from SecureStore
-//   • sign-in     — set from the login response
-//   • sign-out    — cleared
-//
-// It is deliberately NOT persisted here. SecureStore remains the only place the
-// token is written to disk.
 
+import '../local/clinician_storage_scope.dart';
 import '../local/stores.dart';
+
+typedef SessionSignOutHook = Future<void> Function();
 
 class Session {
   Session._();
 
   static String? _token;
   static String? _clinicianId;
+  static SessionSignOutHook? _beforeSignOut;
 
   static String? get token => _token;
   static String? get clinicianId => _clinicianId;
@@ -35,14 +19,35 @@ class Session {
   static void set({required String token, String? clinicianId}) {
     _token = token;
     _clinicianId = clinicianId;
+
+    final id = clinicianId?.trim() ?? '';
+    if (id.isEmpty) {
+      ClinicianStorageScope.clear();
+    } else {
+      ClinicianStorageScope.bind(id);
+    }
+  }
+
+  static void installBeforeSignOutHook(SessionSignOutHook? hook) {
+    _beforeSignOut = hook;
   }
 
   static void clear() {
     _token = null;
     _clinicianId = null;
+    ClinicianStorageScope.clear();
   }
 
   static Future<void> signOut() async {
+    final hook = _beforeSignOut;
+    if (hook != null) {
+      try {
+        await hook();
+      } catch (_) {
+        // Push revocation is best-effort. Never trap a clinician in a session
+        // because the network/push provider is unavailable.
+      }
+    }
     await SecureStore.signOut();
     clear();
   }

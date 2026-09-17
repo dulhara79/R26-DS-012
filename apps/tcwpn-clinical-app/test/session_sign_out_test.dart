@@ -8,6 +8,7 @@ void main() {
 
   setUp(() {
     FlutterSecureStorage.setMockInitialValues({});
+    Session.installBeforeSignOutHook(null);
     Session.clear();
   });
 
@@ -28,5 +29,22 @@ void main() {
     expect(await SecureStore.token(), isNull);
     expect(await SecureStore.clinicianId(), isNull);
     expect(await SecureStore.clinicianName(), isNull);
+  });
+
+  test('failed push revocation cannot block clinician sign out', () async {
+    await SecureStore.saveSession(
+      clinicianId: 'DR001',
+      clinicianName: 'Dr Test',
+      token: 'session-token',
+    );
+    Session.set(token: 'session-token', clinicianId: 'DR001');
+    Session.installBeforeSignOutHook(() async {
+      throw StateError('push provider unavailable');
+    });
+
+    await Session.signOut();
+
+    expect(Session.isActive, isFalse);
+    expect(await SecureStore.hasSession(), isFalse);
   });
 }

@@ -2,9 +2,9 @@
 //
 // Two modes, chosen at build time by whether AUTH_BASE is set.
 //
-//   REMOTE — the Space verifies credentials, issues sessions, sends OTP email,
-//            and handles registration and password reset. Required before any
-//            real patient data.
+//   REMOTE — the auth service verifies credentials, issues sessions, sends OTP
+//            email, and handles registration and password reset. Required
+//            before any real patient data.
 //
 //   LOCAL  — credentials compiled into the build. Development and demos only.
 //            Registration and password reset are unavailable, and the app says
@@ -41,10 +41,12 @@ class AuthMessage implements Exception {
 }
 
 class AuthService {
-  static const String _base = String.fromEnvironment('AUTH_BASE');
-  static const String _salt =
-      String.fromEnvironment('AUTH_SALT', defaultValue: 'r26-ds012-local-salt');
-  static const String _localAccounts = String.fromEnvironment('AUTH_LOCAL');
+  // Env is the single build-time configuration source. Keeping the auth defines
+  // here as a second String.fromEnvironment set previously allowed documentation
+  // and production code to drift independently.
+  static const String _base = Env.authBase;
+  static const String _salt = Env.authSalt;
+  static const String _localAccounts = Env.authLocalAccounts;
 
   static bool get isLocalMode => _base.isEmpty;
   static bool get supportsSelfService => !isLocalMode;
@@ -176,11 +178,8 @@ class AuthService {
 
   // ── PASSWORD RESET ───────────────────────────────────────────────────────
 
-  /// Requests a reset code.
-  ///
-  /// The server answers identically whether or not the address is registered,
-  /// so this cannot be used to discover who is on the study. The UI must not
-  /// imply otherwise.
+  /// Requests a reset code. The server should answer identically whether or
+  /// not the address is registered, so this cannot be used for enumeration.
   static Future<void> requestReset(String email) async {
     _ensureSelfServiceConfigured();
     final api = _client();
@@ -238,10 +237,9 @@ class AuthService {
     return null;
   }
 
-  /// Demo-only fallback accounts used when AUTH_LOCAL is omitted. This branch
-  /// is intentionally isolated from production branches so a demo build can be
-  /// signed out and signed back in even when no external auth service is
-  /// available. Local mode is visibly marked insecure in release builds.
+  /// Demo-only fallback accounts used when AUTH_LOCAL is omitted. Local mode is
+  /// visibly marked insecure in release builds and must not be used with real
+  /// participant data.
   static List<String> _fallbackAccounts() => [
         'DR001|Dr D. Kaushalya|${digest('clinanx-dev')}',
         'DR002|Dr C. Suraweera|${digest('clinanx-dev')}',
