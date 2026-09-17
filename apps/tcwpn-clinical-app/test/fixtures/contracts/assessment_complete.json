@@ -1,0 +1,70 @@
+{
+  "subject_id": "subject-001",
+  "fusion_result_id": 123,
+  "current_assessment": {
+    "score": 0.58,
+    "tier": "Medium",
+    "band": "AMBER"
+  },
+  "forecast": {
+    "forecast_result_id": "fcst-001",
+    "scope": "physiological",
+    "horizon_minutes": 10,
+    "score": 0.84,
+    "tier": "High",
+    "escalation_probability": null,
+    "escalation_predicted": true,
+    "generated_at": "2026-09-15T10:00:00Z",
+    "valid_until": "2026-09-15T10:10:00Z"
+  },
+  "confidence": 0.71,
+  "assessment_status": "complete",
+  "modalities": [
+    {
+      "component_id": "c1_physiological",
+      "score": 0.82,
+      "available": true,
+      "included_in_fusion": true,
+      "status": "ok",
+      "confidence": 0.5,
+      "coverage": 0.5,
+      "captured_at": "2026-09-15T09:59:00Z",
+      "contribution": 0.24
+    },
+    {
+      "component_id": "c2_behavioral",
+      "score": null,
+      "available": false,
+      "included_in_fusion": false,
+      "status": "not_validated",
+      "confidence": null,
+      "coverage": null,
+      "captured_at": null,
+      "contribution": null
+    },
+    {
+      "component_id": "c3_clinical_nlp",
+      "score": 0.67,
+      "available": true,
+      "included_in_fusion": true,
+      "status": "ok",
+      "confidence": 0.61,
+      "coverage": 1.0,
+      "captured_at": "2026-09-15T09:30:00Z",
+      "contribution": 0.22
+    },
+    {
+      "component_id": "c4_demographic",
+      "score": 0.43,
+      "available": true,
+      "included_in_fusion": true,
+      "status": "ok",
+      "confidence": 0.7,
+      "coverage": 1.0,
+      "captured_at": "2026-09-01T08:00:00Z",
+      "contribution": 0.12
+    }
+  ],
+  "computed_at": "2026-09-15T10:00:00Z",
+  "model_version": "ragf-v0.4"
+}
