@@ -47,9 +47,6 @@ import 'package:http/io_client.dart';
 
 import 'pinned_certificates.dart';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:http/http.dart' as http;
-
 /// Disables pinning. For emulator work behind a debugging proxy only.
 ///   --dart-define=DISABLE_TLS_PINNING=true
 /// The app shows a permanent red banner when this is set in a release build.
@@ -221,9 +218,6 @@ class SecureHttp {
       final r = PinReport(
         status: PinStatus.pinMismatch,
         host: host,
-        // The message matters: this is what a clinician on a hospital network
-        // with an inspecting proxy will hit, and "check your connection" would
-        // send them chasing the wrong thing entirely.
         detail: 'Certificate not signed by a pinned authority. '
             'This network may be intercepting traffic. ${_short(e.message)}',
         checkedAt: now,
