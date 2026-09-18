@@ -13,12 +13,10 @@ on:
     branches: [main]
     paths:
       - "apps/tcwpn-clinical-app/**"
-      - ".github/workflows/component-clinanx-ci.yml"
   push:
     branches: [main]
     paths:
       - "apps/tcwpn-clinical-app/**"
-      - ".github/workflows/component-clinanx-ci.yml"
   workflow_dispatch:
 
 permissions:
