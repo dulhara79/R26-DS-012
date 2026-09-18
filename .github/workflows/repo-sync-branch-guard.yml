@@ -1,10 +1,9 @@
 # ---------------------------------------------------------------------------
-# The sync/** branches are force-rebuilt from scratch on every mirror run.
-# Any human commit pushed there WILL be destroyed on the next sync.
+# Protect the bot-owned ClinAnx mirror branch.
 #
-# This workflow detects that situation and fails the PR loudly, so the work is
-# recovered from the reflog and re-applied in the component repo instead of
-# quietly vanishing.
+# The rolling branch sync/tcwpn-clinical-app is rebuilt from the latest main
+# by dulhara79/tcwpn_mobile_app after an approved source-main change.
+# Human commits on this branch must be moved to the source repository instead.
 # ---------------------------------------------------------------------------
 name: repo-sync-branch-guard
 
@@ -18,46 +17,47 @@ permissions:
 
 jobs:
   guard:
-    name: No manual commits on sync branches
-    if: startsWith(github.head_ref, 'sync/')
+    name: Protect ClinAnx sync branch
+    if: github.head_ref == 'sync/tcwpn-clinical-app'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
-          # The default PR ref is a synthetic merge commit authored by GitHub.
-          # Checking that out would flag every PR as having a "foreign" commit.
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Inspect authorship
+      - name: Verify bot authorship and change scope
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          EXPECTED_EMAIL: tcwpn-sync@users.noreply.github.com
+          OWNED_PREFIX: apps/tcwpn-clinical-app/
+        shell: bash
         run: |
           set -euo pipefail
-          git fetch origin "${{ github.base_ref }}" --depth=50
 
-          FOREIGN=$(git log --format='%H %ae %s' \
-                      "origin/${{ github.base_ref }}..HEAD" \
-                    | grep -v 'tcwpn-sync@users.noreply.github.com' || true)
+          git fetch origin "${{ github.base_ref }}" --depth=100
 
-          if [ -n "$FOREIGN" ]; then
-            echo "$FOREIGN"
-            gh pr comment "$PR" --body "$(cat <<'MSG'
-          **Manual commits detected on a bot-owned `sync/**` branch.**
-
-          This branch is force-rebuilt from `main` on every mirror run, so these
-          commits will be overwritten and lost.
-
-          Move the change into `dulhara79/tcwpn_test`, merge it there, and let the
-          mirror re-run. Recover the work with `git reflog` if you have already
-          lost your local copy.
-          MSG
+          foreign="$(
+            git log --format='%H%x09%ae%x09%s'               "origin/${{ github.base_ref }}..HEAD"             | awk -F '\t' -v expected="${EXPECTED_EMAIL}" '$2 != expected { print }'
           )"
-            echo "::error::Manual commits on a sync branch will be destroyed by the next mirror run."
+
+          if [[ -n "${foreign}" ]]; then
+            echo "${foreign}"
+            gh pr comment "${PR}" --body "Manual commits were detected on the bot-owned \`sync/tcwpn-clinical-app\` branch. Make clinician-app changes in \`dulhara79/tcwpn_mobile_app\`, merge them to source \`main\`, and let the mirror workflow update this PR."
+            echo "::error::Unexpected non-bot commits detected on the ClinAnx sync branch."
             exit 1
           fi
 
-          echo "OK — branch contains only mirror commits."
+          changed="$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")"
+          outside="$(printf '%s\n' "${changed}" | grep -v "^\${OWNED_PREFIX}" || true)"
+
+          if [[ -n "${outside}" ]]; then
+            echo "${outside}"
+            echo "::error::ClinAnx mirror PR modifies files outside ${OWNED_PREFIX}."
+            exit 1
+          fi
+
+          echo "OK — bot authorship and ClinAnx mirror scope are valid."
