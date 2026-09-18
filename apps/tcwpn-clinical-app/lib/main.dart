@@ -1,23 +1,14 @@
 // lib/main.dart
-//
-// Boot order is deliberate:
-//
-//   consent gate  →  sign-in  →  shell
-//
-// The gate comes first because the Terms govern installation and use of the
-// software itself, not just the clinical workflow. A user who has not accepted
-// must not reach a screen that names the study, the hospital, or any patient.
-//
-// The gate is re-entered automatically whenever `kAgreementVersion` changes or
-// consent has been withdrawn — `ConsentStore.hasValidConsent()` checks both.
 
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 
+import 'core/config/env.dart';
 import 'core/design/theme.dart';
+import 'core/notifications/firebase_attention_push_service.dart';
+import 'core/notifications/flutter_attention_notification_gateway.dart';
 import 'core/security/secure_http.dart';
 import 'core/design/tokens.dart';
 import 'data/api/session.dart';
@@ -26,10 +17,6 @@ import 'data/local/stores.dart';
 import 'features/auth/login_screen.dart';
 import 'features/consent/consent_gate_screen.dart';
 import 'features/shell.dart';
-import 'state/controllers.dart';
-
-/// Keep in step with `version:` in pubspec.yaml. Recorded on every acceptance.
-const String kAppVersion = '1.0.0+1';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,18 +27,26 @@ Future<void> main() async {
     statusBarBrightness: Brightness.light,
   ));
 
-  // Verify the certificate chain before anything else touches the network.
-  // Non-blocking: a failure does not prevent launch, because the clinician
-  // still needs to read the consent screens and the diagnostic in Settings.
-  // Every actual request is enforced independently by the trust store.
+  try {
+    await attentionNotificationGateway.initialize();
+  } catch (_) {
+    // Local notification failure must never block clinical access.
+  }
+
+  // Push is optional at runtime. Missing/invalid Firebase build configuration
+  // degrades to the server-backed Activity view plus polling fallback.
+  try {
+    await attentionPushService.initialize();
+  } catch (_) {
+    // Never block consent/sign-in because a push provider is unavailable.
+  }
+
+  Session.installBeforeSignOutHook(attentionPushService.revoke);
   unawaited(SecureHttp.verifyAll());
 
   final consented = await ConsentStore.hasValidConsent();
   final signedIn = consented && await SecureStore.hasSession();
 
-  // Restore the bearer token into memory so the first request after a warm
-  // start is authenticated. Skipping this makes the app look signed in while
-  // every model call returns 401.
   if (signedIn) {
     Session.set(
       token: await SecureStore.token() ?? '',
@@ -81,24 +76,17 @@ class _ClinAnxAppState extends State<ClinAnxApp> {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => RosterController()..init(),
-      child: MaterialApp(
-        title: 'ClinAnx',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.light,
-        builder: (context, child) => MediaQuery.withClampedTextScaling(
-          minScaleFactor: 0.9,
-          maxScaleFactor: 1.3,
-          child: ColoredBox(color: Ds.canvas, child: child!),
-        ),
-        home: !_consented
-            ? ConsentGateScreen(
-                appVersion: kAppVersion,
-                onAccepted: () => setState(() => _consented = true),
-              )
-            : (widget.signedIn ? const AppShell() : const LoginScreen()),
-      ),
+    return MaterialApp(
+      title: 'ClinAnx',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light,
+      builder: (context, child) => ColoredBox(color: Ds.canvas, child: child!),
+      home: !_consented
+          ? ConsentGateScreen(
+              appVersion: Env.appVersion,
+              onAccepted: () => setState(() => _consented = true),
+            )
+          : (widget.signedIn ? const AppShell() : const LoginScreen()),
     );
   }
 }
