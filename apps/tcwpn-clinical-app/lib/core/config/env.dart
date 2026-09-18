@@ -1,100 +1,117 @@
 // lib/core/config/env.dart
 //
-// COMMIT THIS FILE. Remove `lib/core/config/env.dart` from .gitignore and
-// delete `lib/core/config/env.example.dart`.
-//
-// WHY THE GITIGNORE HAD TO GO
-// ---------------------------
-// Twenty-one files under lib/ import '../../core/config/env.dart'. The file was
-// gitignored, so a clean clone of develop/integration cannot resolve that
-// import: `flutter analyze`, `flutter test` and `flutter build apk` all fail on
-// the first file that touches it. Four acceptance criteria in section 33 fail
-// for a reason that has nothing to do with the code.
-//
-// The file was presumably gitignored because an earlier version held an
-// HF_TOKEN literal. It no longer does. Every value below is
-// `String.fromEnvironment` / `bool.fromEnvironment`, which reads a --dart-define
-// at COMPILE time and defaults to empty. There is nothing secret in this source
-// file; the secrets live in the build command and in CI, which is exactly where
-// section 16 wants them.
-//
-// If you ever feel the urge to paste a literal token in here: don't. Anything
-// compiled into an APK is recoverable with `apktool` in about a minute.
+// Central build-time configuration for ClinAnx. Values come from --dart-define;
+// no reusable privileged credential is compiled into the mobile application.
 
 class Env {
   const Env._();
 
   static const String appName = 'ClinAnx';
 
-  // ── The one service this app talks to ──────────────────────────────────────
+  // ── Research build identity ───────────────────────────────────────────────
+  // Non-secret identifiers make a study/demo build reproducible and prevent
+  // accidental endpoint/build confusion. They are safe to display in Settings.
 
-  /// R26-DS-012 Central Backend. Everything clinical goes through here:
-  /// enrolment, note ingestion, gate, fusion, timeline, evidence, verdict.
-  ///
-  /// Android emulator reaching a backend on the host machine: use
-  /// `http://10.0.2.2:8000`, not `localhost`.
+  static const String appVersion = String.fromEnvironment(
+    'APP_VERSION',
+    defaultValue: '1.0.0+1',
+  );
+  static const String buildEnvironment = String.fromEnvironment(
+    'BUILD_ENVIRONMENT',
+    defaultValue: 'development',
+  );
+  static const String buildRevision = String.fromEnvironment(
+    'BUILD_REVISION',
+    defaultValue: 'unversioned',
+  );
+
+  // ── Central Backend ────────────────────────────────────────────────────────
+  // Central Backend requests use the authenticated clinician Session bearer.
+  // Service-to-service/shared privileged credentials belong on the backend and
+  // must not be compiled into ClinAnx.
+
   static const String backendBase = String.fromEnvironment(
     'BACKEND_BASE',
     defaultValue: '',
   );
-
-  /// The backend's shared bearer token (`BACKEND_API_TOKEN` server-side).
-  ///
-  /// Injected at build time, never written into source. This is a SINGLE SHARED
-  /// APP CREDENTIAL, not a per-clinician one. Clinician attribution therefore
-  /// travels in each request body's `author` field, not in the token.
-  ///
-  /// State this limitation in the viva. It is adequate for a research prototype
-  /// and is NOT adequate for clinical deployment, which needs per-user
-  /// authentication and authorisation. Section 16 asks for the code to be
-  /// structured so this can later be replaced by a clinician JWT: it is —
-  /// `ApiClient`'s `bearer` callback is evaluated per request, so swapping the
-  /// source of the credential is a one-line change at the gateway's call site.
-  static const String backendToken = String.fromEnvironment('BACKEND_TOKEN');
-
-  /// TC-WPN Space. Retained ONLY for the unauthenticated `GET /health` warm-up,
-  /// so the first note analysis does not pay the full cold start (section 9).
-  /// The clinician workflow must never call `/predict` here — inference belongs
-  /// to the backend.
-  ///
-  /// Leave it empty and the app simply skips the warm-up. Nothing else changes.
   static const String tcwpnBase = String.fromEnvironment('TCWPN_BASE');
 
   // ── Clinician authentication ──────────────────────────────────────────────
-  //
-  // MOVED HERE from AuthService, which read these three defines directly. That
-  // put four config knobs in two files and made section 17's "centralize
-  // configuration" false in a way that was easy to miss: `grep -rn
-  // fromEnvironment lib/` was the only way to find them.
-  //
-  // This is a SEPARATE service from the Central Backend. The backend's own auth
-  // is the shared `backendToken` above; `authBase` is the clinician sign-in
-  // service that issues the session shown in the app bar. Do not point one at
-  // the other.
 
-  /// ClinAnx auth service. Empty selects LOCAL mode: credentials compiled into
-  /// the build, registration and password reset disabled, and a red banner in
-  /// release builds. Development and demos only.
   static const String authBase = String.fromEnvironment('AUTH_BASE');
-
-  /// Salt for the local-mode password hash. Overriding it is pointless security
-  /// theatre — local mode is not secure — but it keeps two demo builds from
-  /// sharing a hash table.
   static const String authSalt = String.fromEnvironment(
     'AUTH_SALT',
     defaultValue: 'r26-ds012-local-salt',
   );
-
-  /// Local-mode account table. Format is AuthService's; see that file.
   static const String authLocalAccounts = String.fromEnvironment('AUTH_LOCAL');
-
   static bool get hasRemoteAuth => authBase.isNotEmpty;
+
+  // ── Phase 7 push / disaster-recovery Firebase slots ───────────────────────
+  // Only one slot is active in an installed build. FlutterFire Messaging does
+  // not support runtime switching between multiple messaging FirebaseApp
+  // instances. The second slot is for a separately built DR APK/app package;
+  // runtime resilience remains server persistence + polling fallback.
+
+  static const Set<String> validPushSlots = <String>{'primary', 'secondary'};
+
+  static const String pushFirebaseSlot = String.fromEnvironment(
+    'PUSH_FIREBASE_SLOT',
+    defaultValue: 'primary',
+  );
+
+  static const String firebasePrimaryApiKey =
+      String.fromEnvironment('FIREBASE_PRIMARY_API_KEY');
+  static const String firebasePrimaryAppId =
+      String.fromEnvironment('FIREBASE_PRIMARY_APP_ID');
+  static const String firebasePrimarySenderId =
+      String.fromEnvironment('FIREBASE_PRIMARY_SENDER_ID');
+  static const String firebasePrimaryProjectId =
+      String.fromEnvironment('FIREBASE_PRIMARY_PROJECT_ID');
+  static const String firebasePrimaryIosBundleId =
+      String.fromEnvironment('FIREBASE_PRIMARY_IOS_BUNDLE_ID');
+
+  static const String firebaseSecondaryApiKey =
+      String.fromEnvironment('FIREBASE_SECONDARY_API_KEY');
+  static const String firebaseSecondaryAppId =
+      String.fromEnvironment('FIREBASE_SECONDARY_APP_ID');
+  static const String firebaseSecondarySenderId =
+      String.fromEnvironment('FIREBASE_SECONDARY_SENDER_ID');
+  static const String firebaseSecondaryProjectId =
+      String.fromEnvironment('FIREBASE_SECONDARY_PROJECT_ID');
+  static const String firebaseSecondaryIosBundleId =
+      String.fromEnvironment('FIREBASE_SECONDARY_IOS_BUNDLE_ID');
+
+  static String get normalizedPushFirebaseSlot =>
+      pushFirebaseSlot.trim().toLowerCase();
+  static bool get hasValidPushFirebaseSlot =>
+      validPushSlots.contains(normalizedPushFirebaseSlot);
+  static bool get useSecondaryFirebase => normalizedPushFirebaseSlot == 'secondary';
+
+  static String get activeFirebaseApiKey => useSecondaryFirebase
+      ? firebaseSecondaryApiKey
+      : firebasePrimaryApiKey;
+  static String get activeFirebaseAppId => useSecondaryFirebase
+      ? firebaseSecondaryAppId
+      : firebasePrimaryAppId;
+  static String get activeFirebaseSenderId => useSecondaryFirebase
+      ? firebaseSecondarySenderId
+      : firebasePrimarySenderId;
+  static String get activeFirebaseProjectId => useSecondaryFirebase
+      ? firebaseSecondaryProjectId
+      : firebasePrimaryProjectId;
+  static String get activeFirebaseIosBundleId => useSecondaryFirebase
+      ? firebaseSecondaryIosBundleId
+      : firebasePrimaryIosBundleId;
+
+  static bool get hasPushFirebase =>
+      hasValidPushFirebaseSlot &&
+      activeFirebaseApiKey.isNotEmpty &&
+      activeFirebaseAppId.isNotEmpty &&
+      activeFirebaseSenderId.isNotEmpty &&
+      activeFirebaseProjectId.isNotEmpty;
 
   // ── Timeouts ───────────────────────────────────────────────────────────────
 
-  /// A cold Space behind the backend can push one note analysis past a minute;
-  /// COMPONENT_TIMEOUT_S is 60s server-side and the backend adds its own work
-  /// on top.
   static const Duration inferenceTimeout = Duration(seconds: 180);
   static const Duration quickTimeout = Duration(seconds: 25);
 
@@ -102,23 +119,24 @@ class Env {
 
   static bool get hasBackend => backendBase.isNotEmpty;
   static bool get hasTcwpnWarmup => tcwpnBase.isNotEmpty;
-
-  /// True for a build that can actually reach the clinical path. Use this to
-  /// gate the UI rather than letting screens fail one call at a time.
   static bool get isConfigured => hasBackend;
 
-  /// A modality reading older than this is called out in the chart.
-  ///
-  /// DISPLAY THRESHOLD ONLY. The authoritative freshness decision is the
-  /// backend's `modalities[*].fresh`, computed from gate.MAX_AGE_MINUTES, which
-  /// differs per modality — minutes for physiological, months for notes. Where
-  /// the two disagree, show the server's (section 20).
+  /// Handbook Phase 8 transport rule: participant/clinical traffic uses HTTPS.
+  /// Plain HTTP is tolerated only for loopback development, never remote hosts.
+  static bool get isBackendTransportSafe {
+    if (!hasBackend) return true;
+    final uri = Uri.tryParse(backendBase.trim());
+    if (uri == null || uri.host.isEmpty) return false;
+    if (uri.scheme.toLowerCase() == 'https') return true;
+    if (uri.scheme.toLowerCase() != 'http') return false;
+    final host = uri.host.toLowerCase();
+    return host == 'localhost' || host == '127.0.0.1' || host == '::1';
+  }
+
   static const Duration stalenessThreshold = Duration(hours: 72);
 
-  /// False for any build that touches real patients. Removes the seeded
-  /// demonstration patient and the example note library.
   static const bool demoData = bool.fromEnvironment(
     'DEMO_DATA',
-    defaultValue: true,
+    defaultValue: false,
   );
 }
