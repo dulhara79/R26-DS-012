@@ -52,7 +52,7 @@ jobs:
           fi
 
           changed="$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")"
-          outside="$(printf '%s\n' "${changed}" | grep -v "^\${OWNED_PREFIX}" || true)"
+          outside="$(printf '%s\n' "${changed}" | grep -v "^${OWNED_PREFIX}" || true)"
 
           if [[ -n "${outside}" ]]; then
             echo "${outside}"
