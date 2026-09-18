@@ -6,12 +6,11 @@
 //                  which is Keychain on iOS and EncryptedSharedPreferences on
 //                  Android. Never SharedPreferences.
 //
-//   RecordStore  — clinical records. Every read and write takes the patient MRN
-//                  as an argument. There is no `activePatientId` static: the
-//                  previous build had one, and a stale value meant one patient's
-//                  assessment could be written into another patient's chart.
-//                  Making the key a required parameter removes that failure mode
-//                  at the type level.
+//   RecordStore  — clinical records. Every key is namespaced by the currently
+//                  authenticated clinician, and patient-specific records are
+//                  additionally namespaced by MRN. Legacy unscoped keys are
+//                  deliberately not read as a fallback because ownership cannot
+//                  be proven after an upgrade.
 
 import 'dart:convert';
 
@@ -19,6 +18,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/models.dart';
+import 'clinician_storage_scope.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -58,29 +58,30 @@ class SecureStore {
 class RecordStore {
   static Future<SharedPreferences> get _p => SharedPreferences.getInstance();
 
-  // Roster is global; everything else is namespaced by MRN.
-  static const _kRoster = 'roster_v2';
-  static const _kAlerts = 'alerts_v2';
-  static const _kSiteSupport = 'support_site_v2';
+  static String get _kRoster =>
+      ClinicianStorageScope.keyForCurrent('roster_v2');
+  static String get _kAlerts =>
+      ClinicianStorageScope.keyForCurrent('alerts_v2');
+  static String get _kSiteSupport =>
+      ClinicianStorageScope.keyForCurrent('support_site_v2');
 
-  static String _notes(String mrn) => 'notes_v2::$mrn';
-  static String _support(String mrn) => 'support_v2::$mrn';
+  static String _notes(String mrn) =>
+      ClinicianStorageScope.keyForCurrent('notes_v2::$mrn');
+  static String _support(String mrn) =>
+      ClinicianStorageScope.keyForCurrent('support_v2::$mrn');
 
   // v3: the cached fusion payload is now the backend's clinician-timeline shape,
   // not the old fusion-service shape. The key is bumped so a cache written by a
   // previous build is ignored rather than misparsed — an old `composite_score`
   // blob read by the new parser would yield a null composite and look like a
   // blocked gate, which is a different clinical statement entirely.
-  static String _fusion(String mrn) => 'fusion_v3::$mrn';
+  static String _fusion(String mrn) =>
+      ClinicianStorageScope.keyForCurrent('fusion_v3::$mrn');
 
-  static String _subject(String mrn) => 'subject_id_v1::$mrn';
+  static String _subject(String mrn) =>
+      ClinicianStorageScope.keyForCurrent('subject_id_v1::$mrn');
 
   // ── Backend subject id (per patient) ──────────────────────────────────────
-  //
-  // The opaque id the Central Backend minted for this patient at enrolment.
-  // Stored so the raw MRN stops travelling once it has been exchanged once.
-  // Namespaced by MRN like every other record, for the same reason: there is no
-  // `activePatient` static anywhere in this class.
 
   static Future<String?> subjectId(String mrn) async {
     final v = (await _p).getString(_subject(mrn));
@@ -130,10 +131,6 @@ class RecordStore {
           _notes(mrn), jsonEncode(notes.map((n) => n.toJson()).toList()));
 
   // ── Support set ───────────────────────────────────────────────────────────
-  //
-  // Two tiers, matching how few-shot adaptation is actually used: site-level
-  // notes seed every patient, and per-patient notes refine the prototype for
-  // one individual. `effectiveSupportSet` merges them.
 
   static Future<List<SupportNote>> loadSupport(String mrn) =>
       _loadSupportAt(_support(mrn));
@@ -171,11 +168,6 @@ class RecordStore {
 
   /// Caches the server's answer verbatim, via FusionResult.toJson, which emits
   /// exactly the keys FusionResult.fromJson reads.
-  ///
-  /// The previous version hand-built a different, lossy shape here — dropping
-  /// status, freshness, the gate decision and the fusion row id — so the cached
-  /// copy and the network copy were not the same object. Round-tripping through
-  /// one parser means the two paths cannot diverge in how a field is read.
   static Future<void> cacheFusion(String mrn, FusionResult r) async =>
       (await _p).setString(_fusion(mrn), jsonEncode(r.toJson()));
 
@@ -212,9 +204,8 @@ class RecordStore {
 
   // ── Deletion ──────────────────────────────────────────────────────────────
 
-  /// Removes every record belonging to one patient across every namespace.
-  /// The previous build's delete dialog promised this and cleared only the
-  /// roster entry, leaving notes and assessments orphaned on disk.
+  /// Removes every locally cached record belonging to one patient within the
+  /// current clinician's namespace. It never deletes another clinician's copy.
   static Future<void> purgePatient(String mrn) async {
     final p = await _p;
     await p.remove(_notes(mrn));
