@@ -25,8 +25,11 @@ import gate
 import identity
 import modality_clients as mc
 import rag_client
+from forecast import persist_c1_forecast_and_event
 from db_models import (AuditLog, FusionResult, ModalityReading, PairingCode,
                        Subject, SubjectAlias, Verdict, get_session, init_db, utcnow, SupportBankNote, SessionLocal)
+from clinician_api import (Principal, require_assignment, router as clinician_router,
+                           service_or_clinician)
 
 API_TOKEN = os.getenv("BACKEND_API_TOKEN", "")
 ALL_MODALITIES = ["c1_physiological", "c2_behavioral", "c3_clinical_nlp", "c4_demographic"]
@@ -63,6 +66,7 @@ SUPPORT_BANK_VERSION = __import__("os").getenv("SUPPORT_BANK_VERSION", "syntheti
 app = FastAPI(title="Central Backend — R26-DS-012", version="cb-v1.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
                    allow_methods=["*"], allow_headers=["*"])
+app.include_router(clinician_router)
 
 # Also create tables at import time. The lifespan handler covers `uvicorn main:app`,
 # but a bare TestClient(app) never triggers lifespan, and a missing-table error at
@@ -456,8 +460,11 @@ def ingest_physiological(req: PhysiologicalWindow, db: Session = Depends(get_ses
     row = _store(db, subject_id, "c1_physiological", result)
     db.commit()
     fusion_info = _auto_fuse(db, subject_id, "physio-ingest", debounce=True)
+    forecast, event = persist_c1_forecast_and_event(db, subject_id, row)
     return {"subject_id": subject_id, "reading_id": row.id,
             "status": result.status, "score": result.raw_score, "note": result.note,
+            **({"forecast_result_id": forecast.forecast_result_id} if forecast else {}),
+            **({"attention_event_id": event.id} if event else {}),
             **fusion_info}
 
 
@@ -553,16 +560,18 @@ class ClinicalNote(BaseModel):
 
 @app.post("/v1/clinical-notes", tags=["ingestion"])
 def ingest_clinical_note(req: ClinicalNote, db: Session = Depends(get_session),
-                         authorization: Optional[str] = Header(None)):
+                         principal: Optional[Principal] = Depends(service_or_clinician)):
     """Steps 22-26. Note enters from the clinician side only.
 
     The raw note text is stored ONLY in this component's detail blob and is never
     returned to the patient app — see the egress endpoints, which expose the
     score but never the text.
     """
-    _auth(authorization)
     subject_id = req.subject_id or _resolve(db, "mrn_hash", identity.hash_mrn(req.mrn or ""))
     _require_subject(db, subject_id)
+    if principal is not None:
+        require_assignment(db, principal, subject_id)
+        req.author = principal.clinician_id
 
     support_set = req.support_set or None
     support_set_version = None
@@ -772,13 +781,15 @@ def patient_risk(subject_id: str, db: Session = Depends(get_session)):
     row = _latest_fusion(db, subject_id)
     assessment = _assessment_for_row(row)
     if not row:
-        return {"subject_id": subject_id, "composite": None, "band": "GREY",
+        return {"subject_id": subject_id, "fusion_result_id": None,
+                "composite": None, "band": "GREY",
                 "message": "no assessment yet", "updated_at": None,
                 "assessment_status": assessment["status"],
                 "missing_modalities": assessment["missing_modalities"]}
     _audit(db, subject_id, "egress.patient", None)
     db.commit()
     return {"subject_id": subject_id,
+            "fusion_result_id": row.id,
             "composite": row.composite, "band": row.band,
             "message": row.reason or "assessment available",
             "updated_at": row.computed_at,
