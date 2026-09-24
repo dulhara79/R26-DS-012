@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
 
 from care_anxrag.embeddings import OllamaEmbedder
-from care_anxrag.generation import OllamaGenerator
+from care_anxrag.generation import EvidenceOnlyGenerator, OllamaGenerator
 from care_anxrag.models import (
     ChunkRecord,
     DocumentStatus,
@@ -137,6 +137,7 @@ def test_ollama_generation_contract_and_citations(monkeypatch) -> None:
         query_analysis=QueryAnalysis(
             original_query="What treatment is used?",
             normalized_query="what treatment is used?",
+            retrieval_query="what treatment is used?",
             intent=QueryIntent.TREATMENT,
             preferred_layers=[KnowledgeLayer.CLINICAL_CORE],
             safety_level=SafetyLevel.NORMAL,
@@ -149,6 +150,9 @@ def test_ollama_generation_contract_and_citations(monkeypatch) -> None:
     assert payload.cited_source_ids == ["S1"]
     assert captured["url"].endswith("/api/chat")
     assert isinstance(captured["json"]["format"], dict)
+    system_text = captured["json"]["messages"][0]["content"]
+    assert "atomic factual sentence" in system_text
+    assert "individually support the entire claim" in system_text
 
 
 def test_ollama_repair_request_retains_original_evidence(monkeypatch) -> None:
@@ -168,6 +172,7 @@ def test_ollama_repair_request_retains_original_evidence(monkeypatch) -> None:
         query_analysis=QueryAnalysis(
             original_query="What treatment is used?",
             normalized_query="what treatment is used?",
+            retrieval_query="what treatment is used?",
             intent=QueryIntent.TREATMENT,
             preferred_layers=[KnowledgeLayer.CLINICAL_CORE],
             safety_level=SafetyLevel.NORMAL,
@@ -401,3 +406,32 @@ def test_nli_uses_model_label_mapping_and_accepts_single_vector(monkeypatch) -> 
     relation = CrossEncoderNliClassifier("custom-nli").classify([(left, right)])[0]
     assert relation.label.value == "entailment"
     assert relation.confidence > 0.99
+
+
+
+def test_evidence_only_generator_returns_source_text_without_paraphrasing() -> None:
+    chunk = sample_chunk()
+    hit = SearchHit(chunk=chunk, care_score=0.9)
+    retrieval = RetrievalResult(
+        query_analysis=QueryAnalysis(
+            original_query="What treatment is used for panic disorder?",
+            normalized_query="what treatment is used for panic disorder?",
+            retrieval_query="what treatment is used for panic disorder?",
+            intent=QueryIntent.TREATMENT,
+            preferred_layers=[KnowledgeLayer.CLINICAL_CORE],
+            safety_level=SafetyLevel.NORMAL,
+        ),
+        hits=[hit],
+        confidence=0.8,
+    )
+
+    payload = EvidenceOnlyGenerator().generate(
+        "What treatment is used for panic disorder?",
+        [hit],
+        retrieval,
+    )
+
+    assert chunk.text in payload.answer
+    assert payload.cited_source_ids == ["S1"]
+    assert payload.answer.startswith("- ")
+    assert "[S1]" in payload.answer

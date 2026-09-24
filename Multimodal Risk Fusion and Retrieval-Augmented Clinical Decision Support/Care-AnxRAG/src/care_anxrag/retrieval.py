@@ -6,6 +6,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Sequence
 
+from .clinical_match import (
+    population_compatibility,
+    supports_explicit_treatment_query,
+    treatment_compatibility,
+)
 from .config import Settings
 from .db import Database
 from .embeddings import Embedder
@@ -69,9 +74,9 @@ class CareRetriever:
 
         if self.database.count_chunks(status=None) > 0:
             self.database.assert_embedding_identity(self.embedder.model_id)
-        query_embedding = self.embedder.embed([analysis.normalized_query])[0]
+        query_embedding = self.embedder.embed([analysis.retrieval_query])[0]
         dense_ranked = self._dense_search(query_embedding, analysis.preferred_layers)
-        lexical_ranked = self._lexical_search(analysis.normalized_query)
+        lexical_ranked = self._lexical_search(analysis.retrieval_query)
         hits = self._fuse(dense_ranked, lexical_ranked)
         if not hits:
             return RetrievalResult(
@@ -104,7 +109,10 @@ class CareRetriever:
                 hit.chunk.layer,
             )
             hit.relevance_score = self._relevance_score(hit)
-            hit.care_score = self._care_score(hit)
+            hit.care_score = self._care_score(
+            hit,
+            analysis,
+        )
         hits.sort(key=lambda value: value.care_score, reverse=True)
 
         # Source authority and evidence quality must never make an unrelated chunk
@@ -139,6 +147,7 @@ class CareRetriever:
             selected,
             confidence,
             unresolved_conflict,
+            analysis,
         )
         evidence_dates = [
             hit.chunk.updated_at or hit.chunk.published_at
@@ -240,6 +249,24 @@ class CareRetriever:
         return hits[: self.settings.fused_candidates]
 
     @staticmethod
+    def _clinical_compatibility_adjustment(
+    applicability_score: float,
+    ) -> float:
+        """
+        Convert strong clinical incompatibility into a ranking adjustment.
+
+        Applicability below 0.50 represents a strong mismatch, such as
+        evidence explicitly targeting a different anxiety subtype.
+
+        Generic or partially applicable anxiety evidence is not penalized
+        here; its normal applicability score already handles that case.
+        """
+        if applicability_score < 0.50:
+            return 0.60
+
+        return 1.0
+
+    @staticmethod
     def _relevance_score(hit: SearchHit) -> float:
         # Deliberately excludes authority/evidence/freshness: this is the guardrail
         # against highly authoritative but irrelevant evidence. Lexical presence is
@@ -252,9 +279,36 @@ class CareRetriever:
             + 0.05 * hit.applicability_score
         )
 
-    def _care_score(self, hit: SearchHit) -> float:
+    @staticmethod
+    def _clinical_text(hit: SearchHit) -> str:
+        return "\n".join(
+            value
+            for value in [
+                getattr(hit.chunk, "title", ""),
+                getattr(hit.chunk, "section_heading", ""),
+                getattr(hit.chunk, "text", ""),
+            ]
+            if value
+        )
+
+    @classmethod
+    def _treatment_compatibility_adjustment(cls, hit: SearchHit, analysis) -> float:
+        return treatment_compatibility(
+            getattr(analysis, "treatments", []) or [],
+            cls._clinical_text(hit),
+        )
+
+    @classmethod
+    def _population_compatibility_adjustment(cls, hit: SearchHit, analysis) -> float:
+        return population_compatibility(
+            getattr(analysis, "population", None),
+            cls._clinical_text(hit),
+        )
+
+    def _care_score(self, hit: SearchHit, analysis=None) -> float:
         weights = self.settings.weights
-        return clamp(
+
+        base_score = clamp(
             weights.semantic * hit.dense_score
             + weights.lexical * hit.lexical_score
             + weights.rrf * hit.rrf_normalized
@@ -263,6 +317,30 @@ class CareRetriever:
             + weights.evidence * hit.chunk.evidence_score
             + weights.freshness * hit.freshness_score
             + weights.applicability * hit.applicability_score
+        )
+
+        subtype_compatibility = self._clinical_compatibility_adjustment(
+            hit.applicability_score
+        )
+
+        treatment_adjustment = 1.0
+        population_adjustment = 1.0
+
+        if analysis is not None:
+            treatment_adjustment = self._treatment_compatibility_adjustment(
+                hit,
+                analysis,
+            )
+            population_adjustment = self._population_compatibility_adjustment(
+                hit,
+                analysis,
+            )
+
+        return clamp(
+            base_score
+            * subtype_compatibility
+            * treatment_adjustment
+            * population_adjustment
         )
 
     def _resolve_conflicts(
@@ -354,6 +432,7 @@ class CareRetriever:
         hits: Sequence[SearchHit],
         confidence: float,
         unresolved_conflict: float,
+        analysis,
     ) -> tuple[bool, str | None]:
         if not hits:
             return True, "no_active_evidence_after_conflict_resolution"
@@ -367,4 +446,28 @@ class CareRetriever:
             return True, "insufficient_source_diversity"
         if unresolved_conflict > self.settings.unresolved_conflict_threshold:
             return True, "unresolved_high_confidence_evidence_conflict"
+
+        requested_treatments = set(getattr(analysis, "treatments", []) or [])
+        if requested_treatments:
+            requested_subtypes = set(
+                getattr(analysis, "anxiety_subtypes", []) or []
+            )
+            requested_population = getattr(analysis, "population", None)
+            unsupported_treatments = [
+                treatment
+                for treatment in requested_treatments
+                if not any(
+                    supports_explicit_treatment_query(
+                        requested_subtypes,
+                        {treatment},
+                        requested_population,
+                        hit.chunk.topics,
+                        self._clinical_text(hit),
+                    )
+                    for hit in hits
+                )
+            ]
+            if unsupported_treatments:
+                return True, "insufficient_direct_evidence_for_requested_treatment"
+
         return False, None
