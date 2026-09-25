@@ -281,8 +281,13 @@ class FusionDetailScreen extends StatelessWidget {
                         Expanded(
                           child: Readout(
                             label: 'CONFIDENCE',
-                            value:
-                                '${(latestNote!.result!.confidence * 100).round()}%',
+                            // round() throws UnsupportedError on a non-finite
+                            // double, and a throw inside build is a red error
+                            // screen. A confidence the service did not send is
+                            // shown as unknown instead.
+                            value: latestNote!.result!.confidence.isFinite
+                                ? '${(latestNote!.result!.confidence * 100).round()}%'
+                                : '\u2014',
                           ),
                         ),
                         Expanded(
@@ -315,7 +320,12 @@ class FusionDetailScreen extends StatelessWidget {
     if (c.isEmpty || !c.first.available) {
       return 'This note\u2019s score is not currently part of the composite.';
     }
-    final pct = (c.first.weight * 100).round();
+    final w = c.first.weight;
+    if (!w.isFinite) {
+      return 'The weight this note\u2019s score carries in the current '
+          'composite was not reported.';
+    }
+    final pct = (w * 100).round();
     return 'This note\u2019s score carries $pct% of the weight in the current '
         'composite, after rescaling across the modalities that reported.';
   }

@@ -243,7 +243,15 @@ class ConfidenceDial extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final low = value < 0.60;
+    // `value` comes off a network response. `double.nan.round()` and
+    // `double.infinity.round()` both throw UnsupportedError, and a throw inside
+    // build is a red error screen — so a service that omits `confidence`, or
+    // sends it as a string this app cannot parse, used to take the whole
+    // assessment down rather than showing one dash. Non-finite reads as unknown.
+    final known = value.isFinite;
+    final fraction = known ? value.clamp(0.0, 1.0) : 0.0;
+    final low = known && value < 0.60;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -254,7 +262,7 @@ class ConfidenceDial extends StatelessWidget {
             alignment: Alignment.center,
             children: [
               TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: value.clamp(0.0, 1.0)),
+                tween: Tween(begin: 0, end: fraction),
                 duration: Ds.med,
                 curve: Curves.easeOutCubic,
                 builder: (_, v, __) => CircularProgressIndicator(
@@ -265,7 +273,7 @@ class ConfidenceDial extends StatelessWidget {
                   valueColor: AlwaysStoppedAnimation(low ? Ds.amber : Ds.brand),
                 ),
               ),
-              Text('${(value * 100).round()}',
+              Text(known ? '${(value * 100).round()}' : '\u2014',
                   style: AppTheme.data(size: 14, weight: FontWeight.w600)),
             ],
           ),

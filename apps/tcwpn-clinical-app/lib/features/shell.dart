@@ -20,6 +20,7 @@ import '../domain/models.dart';
 import '../state/controllers.dart';
 import 'alerts/alerts_screen.dart';
 import 'chart/patient_chart_screen.dart';
+import 'dashboard/kpi_dashboard_screen.dart';
 import 'patients/scan_patient_id_screen.dart';
 import 'settings/settings_screen.dart';
 import 'tcwpn/support_set_screen.dart';
@@ -46,6 +47,8 @@ class _AppShellState extends State<AppShell> {
           _PatientsTab(),
           AlertsScreen(),
           SettingsScreen(),
+          AskCareScreen(),
+          KpiDashboardScreen(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -81,6 +84,11 @@ class _AppShellState extends State<AppShell> {
             icon: Icon(Icons.psychology_outlined),
             selectedIcon: Icon(Icons.psychology),
             label: 'Ask CARE',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.insights_outlined),
+            selectedIcon: Icon(Icons.insights_rounded),
+            label: 'Dashboard',
           ),
         ],
       ),

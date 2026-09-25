@@ -1,0 +1,4 @@
+import { useState } from 'react'
+import { NavLink } from 'react-router-dom'
+const nav=[['Research','/'],['System','/components'],['Evidence','/results'],['Methodology','/methodology'],['Publications','/publications'],['People','/team']]
+export default function Navbar(){const [open,setOpen]=useState(false);return <header className="site-header"><div className="nav-shell"><NavLink to="/" className="brand" onClick={()=>setOpen(false)}><strong>R26—DS—012</strong><span>Multimodal Anxiety Research</span></NavLink><button className="menu" onClick={()=>setOpen(!open)} aria-expanded={open}>Menu</button><nav className={open?'nav-links open':'nav-links'}>{nav.map(([n,p])=><NavLink key={p} to={p} onClick={()=>setOpen(false)} className={({isActive})=>isActive?'active':''}>{n}</NavLink>)}<a href="https://github.com/dulhara79/R26-DS-012" target="_blank" rel="noreferrer">Repository ↗</a></nav></div></header>}

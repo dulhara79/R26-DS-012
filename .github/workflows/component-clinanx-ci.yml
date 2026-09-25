@@ -1,0 +1,145 @@
+# ---------------------------------------------------------------------------
+# Validation for the mirrored ClinAnx clinician Flutter application.
+#
+# Source of truth:
+#   dulhara79/tcwpn_mobile_app main
+# Mirror destination:
+#   apps/tcwpn-clinical-app
+# ---------------------------------------------------------------------------
+name: component-clinanx-ci
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/tcwpn-clinical-app/**"
+  push:
+    branches: [main]
+    paths:
+      - "apps/tcwpn-clinical-app/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: component-clinanx-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APP_DIR: apps/tcwpn-clinical-app
+
+jobs:
+  provenance:
+    name: ClinAnx mirror provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Validate mirror metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          manifest="${APP_DIR}/.sync-metadata.json"
+          test -f "${manifest}"
+
+          python - "${manifest}" <<'PY'
+          import json
+          import re
+          import sys
+
+          path = sys.argv[1]
+          with open(path, encoding="utf-8") as handle:
+              data = json.load(handle)
+
+          expected = {
+              "source_repository": "dulhara79/tcwpn_mobile_app",
+              "source_branch": "main",
+              "ownership": "generated-mirror-do-not-edit-directly",
+          }
+
+          for key, value in expected.items():
+              if data.get(key) != value:
+                  raise SystemExit(f"{key} must be {value!r}; got {data.get(key)!r}")
+
+          sha = data.get("source_commit", "")
+          if not re.fullmatch(r"[0-9a-f]{40}", sha):
+              raise SystemExit("source_commit must be a full 40-character Git SHA")
+
+          tree = data.get("source_tree", "")
+          if not re.fullmatch(r"[0-9a-f]{40}", tree):
+              raise SystemExit("source_tree must be a full 40-character Git tree SHA")
+
+          print(f"ClinAnx source commit: {sha}")
+          PY
+
+      - name: Reject sensitive/generated artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          bad="$(
+            find "${APP_DIR}" -type f               \( -name '.env' -o -name '*.jks' -o -name '*.keystore' -o -name '*.pem' -o -name '*.key' -o -name '.DS_Store' \)               -print || true
+          )"
+
+          if [[ -n "${bad}" ]]; then
+            echo "${bad}"
+            echo "::error::Sensitive or generated files were committed to the ClinAnx mirror."
+            exit 1
+          fi
+
+  scope:
+    name: ClinAnx mirror scope
+    if: github.event_name == 'pull_request' && github.head_ref == 'sync/tcwpn-clinical-app'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Assert sync PR is confined to the owned folder
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "${{ github.base_ref }}" --depth=100
+          changed="$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")"
+          echo "${changed}"
+
+          outside="$(printf '%s\n' "${changed}" | grep -v '^apps/tcwpn-clinical-app/' || true)"
+          if [[ -n "${outside}" ]]; then
+            echo "${outside}"
+            echo "::error::ClinAnx sync PR escaped its owned directory."
+            exit 1
+          fi
+
+  flutter:
+    name: ClinAnx Flutter validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/tcwpn-clinical-app
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Static analysis
+        run: flutter analyze
+
+      - name: Tests
+        run: flutter test

@@ -159,6 +159,23 @@ extension AlertBandX on AlertBand {
         AlertBand.darkRed => 'Urgent',
       };
 
+  /// Severity word for ONE MODALITY's own score shown in isolation. Pairs with
+  /// [fromScore] and shares its 0.25 / 0.50 / 0.75 edges — no new thresholds
+  /// are introduced here.
+  ///
+  /// Deliberately a different word list from [label] and [protocolName]. Those
+  /// name the FUSION service's protocol output, which bands three ways at
+  /// 0.33/0.66 (fusion_service/fusion.py, BANDS). If a clinical-note score and
+  /// a composite both read "Monitor", a clinician will reasonably assume the
+  /// two numbers are on the same scale. They are not.
+  String get severityLabel => switch (this) {
+        AlertBand.grey => 'Not scored',
+        AlertBand.green => 'Low',
+        AlertBand.amber => 'Moderate',
+        AlertBand.red => 'High',
+        AlertBand.darkRed => 'Very high',
+      };
+
   /// The band name as the proposal writes it — used in exports and PDFs where
   /// the protocol vocabulary matters more than the friendly label.
   String get protocolName => switch (this) {

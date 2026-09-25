@@ -307,6 +307,20 @@ class SupportContribution {
         combinedWeight: _d(j['combined_weight'] ?? j['weight'], 1),
         noteDate: j['note_date'] == null ? null : _dt(j['note_date']),
       );
+
+  /// Round-trips through [fromJson]. Without this the support-influence panel
+  /// was present the first time an assessment was shown and gone the moment the
+  /// note was reopened from history, because `TcwpnResult.toJson` had nothing to
+  /// write these into.
+  Map<String, dynamic> toJson() => {
+        'note_id': noteId,
+        'label': label,
+        'excerpt': excerpt,
+        'temporal_weight': temporalWeight,
+        'confidence_weight': confidenceWeight,
+        'combined_weight': combinedWeight,
+        'note_date': noteDate?.toIso8601String(),
+      };
 }
 
 /// TC-WPN inference output.
@@ -328,6 +342,13 @@ class TcwpnResult {
   final int latencyMs;
   final bool usedDefaultSupportSet;
 
+  /// The service's own `calibration_status`, verbatim, or '' when it did not
+  /// send one. The live TC-WPN deployment reports `uncalibrated` alongside a
+  /// field it names `probability` (see the Central Backend's
+  /// modality_clients.py::call_c3). Calling that number a calibrated
+  /// probability in the UI would assert a property the model disclaims.
+  final String calibrationStatus;
+
   const TcwpnResult({
     required this.prediction,
     required this.riskScore,
@@ -345,7 +366,20 @@ class TcwpnResult {
     this.modelVersion = 'TC-WPN',
     this.latencyMs = 0,
     this.usedDefaultSupportSet = false,
+    this.calibrationStatus = '',
   });
+
+  /// True only when the service positively said the probability is calibrated.
+  /// Silence is not a claim of calibration.
+  bool get isCalibrated => calibrationStatus.toLowerCase() == 'calibrated';
+
+  /// What to call the headline number. Follows [calibrationStatus] rather than
+  /// the field name it arrived under.
+  String get probabilityLabel => calibrationStatus.isEmpty
+      ? 'CLINICAL-NOTE RISK'
+      : (isCalibrated
+          ? 'CLINICAL-NOTE RISK · CALIBRATED'
+          : 'CLINICAL-NOTE RISK · UNCALIBRATED');
 
   bool get isPositive => riskScore >= threshold;
 
@@ -353,8 +387,11 @@ class TcwpnResult {
   /// proposal's own safety notice sets the bar at 60%.
   bool get needsManualReview => confidence < 0.60;
 
-  /// True when the service reported real attention mass for at least one span.
-  bool get hasAttribution => spans.any((s) => s.hasWeight);
+  /// True when the service reported real, usable attention mass for at least
+  /// one span. `isFinite` as well as [AttentionSpan.hasWeight]: an infinite
+  /// weight cannot be drawn as a bar, so claiming attribution for it would put
+  /// the section heading and the section's contents out of step.
+  bool get hasAttribution => spans.any((s) => s.hasWeight && s.weight.isFinite);
 
   factory TcwpnResult.fromJson(Map<String, dynamic> j, {int? fallbackLatency}) {
     final raw = _d(j['risk_score']);
@@ -362,7 +399,14 @@ class TcwpnResult {
       prediction: _s(j['prediction'],
           raw >= _d(j['threshold'], .5) ? 'ANXIETY' : 'NO ANXIETY'),
       riskScore: raw,
-      calibratedProbability: _d(j['calibrated_probability'] ?? j['risk_score']),
+      // Same preference order the Central Backend applies in call_c3:
+      // calibrated_probability > probability > risk_score > score. The live
+      // Space names the field `probability`; without it in this chain the
+      // headline read 0.0000 for a response that did contain a score.
+      calibratedProbability: _d(j['calibrated_probability'] ??
+          j['probability'] ??
+          j['risk_score'] ??
+          j['score']),
       confidence: _d(j['confidence']),
       entropy: _d(j['entropy'], double.nan),
       threshold: _d(j['threshold'], 0.5),
@@ -388,6 +432,7 @@ class TcwpnResult {
       modelVersion: _s(j['model_version'], 'TC-WPN'),
       latencyMs: _i(j['latency_ms'], fallbackLatency ?? 0),
       usedDefaultSupportSet: _b(j['used_default_support_set']),
+      calibrationStatus: _s(j['calibration_status']),
     );
   }
 
@@ -401,6 +446,15 @@ class TcwpnResult {
         'support_k': supportK,
         'ece': ece,
         'attention_spans': spans.map((s) => s.toJson()).toList(),
+        // These three were dropped by the previous version of this method, so
+        // the local cache round-tripped an assessment that had LESS in it than
+        // the one the clinician was shown a moment earlier: the support-set
+        // influence panel and the prototype-distance rows simply vanished when
+        // the note was reopened from the chart. They are written now.
+        'support_contributions':
+            supportContributions.map((s) => s.toJson()).toList(),
+        'prototype_distance_anxiety': prototypeDistanceAnxiety,
+        'prototype_distance_control': prototypeDistanceControl,
         'temporal_context': temporalContext,
         'model_version': modelVersion,
         'latency_ms': latencyMs,
