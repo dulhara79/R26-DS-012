@@ -1,0 +1,233 @@
+{
+  "model_version": "c1-direct-ridge-score-forecast-wesad-v5",
+  "model_file": "DIRECT_RIDGE_FORECAST_FINAL.pth",
+  "save_status": "EXTERNALLY_VALIDATED_FINAL",
+  "model_type": "direct_multioutput_ridge_logit_score_delta",
+  "ae_model_version": "c1-unmasked-lstm-ae-wesad-v2",
+  "ae_model_file": "LSTM_AE_FINAL.pth",
+  "c1_score_formula": "raw_error / (raw_error + baseline_p95_raw_error)",
+  "baseline_p95_raw_error": 0.8247361928224564,
+  "score_note": "bounded monotonic anomaly score, not a probability",
+  "history_blocks": 2,
+  "history_block_minutes": 5,
+  "history_raw_minutes": 10,
+  "forecast_horizons_minutes": [
+    5,
+    10
+  ],
+  "raw_feature_window_overlap_percent": 0,
+  "ae_forecast_block_overlap_percent": 0,
+  "forecast_strategy": "direct +5/+10 prediction of logit-score change relative to persistence",
+  "recursive_decoding": false,
+  "teacher_forcing": false,
+  "manual_posthoc_anchoring": false,
+  "training_subjects": [
+    "S2",
+    "S4",
+    "S5",
+    "S7",
+    "S8",
+    "S9",
+    "S10",
+    "S11",
+    "S13",
+    "S14",
+    "S15",
+    "S16",
+    "S17"
+  ],
+  "excluded_subjects": [
+    "S3",
+    "S6"
+  ],
+  "training_origins_by_subject": {
+    "S2": 5,
+    "S4": 4,
+    "S5": 2,
+    "S7": 2,
+    "S8": 2,
+    "S9": 4,
+    "S10": 3,
+    "S11": 5,
+    "S13": 6,
+    "S14": 3,
+    "S15": 1,
+    "S16": 5,
+    "S17": 1
+  },
+  "n_training_origins": 43,
+  "subject_weighting": "each participant has total training weight 1",
+  "selected_alpha": 100.0,
+  "alpha_selection": {
+    "selection_rule": "largest alpha within one standard error of best inner mean MAE",
+    "unregularized_best_alpha": 10.0,
+    "selected_alpha": 100.0,
+    "candidate_results": {
+      "0.0001": {
+        "mean_subject_mae": 0.12817215559588765,
+        "standard_error": 0.018731232472927767,
+        "n_validation_subjects": 13,
+        "subject_mae": [
+          0.23769154758848346,
+          0.10043292835456061,
+          0.08146925048167614,
+          0.035849795134849816,
+          0.10410295909136746,
+          0.13959359179735717,
+          0.04559758689351734,
+          0.15707156224631622,
+          0.09155625872886386,
+          0.27465861183795753,
+          0.13015261911240084,
+          0.13792878347153453,
+          0.13013252800765457
+        ]
+      },
+      "0.001": {
+        "mean_subject_mae": 0.128171880853649,
+        "standard_error": 0.018731169984934078,
+        "n_validation_subjects": 13,
+        "subject_mae": [
+          0.2376914278908422,
+          0.10043311909784755,
+          0.08146905178691108,
+          0.03585035390319238,
+          0.10410328188369317,
+          0.13959273586963916,
+          0.04559749867195271,
+          0.157069961327787,
+          0.09155617619140129,
+          0.27465828408144466,
+          0.1301536374926699,
+          0.13792651188466287,
+          0.13013241101539275
+        ]
+      },
+      "0.01": {
+        "mean_subject_mae": 0.1281691341475724,
+        "standard_error": 0.018730545613421613,
+        "n_validation_subjects": 13,
+        "subject_mae": [
+          0.23769022878122006,
+          0.10043502569939149,
+          0.08146706415712246,
+          0.035855939158105254,
+          0.10410650677609426,
+          0.13958417745274712,
+          0.045596616262739476,
+          0.15705396012355183,
+          0.0915553498998946,
+          0.2746550100159004,
+          0.1301638183315012,
+          0.13790380639803063,
+          0.13013124086214195
+        ]
+      },
+      "0.1": {
+        "mean_subject_mae": 0.1281417385263715,
+        "standard_error": 0.0187243524511138,
+        "n_validation_subjects": 13,
+        "subject_mae": [
+          0.23767802610885708,
+          0.10045400902669614,
+          0.08144712028903214,
+          0.03591154999310012,
+          0.104138454611336,
+          0.13949867941322497,
+          0.045587773108215233,
+          0.1568947422357169,
+          0.09154699602202195,
+          0.27462261770009055,
+          0.13026533121471118,
+          0.1376777846946613,
+          0.13011951642516573
+        ]
+      },
+      "1.0": {
+        "mean_subject_mae": 0.12787473908650962,
+        "standard_error": 0.018667201432139263,
+        "n_validation_subjects": 13,
+        "subject_mae": [
+          0.23753647983196702,
+          0.10063599439545906,
+          0.08124153333403897,
+          0.03644457092354067,
+          0.10442970500584753,
+          0.13865239977166346,
+          0.04549770987652282,
+          0.1553782237206068,
+          0.09145504566986094,
+          0.2743319675149287,
+          0.13125176388752252,
+          0.13551608060214598,
+          0.13000013359052032
+        ]
+      },
+      "10.0": {
+        "mean_subject_mae": 0.12607526640669875,
+        "standard_error": 0.01839123229328219,
+        "n_validation_subjects": 13,
+        "subject_mae": [
+          0.23515017057930204,
+          0.10194097652833956,
+          0.07894894480938802,
+          0.04019500590467007,
+          0.10567786314829394,
+          0.13107105940830086,
+          0.04458644536070886,
+          0.14529630695779203,
+          0.09011793703627281,
+          0.27362875004403214,
+          0.13890086807513974,
+          0.12476698804374911,
+          0.12869714739109428
+        ]
+      },
+      "100.0": {
+        "mean_subject_mae": 0.13002260027268092,
+        "standard_error": 0.019696852430503828,
+        "n_validation_subjects": 13,
+        "subject_mae": [
+          0.2568366183730087,
+          0.11467298250022297,
+          0.06737174530585108,
+          0.054045785682707514,
+          0.10322551659524556,
+          0.13827890602021575,
+          0.05302291209492734,
+          0.1360034204897917,
+          0.08601505178666417,
+          0.2870754026651907,
+          0.15878993809601927,
+          0.11501217931271075,
+          0.11994334462229639
+        ]
+      }
+    }
+  },
+  "n_linear_coefficients_and_biases": 6,
+  "wesad_loso_results_file": "wesad_loso_forecast_metrics.json",
+  "deployment_gate_file": "deployment_gate.json",
+  "affectiveroad_results_file": "affectiveroad_forecast_metrics.json",
+  "external_validation_status": "APPROVED",
+  "external_evaluated_drives": [
+    "Drv3",
+    "Drv4",
+    "Drv5",
+    "Drv6",
+    "Drv7",
+    "Drv8",
+    "Drv9",
+    "Drv10",
+    "Drv11",
+    "Drv12",
+    "Drv13"
+  ],
+  "external_not_evaluable_drives": [
+    "Drv1",
+    "Drv2"
+  ],
+  "endpoint_change_required": true,
+  "endpoint_note": "Load with DirectScoreForecaster. The model takes two C1 score history values and returns [score_plus_5m, score_plus_10m].",
+  "trained_at": "2026-08-29T06:48:28.263941+00:00"
+}

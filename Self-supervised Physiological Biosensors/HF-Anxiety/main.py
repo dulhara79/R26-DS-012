@@ -1,3 +1,4 @@
+import json
 import os
 import re
 from collections import defaultdict
@@ -17,21 +18,31 @@ from huggingface_hub import hf_hub_download
 # STEP 1: PYTORCH MODEL CLASSES (Unchanged, fully functional)
 # -------------------------------------------------------------
 
-class MaskedLSTMAutoEncoder(nn.Module):
+class LSTMAutoEncoder(nn.Module):
     def __init__(self, n_features=10, hidden_size=64, n_layers=1):
-        super(MaskedLSTMAutoEncoder, self).__init__()
-        self.n_features  = n_features
+        super().__init__()
+        self.n_features = n_features
         self.hidden_size = hidden_size
-        self.n_layers    = n_layers
-        self.T           = 5
+        self.n_layers = n_layers
+        self.T = 5
 
-        self.encoder     = nn.LSTM(input_size=n_features, hidden_size=hidden_size, num_layers=n_layers, batch_first=True)
-        self.decoder     = nn.LSTM(input_size=hidden_size, hidden_size=hidden_size, num_layers=n_layers, batch_first=True)
+        self.encoder = nn.LSTM(
+            input_size=n_features,
+            hidden_size=hidden_size,
+            num_layers=n_layers,
+            batch_first=True,
+        )
+        self.decoder = nn.LSTM(
+            input_size=hidden_size,
+            hidden_size=hidden_size,
+            num_layers=n_layers,
+            batch_first=True,
+        )
         self.output_layer = nn.Linear(hidden_size, n_features)
 
     def forward(self, x):
         _, (h_n, _) = self.encoder(x)
-        bottleneck   = h_n[-1]
+        bottleneck = h_n[-1]
         decoder_input = bottleneck.unsqueeze(1).repeat(1, self.T, 1)
         decoder_out, _ = self.decoder(decoder_input)
         return self.output_layer(decoder_out)
@@ -41,41 +52,27 @@ class MaskedLSTMAutoEncoder(nn.Module):
         return h_n[-1]
 
 
-class Seq2SeqForecaster(nn.Module):
-    def __init__(self, embed_dim=64, enc_hidden=128, dec_hidden=128, n_layers=1, forecast_steps=10):
-        super(Seq2SeqForecaster, self).__init__()
-        self.forecast_steps = forecast_steps
-        self.dec_hidden     = dec_hidden
-        self.n_layers       = n_layers
+class DirectScoreForecaster(nn.Module):
+    """Exact inference module saved by the final forecasting notebook."""
 
-        self.encoder    = nn.LSTM(input_size=embed_dim, hidden_size=enc_hidden, num_layers=n_layers, batch_first=True)
-        self.bridge_h   = nn.Linear(enc_hidden, dec_hidden)
-        self.bridge_c   = nn.Linear(enc_hidden, dec_hidden)
-        self.decoder    = nn.LSTM(input_size=1, hidden_size=dec_hidden, num_layers=n_layers, batch_first=True)
-        self.output_proj = nn.Sequential(nn.Linear(dec_hidden, 1), nn.Softplus())
+    def __init__(self, history_blocks=2, forecast_blocks=2, score_eps=1e-6):
+        super().__init__()
+        self.score_eps = float(score_eps)
+        self.register_buffer("input_mean", torch.zeros(history_blocks))
+        self.register_buffer("input_scale", torch.ones(history_blocks))
+        self.delta_layer = nn.Linear(history_blocks, forecast_blocks)
 
-    def forward(self, x_emb, y_target=None, teacher_forcing_ratio=0.5):
-        batch_size = x_emb.size(0)
-        _, (h_n, c_n) = self.encoder(x_emb)
-        h_dec = torch.tanh(self.bridge_h(h_n))
-        c_dec = torch.tanh(self.bridge_c(c_n))
-        dec_input = torch.zeros(batch_size, 1, 1).to(x_emb.device)
-
-        predictions = []
-        for t in range(self.forecast_steps):
-            dec_out, (h_dec, c_dec) = self.decoder(dec_input, (h_dec, c_dec))
-            pred = self.output_proj(dec_out.squeeze(1))
-            predictions.append(pred)
-            if y_target is not None and torch.rand(1).item() < teacher_forcing_ratio:
-                dec_input = y_target[:, t].unsqueeze(1).unsqueeze(2)
-            else:
-                dec_input = pred.unsqueeze(1).detach()
-        return torch.cat(predictions, dim=1)
-
-    def predict(self, x_emb):
-        self.eval()
-        with torch.no_grad():
-            return self.forward(x_emb, y_target=None, teacher_forcing_ratio=0.0)
+    def forward(self, score_history):
+        bounded = torch.clamp(
+            score_history,
+            self.score_eps,
+            1.0 - self.score_eps,
+        )
+        history_logit = torch.log(bounded) - torch.log1p(-bounded)
+        scaled = (history_logit - self.input_mean) / self.input_scale
+        predicted_delta = self.delta_layer(scaled)
+        future_logit = history_logit[:, -1:] + predicted_delta
+        return torch.sigmoid(future_logit)
 
 
 # -------------------------------------------------------------
@@ -140,26 +137,74 @@ query_api  = db_client.query_api()
 # Hugging Face Vault settings for permanent model weight storage
 HF_TOKEN        = os.getenv("HF_TOKEN")
 HF_WEIGHTS_REPO = os.getenv("HF_WEIGHTS_REPO", "Dewdu/physiological-anxiety-weights")
+PERSONALIZED_MODEL_PREFIX = "unmasked_v2"
 
 device = torch.device('cpu')
 
-# The global default champion model for cold-starts and unpersonalized users
-global_ae_model = MaskedLSTMAutoEncoder(n_features=10, hidden_size=64, n_layers=1)
+# Final population-trained unmasked AE used as the fallback for users who do
+# not yet have personalized unmasked weights. This is a separate model object
+# from forecast_ae_model so personalization/history logic cannot modify the
+# frozen model used by the validated Ridge forecasting path.
+global_ae_model = LSTMAutoEncoder(
+    n_features=FEATURE_COUNT,
+    hidden_size=64,
+    n_layers=1,
+)
 global_ae_model.load_state_dict(torch.load(
-    MODEL_DIR / "MASKED_LSTM_AE_LOSO_S10.pth",
+    MODEL_DIR / "LSTM_AE_FINAL.pth",
     map_location=device,
 ))
 global_ae_model.eval()
 
-# Our fast in-memory storage to keep personalized user models alive in RAM
-user_model_cache = {}
+AE_METADATA_PATH = MODEL_DIR / "LSTM_AE_FINAL_metadata.json"
+FORECAST_METADATA_PATH = MODEL_DIR / "DIRECT_RIDGE_FORECAST_FINAL_metadata.json"
 
-forecaster = Seq2SeqForecaster(embed_dim=64, enc_hidden=128, dec_hidden=128, n_layers=1, forecast_steps=10)
-forecaster.load_state_dict(torch.load(
-    MODEL_DIR / "SEQ2SEQ_LOSO_S11.pth",
+with AE_METADATA_PATH.open(encoding="utf-8") as file:
+    forecast_ae_metadata = json.load(file)
+with FORECAST_METADATA_PATH.open(encoding="utf-8") as file:
+    forecast_metadata = json.load(file)
+
+FORECAST_AE_MODEL_VERSION = "c1-unmasked-lstm-ae-wesad-v2"
+FORECAST_MODEL_VERSION = "c1-direct-ridge-score-forecast-wesad-v5"
+FORECAST_BASELINE_P95 = float(forecast_metadata["baseline_p95_raw_error"])
+
+if forecast_ae_metadata.get("model_version") != FORECAST_AE_MODEL_VERSION:
+    raise RuntimeError("Unexpected LSTM_AE_FINAL metadata version.")
+if forecast_metadata.get("model_version") != FORECAST_MODEL_VERSION:
+    raise RuntimeError("Unexpected direct forecaster metadata version.")
+if forecast_metadata.get("ae_model_version") != FORECAST_AE_MODEL_VERSION:
+    raise RuntimeError("The direct forecaster and unmasked AE versions do not match.")
+if forecast_ae_metadata.get("predict_score_formula") != (
+    "raw_error / (raw_error + baseline_p95_raw_error)"
+):
+    raise RuntimeError("Unexpected C1 score formula in AE metadata.")
+if not np.isclose(
+    FORECAST_BASELINE_P95,
+    float(forecast_ae_metadata["baseline_p95_raw_error"]),
+):
+    raise RuntimeError("The AE and forecaster baseline p95 values do not match.")
+if not np.isfinite(FORECAST_BASELINE_P95) or FORECAST_BASELINE_P95 <= 0:
+    raise RuntimeError("Invalid baseline p95 in model metadata.")
+
+forecast_ae_model = LSTMAutoEncoder(
+    n_features=FEATURE_COUNT,
+    hidden_size=64,
+    n_layers=1,
+)
+forecast_ae_model.load_state_dict(torch.load(
+    MODEL_DIR / "LSTM_AE_FINAL.pth",
     map_location=device,
 ))
-forecaster.eval()
+forecast_ae_model.eval()
+for parameter in forecast_ae_model.parameters():
+    parameter.requires_grad = False
+
+direct_forecaster = DirectScoreForecaster()
+direct_forecaster.load_state_dict(torch.load(
+    MODEL_DIR / "DIRECT_RIDGE_FORECAST_FINAL.pth",
+    map_location=device,
+))
+direct_forecaster.eval()
 
 
 # -------------------------------------------------------------
@@ -301,43 +346,31 @@ def _risk_from_reconstruction_error(error: float, threshold: float) -> float:
     ))
 
 
-def _active_ae_model_for_user(user_id: str) -> MaskedLSTMAutoEncoder:
-    """Load the same personalized ten-feature model used by /predict."""
-    if user_id in user_model_cache:
-        return user_model_cache[user_id]
+def _active_ae_model_for_user(user_id: str) -> LSTMAutoEncoder:
+    """Load the user's personalized unmasked AE, or the final base AE."""
+    personalized_filename = f"{PERSONALIZED_MODEL_PREFIX}_{user_id}.pth"
 
-    personalized_weight_path = MODEL_DIR / f"{user_id}.pth"
-    if not personalized_weight_path.exists():
-        try:
-            hf_hub_download(
-                repo_id=HF_WEIGHTS_REPO,
-                filename=f"{user_id}.pth",
-                repo_type="dataset",
-                local_dir=str(MODEL_DIR),
-                token=HF_TOKEN,
-            )
-        except Exception:
-            pass
+    try:
+        personalized_weight_path = hf_hub_download(
+            repo_id=HF_WEIGHTS_REPO,
+            filename=personalized_filename,
+            repo_type="dataset",
+            token=HF_TOKEN,
+        )
 
-    if personalized_weight_path.exists():
-        try:
-            personalized_model = MaskedLSTMAutoEncoder(
-                n_features=10,
-                hidden_size=64,
-                n_layers=1,
-            )
-            personalized_model.load_state_dict(
-                torch.load(
-                    personalized_weight_path,
-                    map_location=device,
-                )
-            )
-            personalized_model.eval()
-            user_model_cache[user_id] = personalized_model
-            return personalized_model
-        except Exception:
-            pass
-    return global_ae_model
+        personalized_model = LSTMAutoEncoder(
+            n_features=FEATURE_COUNT,
+            hidden_size=64,
+            n_layers=1,
+        )
+        personalized_model.load_state_dict(torch.load(
+            personalized_weight_path,
+            map_location=device,
+        ))
+        personalized_model.eval()
+        return personalized_model
+    except Exception:
+        return global_ae_model
 
 
 @app.get("/")
@@ -481,8 +514,8 @@ def process_and_ingest_raw_data(payload: ChestStrapFeaturesPayload):
     # Feature order matches the notebook exactly:
     # [mean_HR, mean_RR, SDNN, RMSSD, mean_BR, std_BR, mean_temp, std_temp, mean_acc_mag, std_acc_mag]
     features = [
-        payload.mean_hr, payload.mean_rr, payload.sdnn, payload.rmssd, 
-        payload.mean_br, payload.std_br, payload.mean_temp, payload.std_temp, 
+        payload.mean_hr, payload.mean_rr, payload.sdnn, payload.rmssd,
+        payload.mean_br, payload.std_br, payload.mean_temp, payload.std_temp,
         payload.mean_acc_mag, payload.std_acc_mag
     ]
 
@@ -510,14 +543,20 @@ def process_and_ingest_raw_data(payload: ChestStrapFeaturesPayload):
         raise HTTPException(status_code=500, detail=f"Database write failure: {str(e)}")
 
 
+def _c1_score_from_raw_error(raw_error: float) -> float:
+    """Convert unmasked-AE reconstruction error to the deployed 0-1 C1 score."""
+    error = max(float(raw_error), 0.0)
+    return float(np.clip(
+        error / (error + FORECAST_BASELINE_P95 + 1e-12),
+        0.0,
+        1.0,
+    ))
+
+
 @app.get("/predict/{user_id}")
 def get_escalation_forecast(user_id: str):
     validate_user_id(user_id)
 
-    # FIX 5 — Fetch per-user baseline normalization parameters.
-    # Equivalent to loading SX_norm_params_mean.npy and SX_norm_params_std.npy
-    # in the notebook, and applying: normalized = (raw - b_mean) / b_std
-    # (notebook lines 759–763 and 773).
     norm_query = f'''
     from(bucket: "{INFLUX_BUCKET}")
       |> range(start: -1y)
@@ -527,66 +566,61 @@ def get_escalation_forecast(user_id: str):
       |> sort(columns: ["_time"], desc: true)
       |> limit(n: 1)
     '''
-    try:
-        norm_tables  = query_api.query(norm_query)
-        norm_records = [record.values for table in norm_tables for record in table.records]
 
+    try:
+        norm_records = [
+            record.values
+            for table in query_api.query(norm_query)
+            for record in table.records
+        ]
         if not norm_records:
             return {
                 "status": "not_calibrated",
                 "message": (
                     f"No normalization params found for user {user_id}. "
                     f"POST b_mean and b_std to /set_norm_params/{user_id} "
-                    f"before calling /predict."
+                    "before calling /predict."
                 ),
-                "forecast": []
+                "forecast": [],
+                "risk_forecast": [],
+                "coverage": 0.0,
             }
 
-        b_mean = np.array(
+        b_mean = np.asarray(
             [
                 _record_norm_value(norm_records[0], i, std=False)
                 for i in range(FEATURE_COUNT)
             ],
             dtype=np.float32,
         )
-        b_std = np.array(
+        b_std = np.asarray(
             [
                 _record_norm_value(norm_records[0], i, std=True)
                 for i in range(FEATURE_COUNT)
             ],
             dtype=np.float32,
         )
-        reconstruction_threshold = max(
-            float(
-                norm_records[0].get(
-                    "reconstruction_error_p90",
-                    DEFAULT_RECONSTRUCTION_ERROR_THRESHOLD,
-                )
-            ),
-            DEFAULT_RECONSTRUCTION_ERROR_THRESHOLD,
-        )
-
         if not np.isfinite(b_mean).all() or not np.isfinite(b_std).all():
             raise ValueError("Stored normalization parameters are incomplete or non-finite.")
-
         b_std = np.maximum(b_std, MINIMUM_BASELINE_STDS)
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve norm params: {str(error)}",
+        )
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve norm params: {str(e)}")
-
-    # Fetch the last 19 minutes of raw feature windows
     query = f'''
     from(bucket: "{INFLUX_BUCKET}")
-      |> range(start: -19m)
+      |> range(start: -20m)
       |> filter(fn: (r) => r["_measurement"] == "physiological_metrics")
       |> filter(fn: (r) => r["user_id"] == "{user_id}")
       |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
       |> sort(columns: ["_time"])
     '''
+
     try:
-        tables = query_api.query(query)
         valid_records = []
-        for table in tables:
+        for table in query_api.query(query):
             for record in table.records:
                 row = [
                     _record_feature(record.values, i)
@@ -594,124 +628,127 @@ def get_escalation_forecast(user_id: str):
                 ]
                 if None in row or _feature_quality_issue(row) is not None:
                     continue
-                valid_records.append((record.get_time(), row))
+                observed_at = record.get_time()
+                if observed_at.tzinfo is None:
+                    observed_at = observed_at.replace(tzinfo=timezone.utc)
+                else:
+                    observed_at = observed_at.astimezone(timezone.utc)
+                valid_records.append((observed_at, row))
 
         valid_records.sort(key=lambda item: item[0])
-        records = [row for _, row in valid_records]
-
-        current_length = len(records)
-        
-        # Absolute safety net: If there is zero data in InfluxDB, we must wait for the first 60-second block
-        if current_length == 0:
+        if not valid_records:
             return {
                 "status": "buffering",
-                "message": "Waiting for the first 60-second data block from your chest strap to arrive.",
-                "forecast": []
+                "message": "Waiting for the first valid one-minute chest-strap block.",
+                "forecast": [],
+                "risk_forecast": [],
+                "coverage": 0.0,
             }
 
         latest_reading_at = valid_records[-1][0]
-        if latest_reading_at.tzinfo is None:
-            latest_reading_at = latest_reading_at.replace(tzinfo=timezone.utc)
-        else:
-            latest_reading_at = latest_reading_at.astimezone(timezone.utc)
-        latest_reading_age = (
-            datetime.now(timezone.utc) - latest_reading_at
-        ).total_seconds()
+        now = datetime.now(timezone.utc)
+        latest_reading_age = (now - latest_reading_at).total_seconds()
         if (
             latest_reading_age < -30.0
             or latest_reading_age > MAX_FORECAST_READING_AGE_SECONDS
         ):
             return {
                 "status": "stale",
-                "message": (
-                    "Waiting for a fresh one-minute chest-strap data block."
-                ),
+                "message": "Waiting for a fresh one-minute chest-strap data block.",
                 "forecast": [],
+                "risk_forecast": [],
+                "coverage": 0.0,
                 "latest_reading_at": latest_reading_at.isoformat(),
                 "latest_reading_age_seconds": latest_reading_age,
             }
 
-        # Pull whatever records are available, up to the last 19 minutes
-        raw_sequence = np.array(records[-19:], dtype=np.float32)
+        contiguous_records = [valid_records[-1]]
+        for candidate in reversed(valid_records[:-1]):
+            gap_seconds = (
+                contiguous_records[0][0] - candidate[0]
+            ).total_seconds()
+            if not 45.0 <= gap_seconds <= 75.0:
+                break
+            contiguous_records.insert(0, candidate)
+            if len(contiguous_records) == 10:
+                break
 
-        # Turn our raw data into normalized data using the user's custom baseline stats
+        coverage = min(len(contiguous_records) / 10.0, 1.0)
+        if len(contiguous_records) < 10:
+            return {
+                "status": "buffering",
+                "message": (
+                    "Ten consecutive valid one-minute readings are required. "
+                    f"Currently available after the latest gap: {len(contiguous_records)}/10."
+                ),
+                "forecast": [],
+                "risk_forecast": [],
+                "coverage": coverage,
+                "latest_reading_at": latest_reading_at.isoformat(),
+                "latest_reading_age_seconds": latest_reading_age,
+            }
+
+        raw_sequence = np.asarray(
+            [row for _, row in contiguous_records],
+            dtype=np.float32,
+        )
         normalized_sequence = (raw_sequence - b_mean) / b_std
+        if not np.isfinite(normalized_sequence).all():
+            raise ValueError("Normalized forecast input contains non-finite values.")
 
-        # Smart Cold-Start Fallback: Pad missing history with baseline zeros (0.0 = calm state)
-        if current_length < 19:
-            needed_padding = 19 - current_length
-            # Create a block of normal baseline zeros for the missing minutes across all 10 features
-            padding_block = np.zeros((needed_padding, 10), dtype=np.float32)
-            # Stack the calm padding at the front (past) and our live data at the back (present)
-            normalized_sequence = np.vstack([padding_block, normalized_sequence])
-
-        active_ae_model = _active_ae_model_for_user(user_id)
-
-        embeddings_list = []
-        observed_errors = []
+        distinct_blocks = normalized_sequence.reshape(2, 5, FEATURE_COUNT)
+        block_tensor = torch.tensor(distinct_blocks, dtype=torch.float32)
 
         with torch.no_grad():
-            for i in range(15):
-                window        = normalized_sequence[i : i + 5]
-                window_tensor = torch.tensor(
-                    window,
-                    dtype=torch.float32,
-                ).unsqueeze(0)
-                # We use active_ae_model here, which automatically points to the right weights
-                emb           = active_ae_model.encode(window_tensor)
-                embeddings_list.append(emb)
-                reconstruction = active_ae_model(window_tensor)
-                observed_errors.append(
-                    torch.mean((window_tensor - reconstruction) ** 2).item()
-                )
+            reconstructions = forecast_ae_model(block_tensor)
+            raw_errors = torch.mean(
+                (block_tensor - reconstructions) ** 2,
+                dim=(1, 2),
+            ).cpu().numpy()
+            score_history = np.asarray(
+                [_c1_score_from_raw_error(value) for value in raw_errors],
+                dtype=np.float32,
+            )
+            predictions = direct_forecaster(
+                torch.tensor(score_history, dtype=torch.float32).unsqueeze(0)
+            )
 
-            lookback_tensor = torch.cat(embeddings_list, dim=0).unsqueeze(0)
-            predictions     = forecaster.predict(lookback_tensor)
-
-        raw_forecast = predictions.squeeze(0).cpu().numpy().astype(np.float64)
-
-        # Anchor the trained forecast shape to the user's most recent observed
-        # anomaly error. Without this correction, a model bias learned from the
-        # training cohort can keep every line artificially low even when the
-        # latest personalized reconstruction error is extreme.
-        latest_error = float(observed_errors[-1])
-        offset = latest_error - float(raw_forecast[0])
-        decay = np.linspace(0.90, 0.20, len(raw_forecast))
-        recent_slope = 0.0
-        if len(observed_errors) >= 6:
-            recent_slope = (
-                float(np.mean(observed_errors[-3:]))
-                - float(np.mean(observed_errors[-6:-3]))
-            ) / 3.0
-        adjusted_error_forecast = np.maximum(
-            raw_forecast
-            + offset * decay
-            + recent_slope * np.arange(1, len(raw_forecast) + 1),
-            0.0,
-        )
-        risk_forecast = [
-            _risk_from_reconstruction_error(value, reconstruction_threshold)
-            for value in adjusted_error_forecast
-        ]
+        future_scores = predictions.squeeze(0).cpu().numpy().astype(np.float64)
+        future_scores = np.clip(future_scores, 0.0, 1.0)
+        current_score = float(score_history[-1])
+        captured_at = datetime.now(timezone.utc).isoformat()
 
         return {
             "status": "success",
-            "message": "Personalized physiological forecast ready.",
-            "forecast": raw_forecast.tolist(),
-            "adjusted_error_forecast": adjusted_error_forecast.tolist(),
-            "risk_forecast": risk_forecast,
-            "current_reconstruction_error": latest_error,
-            "current_risk_index": _risk_from_reconstruction_error(
-                latest_error,
-                reconstruction_threshold,
-            ),
-            "reconstruction_error_threshold": reconstruction_threshold,
+            "message": "Physiological C1 forecast ready.",
+            "score": current_score,
+            "forecast": future_scores.tolist(),
+            "forecast_horizons_minutes": [5, 10],
+            "forecast_by_horizon": {
+                "plus_5_minutes": float(future_scores[0]),
+                "plus_10_minutes": float(future_scores[1]),
+            },
+            "risk_forecast": (future_scores * 100.0).tolist(),
+            "current_c1_score": current_score,
+            "current_risk_index": current_score * 100.0,
+            "current_reconstruction_error": float(raw_errors[-1]),
+            "c1_score_history": score_history.astype(float).tolist(),
+            "confidence": None,
+            "confidence_status": "not_calibrated",
+            "coverage": 1.0,
+            "captured_at": captured_at,
+            "model_version": FORECAST_AE_MODEL_VERSION,
+            "forecast_model_version": FORECAST_MODEL_VERSION,
             "latest_reading_at": latest_reading_at.isoformat(),
             "latest_reading_age_seconds": latest_reading_age,
         }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Inference failure: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Inference failure: {str(error)}",
+        )
 
 
 @app.get("/history/{user_id}")
@@ -997,3 +1034,4 @@ def get_weekly_feedback_summary(user_id: str):
             status_code=500,
             detail=f"Weekly feedback query failed: {str(e)}",
         )
+
