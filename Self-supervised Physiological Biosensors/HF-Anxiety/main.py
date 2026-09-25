@@ -375,7 +375,14 @@ def _active_ae_model_for_user(user_id: str) -> LSTMAutoEncoder:
 
 @app.get("/")
 def home():
-    return {"status": "running", "message": "Physiological Escalation API is fully operational"}
+    return {
+        "status": "running",
+        "service": "c1_physiological",
+        "scope": "physiological",
+        "model_version": FORECAST_AE_MODEL_VERSION,
+        "forecast_model_version": FORECAST_MODEL_VERSION,
+        "message": "Physiological Escalation API is fully operational",
+    }
 
 
 @app.post("/set_norm_params/{user_id}")
@@ -576,6 +583,9 @@ def get_escalation_forecast(user_id: str):
         if not norm_records:
             return {
                 "status": "not_calibrated",
+                "scope": "physiological",
+                "model_version": FORECAST_AE_MODEL_VERSION,
+                "forecast_model_version": FORECAST_MODEL_VERSION,
                 "message": (
                     f"No normalization params found for user {user_id}. "
                     f"POST b_mean and b_std to /set_norm_params/{user_id} "
@@ -583,6 +593,7 @@ def get_escalation_forecast(user_id: str):
                 ),
                 "forecast": [],
                 "risk_forecast": [],
+                "forecast_horizons_minutes": [5, 10],
                 "coverage": 0.0,
             }
 
@@ -639,9 +650,13 @@ def get_escalation_forecast(user_id: str):
         if not valid_records:
             return {
                 "status": "buffering",
+                "scope": "physiological",
+                "model_version": FORECAST_AE_MODEL_VERSION,
+                "forecast_model_version": FORECAST_MODEL_VERSION,
                 "message": "Waiting for the first valid one-minute chest-strap block.",
                 "forecast": [],
                 "risk_forecast": [],
+                "forecast_horizons_minutes": [5, 10],
                 "coverage": 0.0,
             }
 
@@ -654,9 +669,13 @@ def get_escalation_forecast(user_id: str):
         ):
             return {
                 "status": "stale",
+                "scope": "physiological",
+                "model_version": FORECAST_AE_MODEL_VERSION,
+                "forecast_model_version": FORECAST_MODEL_VERSION,
                 "message": "Waiting for a fresh one-minute chest-strap data block.",
                 "forecast": [],
                 "risk_forecast": [],
+                "forecast_horizons_minutes": [5, 10],
                 "coverage": 0.0,
                 "latest_reading_at": latest_reading_at.isoformat(),
                 "latest_reading_age_seconds": latest_reading_age,
@@ -677,12 +696,16 @@ def get_escalation_forecast(user_id: str):
         if len(contiguous_records) < 10:
             return {
                 "status": "buffering",
+                "scope": "physiological",
+                "model_version": FORECAST_AE_MODEL_VERSION,
+                "forecast_model_version": FORECAST_MODEL_VERSION,
                 "message": (
                     "Ten consecutive valid one-minute readings are required. "
                     f"Currently available after the latest gap: {len(contiguous_records)}/10."
                 ),
                 "forecast": [],
                 "risk_forecast": [],
+                "forecast_horizons_minutes": [5, 10],
                 "coverage": coverage,
                 "latest_reading_at": latest_reading_at.isoformat(),
                 "latest_reading_age_seconds": latest_reading_age,
@@ -716,11 +739,13 @@ def get_escalation_forecast(user_id: str):
         future_scores = predictions.squeeze(0).cpu().numpy().astype(np.float64)
         future_scores = np.clip(future_scores, 0.0, 1.0)
         current_score = float(score_history[-1])
-        captured_at = datetime.now(timezone.utc).isoformat()
+        captured_at = latest_reading_at.isoformat()
 
         return {
             "status": "success",
             "message": "Physiological C1 forecast ready.",
+            "scope": "physiological",
+            "horizon_minutes": 10,
             "score": current_score,
             "forecast": future_scores.tolist(),
             "forecast_horizons_minutes": [5, 10],
