@@ -18,6 +18,10 @@ class FusionRisk {
   /// Backend composite, on its native 0..1 scale.
   final double? composite;
 
+  /// Exact server-side fusion assessment identifier. This is kept opaque and
+  /// is surfaced unchanged so other apps can reference the same assessment.
+  final dynamic fusionResultId;
+
   /// GREEN / AMBER / RED / GREY. GREY means the fusion gate refused to
   /// produce a score (for example only one modality was available), and it
   /// must never be rendered as if it were a low score.
@@ -33,6 +37,7 @@ class FusionRisk {
     required this.band,
     this.message,
     this.updatedAt,
+    this.fusionResultId,
   });
 
   /// True only when the backend actually produced a usable score.
@@ -56,8 +61,17 @@ class FusionRisk {
       band: json['band']?.toString() ?? 'GREY',
       message: json['message']?.toString(),
       updatedAt: parsedUpdatedAt,
+      fusionResultId: json['fusion_result_id'],
     );
   }
+}
+
+/// Returns the only score that is allowed to represent the app-wide
+/// overall risk. A missing composite or GREY fusion result is unavailable,
+/// never a client-side estimate.
+double? officialOverallRisk(FusionRisk? risk) {
+  if (risk == null || !risk.hasScore) return null;
+  return risk.scoreOutOf100;
 }
 
 /// Reads the composite risk produced by the fusion engine.
@@ -104,6 +118,7 @@ class FusionRiskService {
           .timeout(_timeout);
 
       if (response.statusCode != 200) {
+        latest.value = null;
         debugPrint(
           'FusionRiskService: backend returned ${response.statusCode}.',
         );
@@ -111,12 +126,16 @@ class FusionRiskService {
       }
 
       final decoded = jsonDecode(response.body);
-      if (decoded is! Map<String, dynamic>) return null;
+      if (decoded is! Map<String, dynamic>) {
+        latest.value = null;
+        return null;
+      }
 
       final risk = FusionRisk.fromJson(decoded);
       latest.value = risk;
       return risk;
     } catch (error) {
+      latest.value = null;
       debugPrint('FusionRiskService: fetch failed: $error');
       return null;
     }

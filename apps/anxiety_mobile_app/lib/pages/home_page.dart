@@ -8,7 +8,7 @@ import '../services/api_service.dart';
 import '../services/anxiety_feedback_service.dart';
 import '../services/anxiety_level_update_throttle.dart';
 
-/// Home Page — the first tab the user sees.
+/// Home Page: the first tab the user sees.
 ///
 /// Displays:
 ///   • Aura branding & subtitle
@@ -86,7 +86,6 @@ class HomePageState extends State<HomePage> with TickerProviderStateMixin {
     // chest strap connects or disconnects.
     _chestStrap.connectionState.addListener(_onConnectionChanged);
     _chestStrap.liveReadingAvailable.addListener(_onLiveAvailabilityChanged);
-    AnxietyFeedbackService().combinedRisk.addListener(_onCombinedRiskChanged);
     _loadWeeklySummary();
   }
 
@@ -102,13 +101,6 @@ class HomePageState extends State<HomePage> with TickerProviderStateMixin {
   void _onLiveAvailabilityChanged() {
     if (mounted && !_chestStrap.hasLiveWornReading) {
       setState(() => _lastReading = null);
-      _observeOverallLevel();
-    }
-  }
-
-  void _onCombinedRiskChanged() {
-    if (mounted) {
-      setState(() {});
       _observeOverallLevel();
     }
   }
@@ -155,9 +147,6 @@ class HomePageState extends State<HomePage> with TickerProviderStateMixin {
   void dispose() {
     _chestStrap.connectionState.removeListener(_onConnectionChanged);
     _chestStrap.liveReadingAvailable.removeListener(_onLiveAvailabilityChanged);
-    AnxietyFeedbackService().combinedRisk.removeListener(
-      _onCombinedRiskChanged,
-    );
     _readingSubscription?.cancel();
     _notificationThrottleTimer?.cancel();
     _fadeController.dispose();
@@ -173,17 +162,10 @@ void _onFusionRiskChanged() {
   bool get _hasLiveReading =>
       _chestStrap.hasLiveWornReading && (_lastReading?.isWorn ?? false);
 
-  /// Uses the combined score when it is fresh. If only the chest strap is
-  /// available, that reading becomes the current overall score.
-  double? get _overallRisk {
-    final backendRisk = FusionRiskService.instance.latest.value;
-    if (backendRisk != null && backendRisk.hasScore) {
-      return backendRisk.scoreOutOf100;
-    }
-    final combinedRisk = AnxietyFeedbackService().latestFusionRisk;
-    if (combinedRisk != null) return combinedRisk;
-    return _hasLiveReading ? _lastReading!.riskScore : null;
-}
+  /// The app-wide overall risk is server-authoritative. It must come
+  /// exclusively from the latest fusion assessment.
+  double? get _overallRisk =>
+      officialOverallRisk(FusionRiskService.instance.latest.value);
 
   bool get _hasOverallRisk => _overallRisk != null;
 

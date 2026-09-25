@@ -23,7 +23,7 @@ import '../services/notification_helper.dart';
 import 'baseline_calibration_page.dart';
 import '../services/fusion_risk_service.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Dashboard Page — Physiological Monitoring
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -480,7 +480,7 @@ class _DashboardPageState extends State<DashboardPage>
     final status = result['status'] as String?;
     final message = result['message'] as String? ?? "";
 
-    if (status == 'success') {
+    if (status == 'success' && result['scope'] == 'physiological') {
       final List? riskForecast = result['risk_forecast'] as List?;
       final List? forecastHorizons =
           result['forecast_horizons_minutes'] as List?;
@@ -522,11 +522,17 @@ class _DashboardPageState extends State<DashboardPage>
         });
         return;
       }
-      final currentRisk =
-          (result['current_risk_index'] as num?)?.toDouble() ??
-          (ChestStrapService().hasLiveWornReading
-              ? ChestStrapService().lastReading?.riskScore
-              : null);
+      final currentRisk = (result['current_risk_index'] as num?)?.toDouble();
+      if (currentRisk == null || !currentRisk.isFinite) {
+        setState(() {
+          _predictionStatus = 'error';
+          _forecastData = [];
+          _currentModelRisk = null;
+          _forecastCoverage = 0.0;
+          _statusMessage = 'The current physiological risk is not available right now.';
+        });
+        return;
+      }
       final now = DateTime.now();
       if (currentRisk != null) {
         _recentAnxietyReadings.add(
@@ -1019,7 +1025,7 @@ class _DashboardPageState extends State<DashboardPage>
           ),
           const SizedBox(height: 20),
           Text(
-            'Preparing your forecast...',
+            'Preparing your physiological forecast...',
             style: GoogleFonts.poppins(
               fontSize: 14,
               fontWeight: FontWeight.w500,
@@ -1325,7 +1331,7 @@ class _DashboardPageState extends State<DashboardPage>
                   const SizedBox(height: 10),
                   _buildPipelineStepRow(
                     false,
-                    'Preparing the +5 and +10 minute forecast',
+                    'Preparing the near-term physiological forecast',
                     trailing: progress >= 1.0 ? 'Connecting...' : 'Pending',
                   ),
                 ],
@@ -1409,7 +1415,7 @@ class _DashboardPageState extends State<DashboardPage>
                 ),
                 const SizedBox(width: 12),
                 Text(
-                  'Your Next 10 Minutes',
+                  'Near-Term Physiological Forecast',
                   style: GoogleFonts.poppins(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -1433,7 +1439,7 @@ class _DashboardPageState extends State<DashboardPage>
               ),
             ),
             Text(
-              'Your outlook will appear after 10 consecutive valid one-minute readings',
+              'The physiological outlook will appear after 10 consecutive valid one-minute readings',
               style: GoogleFonts.poppins(
                 fontSize: 11,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1481,7 +1487,7 @@ class _DashboardPageState extends State<DashboardPage>
         : Icons.check_circle_outline_rounded;
     final trendTitle = forecastSummary.title;
     final trendDetail = forecastSummary.isUrgent
-        ? 'This is a model estimate, not a diagnosis. Take a slow breath and notice how you feel.'
+        ? 'Potential escalation predicted within the near-term forecast horizon. This is a model estimate, not a diagnosis.'
         : 'This model estimate updates as new body readings arrive.';
     final lineColor = _riskColor(max(currentRisk, predictedPeak));
 
@@ -1541,7 +1547,7 @@ class _DashboardPageState extends State<DashboardPage>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Your Next 10 Minutes',
+                      'Near-Term Physiological Forecast',
                       style: GoogleFonts.poppins(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -1549,7 +1555,7 @@ class _DashboardPageState extends State<DashboardPage>
                       ),
                     ),
                     Text(
-                      'A model estimate from recent body readings',
+                      'A physiological model estimate for the +5 and +10 minute horizons',
                       style: GoogleFonts.poppins(
                         fontSize: 11,
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
