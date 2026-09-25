@@ -120,15 +120,11 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
   // ═══════════════════════════════════════════════════════════════
 
   void _startCalibration() {
-    // Baseline calibration must always use the calm simulator profile.
-    if (ChestStrapService().simulationEnabled.value) {
-      ChestStrapService().setSimulationStress(false);
-    }
     final lastReading = ChestStrapService().lastReading;
     if (!ChestStrapService().isConnected) {
       setState(() {
         _errorMessage =
-            'No chest strap readings are available. Connect the chest strap or turn on test mode.';
+            'No chest strap readings are available. Connect the chest strap.';
         _phase = _Phase.error;
       });
       return;
@@ -539,7 +535,7 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
 
           const SizedBox(height: 32),
 
-          _buildSimulationControls(),
+          _buildChestStrapControls(),
 
           const SizedBox(height: 20),
 
@@ -590,110 +586,48 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
     );
   }
 
-  Widget _buildSimulationControls() {
+  Widget _buildChestStrapControls() {
     final chestStrap = ChestStrapService();
-    return ValueListenableBuilder<bool>(
-      valueListenable: chestStrap.simulationEnabled,
-      builder: (context, enabled, _) {
-        return Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-          ),
-          child: Column(
-            children: [
-              ValueListenableBuilder<ChestStrapState>(
-                valueListenable: chestStrap.connectionState,
-                builder: (context, state, _) {
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      chestStrap.isConnected
-                          ? Icons.bluetooth_connected_rounded
-                          : Icons.bluetooth_searching_rounded,
-                      color: Colors.white,
-                    ),
-                    title: Text(
-                      chestStrap.isConnected
-                          ? 'Chest strap readings connected'
-                          : 'Connect real chest strap',
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    trailing: chestStrap.isConnected
-                        ? null
-                        : TextButton(
-                            onPressed: chestStrap.startScan,
-                            child: const Text(
-                              'Find strap',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ),
-                  );
-                },
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+      ),
+      child: ValueListenableBuilder<ChestStrapState>(
+        valueListenable: chestStrap.connectionState,
+        builder: (context, state, _) {
+          return ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(
+              chestStrap.isConnected
+                  ? Icons.bluetooth_connected_rounded
+                  : Icons.bluetooth_searching_rounded,
+              color: Colors.white,
+            ),
+            title: Text(
+              chestStrap.isConnected
+                  ? 'Chest strap readings connected'
+                  : 'Connect real chest strap',
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
               ),
-              Divider(color: Colors.white.withValues(alpha: 0.2)),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  'Test mode',
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
+            ),
+            trailing: chestStrap.isConnected
+                ? null
+                : TextButton(
+                    onPressed: chestStrap.startScan,
+                    child: const Text(
+                      'Find strap',
+                      style: TextStyle(color: Colors.white),
+                    ),
                   ),
-                ),
-                subtitle: Text(
-                  'Creates realistic test readings without a chest strap.',
-                  style: GoogleFonts.poppins(
-                    color: Colors.white.withValues(alpha: 0.75),
-                    fontSize: 11,
-                  ),
-                ),
-                value: enabled,
-                onChanged: (value) async {
-                  if (value) {
-                    await chestStrap.startSimulation(isWorn: true);
-                  } else {
-                    await chestStrap.stopSimulation();
-                  }
-                },
-              ),
-              if (enabled)
-                ValueListenableBuilder<bool>(
-                  valueListenable: chestStrap.simulatedIsWorn,
-                  builder: (context, isWorn, _) {
-                    return SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        'Simulate strap being worn',
-                        style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontSize: 13,
-                        ),
-                      ),
-                      subtitle: Text(
-                        isWorn
-                            ? 'Creating calm test readings'
-                            : 'The test strap is not being worn',
-                        style: GoogleFonts.poppins(
-                          color: Colors.white.withValues(alpha: 0.7),
-                          fontSize: 10.5,
-                        ),
-                      ),
-                      value: isWorn,
-                      onChanged: chestStrap.setSimulationWorn,
-                    );
-                  },
-                ),
-            ],
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 

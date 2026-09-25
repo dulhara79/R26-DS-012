@@ -856,9 +856,6 @@ class _DashboardPageState extends State<DashboardPage>
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 30),
       children: [
-        _buildSimulationPanel(),
-        const SizedBox(height: 14),
-
         // ── Connection Offline Warning Banner ──
         if (_predictionStatus == 'error') _buildOfflineBanner(),
 
@@ -915,7 +912,7 @@ class _DashboardPageState extends State<DashboardPage>
               child: _KpiCard(
                 label: 'Temperature',
                 value: isWorn
-                    ? _currentReading!.meanTemp.toStringAsFixed(1)
+                    ? (_currentReading!.meanTemp - 3).toStringAsFixed(1)
                     : '--',
                 unit: '°C',
                 icon: Icons.thermostat_rounded,
@@ -1125,157 +1122,6 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
-  Widget _buildSimulationPanel() {
-    final chestStrap = ChestStrapService();
-    return ValueListenableBuilder<bool>(
-      valueListenable: chestStrap.simulationEnabled,
-      builder: (context, enabled, _) {
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: enabled
-                ? Theme.of(context).colorScheme.primaryContainer
-                : Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: enabled
-                  ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.5)
-                  : Theme.of(context).colorScheme.outlineVariant,
-            ),
-          ),
-          child: Column(
-            children: [
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  'Test mode',
-                  style: GoogleFonts.poppins(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                ),
-                subtitle: Text(
-                  enabled
-                      ? 'The phone is creating test readings.'
-                      : 'Enable only while testing without the chest strap.',
-                  style: GoogleFonts.poppins(
-                    fontSize: 10.5,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                value: enabled,
-                onChanged: (value) async {
-                  if (value) {
-                    await chestStrap.startSimulation(isWorn: true);
-                  } else {
-                    await chestStrap.stopSimulation();
-                  }
-                },
-              ),
-              if (enabled)
-                ValueListenableBuilder<bool>(
-                  valueListenable: chestStrap.simulatedIsWorn,
-                  builder: (context, isWorn, _) {
-                    return Column(
-                      children: [
-                        SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            'Strap is worn',
-                            style: GoogleFonts.poppins(
-                              fontSize: 12.5,
-                              color: Theme.of(context).colorScheme.onSurface,
-                            ),
-                          ),
-                          subtitle: Text(
-                            isWorn
-                                ? 'Test readings are active'
-                                : 'The test strap is not being worn',
-                            style: GoogleFonts.poppins(
-                              fontSize: 10.5,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          value: isWorn,
-                          onChanged: chestStrap.setSimulationWorn,
-                        ),
-                        if (isWorn)
-                          Column(
-                            children: [
-                              ValueListenableBuilder<bool>(
-                                valueListenable:
-                                    chestStrap.simulatedStressIncreasing,
-                                builder: (context, stressIncreasing, _) {
-                                  return SwitchListTile(
-                                    contentPadding: EdgeInsets.zero,
-                                    title: Text(
-                                      'Progressively increase stress',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 12.5,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurface,
-                                      ),
-                                    ),
-                                    subtitle: Text(
-                                      stressIncreasing
-                                          ? 'Stress rises from calm to very high over 5 minutes'
-                                          : 'Stress slowly returns to calm after this is turned off',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 10.5,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                    value: stressIncreasing,
-                                    onChanged: chestStrap.setSimulationStress,
-                                  );
-                                },
-                              ),
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton.icon(
-                                  onPressed: _sendTestAnxietyAlert,
-                                  icon: const Icon(
-                                    Icons.notifications_active_outlined,
-                                    size: 18,
-                                  ),
-                                  label: const Text('Check in manually'),
-                                ),
-                              ),
-                            ],
-                          ),
-                      ],
-                    );
-                  },
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _sendTestAnxietyAlert() async {
-    final shown = await AnxietyFeedbackService().showLocalTestAlert();
-    if (!mounted) return;
-    if (!shown) await _checkNotificationPermission();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          shown
-              ? 'Test alert sent. Check the notification popup.'
-              : 'Could not show the test alert. Wear the test strap and allow notifications.',
-        ),
-      ),
-    );
-  }
-
   Widget _buildDisconnectedScreen() {
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -1339,19 +1185,6 @@ class _DashboardPageState extends State<DashboardPage>
                   'Scan & Connect',
                   style: GoogleFonts.poppins(
                     fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () =>
-                    ChestStrapService().startSimulation(isWorn: true),
-                icon: const Icon(Icons.science_outlined, size: 20),
-                label: Text(
-                  'Use Test Mode',
-                  style: GoogleFonts.poppins(
-                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -2433,7 +2266,10 @@ class _DashboardPageState extends State<DashboardPage>
     }
 
     final spots = List<FlSpot>.generate(metricRows.length, (index) {
-      final value = (metricRows[index][_historyMetric] as num).toDouble();
+      final sensorValue = (metricRows[index][_historyMetric] as num).toDouble();
+      final value = _historyMetric == 'mean_temp'
+          ? sensorValue - 3
+          : sensorValue;
       return FlSpot(index.toDouble(), value);
     });
     final values = spots.map((spot) => spot.y).toList();
