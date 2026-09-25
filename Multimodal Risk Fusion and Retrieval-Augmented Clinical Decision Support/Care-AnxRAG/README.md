@@ -2,7 +2,7 @@
 
 **Contradiction-, Authority-, Reliability-, and Evidence-aware Retrieval-Augmented Generation for anxiety information research.**
 
-CARE-AnxRAG is a complete reference implementation for a continuously updated, versioned, evidence-gated anxiety RAG system. It separates semantic relevance from evidence quality, retains source provenance, detects conflicting evidence, abstains when evidence is weak or inconsistent, validates citations, and routes urgent/crisis messages away from ordinary RAG.
+CARE-AnxRAG is a complete reference implementation for a continuously updated, versioned, evidence-gated anxiety retrieval system with extractive answer presentation. It separates semantic relevance from evidence quality, retains source provenance, detects conflicting evidence, abstains when evidence is weak or inconsistent, validates citations, and routes urgent/crisis messages away from ordinary RAG.
 
 > **Research and engineering system, not a clinical device.** It does not diagnose, replace a clinician, prescribe treatment, or provide emergency care. Clinical deployment requires formal governance, localized safety resources, security review, expert evaluation, and applicable regulatory/legal review.
 
@@ -23,7 +23,7 @@ CARE-AnxRAG is a complete reference implementation for a continuously updated, v
 - Evidence-strength-aware contradiction handling using NLI.
 - Calibrated abstention for irrelevance, weak evidence, insufficient diversity, and unresolved conflict.
 - Clinical Core and Research Frontier knowledge layers.
-- Ollama structured generation with strict source-ID validation and one repair attempt.
+- Extractive evidence-only answer rendering: returned medical statements are selected verbatim from retrieved evidence and cited; free-form medical answer generation is disabled.
 - Prompt-injection boundaries around retrieved evidence.
 - Crisis/urgent-message routing before retrieval.
 - FastAPI service, minimal browser UI, CLI, review workflow, scheduler, health checks, reconciliation, and evaluation harness.
@@ -68,9 +68,11 @@ Official/public/licensed/local sources
        conflict suppression or
        calibrated abstention
                 v
-  Ollama grounded JSON generation
+  Verbatim evidence sentence selection
                 v
-       citation validation
+ deterministic structure + citations
+                v
+   claim/citation entailment check
 ```
 
 The SQLite ledger is the source of truth. Vector results are always joined back to active SQLite chunks, so a stale vector cannot make superseded evidence answerable. The vector outbox and `reconcile` command provide eventual consistency and physical cleanup.
@@ -90,7 +92,7 @@ CARE-AnxRAG/
 │   ├── sources/                    # NCBI, NICE, HTTP, and local connectors
 │   ├── ingestion.py                # Versioning, staging, promotion, vector lifecycle
 │   ├── retrieval.py                # Hybrid retrieval + CARE scoring + conflict logic
-│   ├── generation.py               # Ollama generation + citation validation
+│   ├── generation.py               # Extractive evidence-only answer rendering
 │   ├── safety.py                   # Pre-retrieval safety router
 │   ├── api.py                      # FastAPI and browser UI
 │   └── cli.py                      # Operations CLI
@@ -125,20 +127,18 @@ For Chroma and model-based reranking/NLI:
 pip install -e ".[production,dev]"
 ```
 
-## 3. Install and prepare Ollama
+## 3. Install and prepare retrieval embeddings
 
-Install Ollama using its official instructions, start it, then pull the configured models:
+Ollama is used for embeddings only in the default production retrieval stack. Install Ollama using its official instructions, start it, then pull the embedding model:
 
 ```bash
 ollama pull embeddinggemma
-ollama pull gemma3:4b
 ollama list
 ```
 
 The defaults use:
 
 - `embeddinggemma` for embeddings through `/api/embed` at 256 dimensions; supported configured dimensions are 128, 256, 512, 768, or `0` for the model's native output
-- `gemma3:4b` for grounded structured generation through `/api/chat`
 - `cross-encoder/ms-marco-MiniLM-L6-v2` for passage reranking
 - `cross-encoder/nli-deberta-v3-base` for contradiction classification
 
@@ -163,7 +163,7 @@ Local/offline validation settings:
 ```dotenv
 CARE_VECTOR_BACKEND=sqlite
 CARE_EMBEDDING_PROVIDER=hash
-CARE_GENERATOR_PROVIDER=rule
+CARE_GENERATOR_PROVIDER=extractive
 CARE_RERANKER_PROVIDER=heuristic
 CARE_NLI_PROVIDER=heuristic
 CARE_ALLOW_NETWORK_SYNC=false
@@ -174,7 +174,7 @@ Production-oriented settings:
 ```dotenv
 CARE_VECTOR_BACKEND=chroma
 CARE_EMBEDDING_PROVIDER=ollama
-CARE_GENERATOR_PROVIDER=ollama
+CARE_GENERATOR_PROVIDER=extractive
 CARE_RERANKER_PROVIDER=cross_encoder
 CARE_NLI_PROVIDER=cross_encoder
 CARE_ALLOW_NETWORK_SYNC=true
@@ -298,7 +298,7 @@ Endpoints:
 | Method | Endpoint | Purpose |
 |---|---|---|
 | `GET` | `/health` | Minimal service health; internal paths/details are not exposed |
-| `POST` | `/v1/ask` | Grounded answer |
+| `POST` | `/v1/ask` | Structured extractive evidence answer |
 | `POST` | `/v1/retrieve` | Raw retrieval; admin-protected |
 | `POST` | `/v1/sync` | Synchronize sources; admin-protected |
 | `GET` | `/v1/stats` | Corpus counts and integrity |

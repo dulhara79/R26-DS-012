@@ -251,6 +251,30 @@ class Database:
     def get_embedding_identity(self) -> str | None:
         return self.get_metadata("vector_embedding_model_id")
 
+    def list_active_version_fingerprints(self) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    version_id,
+                    document_id,
+                    source_id,
+                    external_id,
+                    content_hash,
+                    status,
+                    layer,
+                    evidence_level,
+                    published_at,
+                    updated_at,
+                    retrieved_at
+                FROM document_versions
+                WHERE status=?
+                ORDER BY source_id, external_id, version_id
+                """,
+                (DocumentStatus.ACTIVE.value,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def ensure_embedding_identity(self, model_id: str) -> None:
         stored = self.get_embedding_identity()
         if stored is None:

@@ -178,8 +178,10 @@ class ChunkRecord(StrictModel):
 class QueryAnalysis(StrictModel):
     original_query: str
     normalized_query: str
+    retrieval_query: str
     intent: QueryIntent
     anxiety_subtypes: list[str] = Field(default_factory=list)
+    treatments: list[str] = Field(default_factory=list)
     population: str | None = None
     wants_recent: bool = False
     preferred_layers: list[KnowledgeLayer] = Field(default_factory=list)

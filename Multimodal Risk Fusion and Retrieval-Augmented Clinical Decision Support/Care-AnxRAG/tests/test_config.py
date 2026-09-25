@@ -105,3 +105,36 @@ def test_embeddinggemma_rejects_unsupported_dimension(project: Path) -> None:
                 "CARE_EMBEDDING_DIMENSIONS": "384",
             },
         )
+
+
+
+def test_grounding_entailment_threshold_from_environment(project: Path) -> None:
+    settings = Settings.from_env(
+        project_root=project,
+        environ={
+            "CARE_VECTOR_BACKEND": "sqlite",
+            "CARE_EMBEDDING_PROVIDER": "hash",
+            "CARE_GENERATOR_PROVIDER": "rule",
+            "CARE_RERANKER_PROVIDER": "heuristic",
+            "CARE_NLI_PROVIDER": "heuristic",
+            "CARE_GROUNDING_ENTAILMENT_THRESHOLD": "0.71",
+        },
+    )
+
+    assert settings.grounding_entailment_threshold == 0.71
+
+
+
+def test_default_answer_provider_is_extractive(project: Path) -> None:
+    settings = Settings.from_env(project_root=project, environ={})
+    assert settings.generator_provider == "extractive"
+
+
+def test_free_form_ollama_answer_generation_is_rejected(project: Path) -> None:
+    with pytest.raises(ValueError, match="free-form medical answer generation is disabled"):
+        Settings.from_env(
+            project_root=project,
+            environ={
+                "CARE_GENERATOR_PROVIDER": "ollama",
+            },
+        )

@@ -15,6 +15,7 @@ from .config import Settings
 from .evaluation import evaluate as run_evaluation
 from .evaluation import load_benchmark
 from .logging_utils import configure_logging
+from .reproducibility import build_experiment_snapshot
 from .runtime import build_runtime
 from .scaffold import scaffold_project
 from .util import redact_sensitive_settings, utc_now
@@ -199,6 +200,56 @@ def evaluate(
     runtime = _runtime(project_root)
     report = run_evaluation(runtime.retriever, runtime.rag, load_benchmark(benchmark))
     typer.echo(_json(report.as_dict()))
+
+
+@app.command("snapshot-experiment")
+def snapshot_experiment(
+    output: Annotated[
+        Path,
+        typer.Argument(help="Destination JSON snapshot file"),
+    ],
+    code_revision: Annotated[
+        str,
+        typer.Option(
+            "--code-revision",
+            help="Exact Git commit/revision for this experiment",
+        ),
+    ],
+    benchmark: Annotated[
+        Path | None,
+        typer.Option(
+            "--benchmark",
+            help="Optional benchmark file to fingerprint",
+        ),
+    ] = None,
+    project_root: Annotated[
+        Path | None,
+        typer.Option(),
+    ] = None,
+) -> None:
+    runtime = _runtime(project_root)
+    snapshot = build_experiment_snapshot(
+        runtime,
+        code_revision=code_revision,
+        benchmark_path=benchmark,
+    )
+    output = output.resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(
+        _json(snapshot) + "\n",
+        encoding="utf-8",
+    )
+    typer.echo(
+        _json(
+            {
+                "snapshot": str(output),
+                "code_revision": code_revision,
+                "active_version_count": snapshot["corpus"][
+                    "active_version_count"
+                ],
+            }
+        )
+    )
 
 
 @app.command()

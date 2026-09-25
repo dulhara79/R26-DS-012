@@ -49,6 +49,7 @@ def _analysis(question: str) -> QueryAnalysis:
     return QueryAnalysis(
         original_query=question,
         normalized_query=question.lower(),
+        retrieval_query=question.lower(),
         intent=QueryIntent.GENERAL,
         preferred_layers=[KnowledgeLayer.CLINICAL_CORE],
         safety_level=SafetyLevel.NORMAL,
