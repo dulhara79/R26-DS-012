@@ -6,6 +6,7 @@ import ImageSlot from "../components/ui/ImageSlot";
 import SectionHead from "../components/ui/SectionHead";
 import { components } from "../data/components";
 import { supervisors, team } from "../data/team";
+import ContactSection from "../components/layout/ContactSection";
 import { site } from "../data/site";
 
 export default function Team() {
@@ -76,49 +77,21 @@ export default function Team() {
                 </span>
                 <h3 className="card-title">{person.name}</h3>
                 <p>{person.affiliation}</p>
+                <a
+                  className="contact-link"
+                  href={person.profile}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View profile <ArrowUpRight size={16} />
+                </a>
               </Reveal>
             ))}
           </div>
         </div>
       </section>
 
-      <section
-        className="section section--dark"
-        aria-labelledby="contact-title"
-      >
-        <div className="shell split">
-          <Reveal>
-            <p className="eyebrow">Contact</p>
-            <h2 className="display" id="contact-title">
-              Questions about the research?
-            </h2>
-            <p className="lead">
-              Open an issue or discussion on the project repository, or reach
-              the team through the {site.department}, {site.institutionShort}.
-            </p>
-          </Reveal>
-          <Reveal delay={0.1}>
-            <div className="button-row">
-              <a
-                className="button button--paper"
-                href={site.repository}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Research repository <ArrowUpRight size={18} />
-              </a>
-              <a
-                className="button button--ghost"
-                href={site.websiteRepository}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Website source <ArrowUpRight size={18} />
-              </a>
-            </div>
-          </Reveal>
-        </div>
-      </section>
+      <ContactSection />
     </>
   );
 }

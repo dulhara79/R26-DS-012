@@ -27,6 +27,7 @@ Every image on the site has a fixed slot. Save a file at the path shown (inside 
 | `/images/banners/findings.webp` | 2400 × 1030 | 21/9 | Findings page header background |
 | `/images/banners/documents.webp` | 2400 × 1030 | 21/9 | Documents page header background |
 | `/images/banners/team.webp` | 2400 × 1030 | 21/9 | Team page header background |
+| `/images/banners/contact.webp` | 2400 × 1030 | 21/9 | Contact page header background |
 | `/images/system/aura-app.webp` | 900 × 1600 | 9/16 | System page · Aura participant app |
 | `/images/system/clinanx-console.webp` | 1600 × 1200 | 4/3 | System page · ClinAnx clinician console |
 
@@ -75,6 +76,10 @@ Every image on the site has a fixed slot. Save a file at the path shown (inside 
 **`/images/banners/team.webp`** (bannerTeam)
 
 > Soft cinematic editorial illustration at dawn. Palette: deep teal #24524f, mist blue #a9c8d5, cream #fdf1e1, peach #e8b9a9, lavender #aaa7d6. Calm, hopeful, scientific. No text, no logos, no watermarks. Seven soft lanterns glowing along a path through misty hills at dawn (four student lights, three guiding lights slightly higher), wide composition.
+
+**`/images/banners/contact.webp`** (bannerContact)
+
+> Soft cinematic editorial illustration at dawn. Palette: deep teal #24524f, mist blue #a9c8d5, cream #fdf1e1, peach #e8b9a9, lavender #aaa7d6. Calm, hopeful, scientific. No text, no logos, no watermarks. An open wooden gate on a hillside path at dawn leading toward a quiet valley in soft mist, welcoming mood, wide composition, empty sky.
 
 **`/images/system/aura-app.webp`** (appAura)
 

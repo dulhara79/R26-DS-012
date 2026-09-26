@@ -12,6 +12,9 @@ export const site = {
   shortTitle: "Multimodal Anxiety Biomarkers",
   repository: "https://github.com/dulhara79/R26-DS-012",
   websiteRepository: "https://github.com/dulhara79/anxiety_research_website",
+  issues: "https://github.com/dulhara79/R26-DS-012/issues",
+  institutionUrl: "https://www.sliit.lk/",
+  campus: "SLIIT Malabe Campus, New Kandy Road, Malabe, Sri Lanka",
   boundary:
     "Research and clinical decision support prototype. Not a diagnostic device; outputs must not be read as a diagnosis of an anxiety disorder.",
 };
@@ -24,4 +27,5 @@ export const navigation = [
   { to: "/findings", label: "Findings" },
   { to: "/documents", label: "Documents" },
   { to: "/team", label: "Team" },
+  { to: "/contact", label: "Contact" },
 ];
