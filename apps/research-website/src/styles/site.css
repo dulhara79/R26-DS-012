@@ -980,3 +980,48 @@ h3.card-title,
     transition: none;
   }
 }
+
+/* Brand and nav actions */
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-text {
+  display: grid;
+  line-height: 1.1;
+}
+
+.logo-mark {
+  flex: none;
+  border-radius: 10px;
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  color: var(--ink);
+  transition: background 0.2s ease;
+}
+
+.nav-icon:hover {
+  background: rgba(19, 32, 31, 0.08);
+}
+
+@media (max-width: 1240px) {
+  .brand-text span {
+    display: none;
+  }
+}

@@ -5,7 +5,8 @@ import Reveal from "../components/ui/Reveal";
 import ImageSlot from "../components/ui/ImageSlot";
 import SectionHead from "../components/ui/SectionHead";
 import FusionStates from "../components/research/FusionStates";
-import { components } from "../data/components";
+import ArchitectureOverview from "../components/research/ArchitectureOverview";
+import ContactSection from "../components/layout/ContactSection";
 import {
   commitments,
   overview,
@@ -101,38 +102,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="section" aria-labelledby="components-title">
-        <div className="shell">
-          <SectionHead
-            id="components-title"
-            eyebrow="Four components · one framework"
-            title="Each signal studied on its own terms."
-            lead={overview.paradigms}
-          />
-          <div className="grid-4">
-            {components.map((component, index) => (
-              <Reveal key={component.id} delay={index * 0.08}>
-                <Link
-                  className="card link-card"
-                  to={`/components/${component.slug}`}
-                >
-                  <ImageSlot name={component.image} alt="" />
-                  <div className="link-card-body">
-                    <span className="card-kicker">
-                      {component.id} · {component.modality}
-                    </span>
-                    <h3 className="card-title">{component.title}</h3>
-                    <p>{component.tagline}</p>
-                    <span className="link-card-foot">
-                      {component.owner} <ArrowRight size={16} />
-                    </span>
-                  </div>
-                </Link>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
+      <ArchitectureOverview />
 
       <section
         className="section section--paper2"
@@ -207,23 +177,42 @@ export default function Home() {
             title="Four researchers, three supervisors."
           />
           <Reveal className="people-strip">
-            {[...team, ...supervisors].map((person) => (
-              <div className="person-chip" key={person.name}>
-                <ImageSlot
-                  name={person.photo}
-                  alt=""
-                  className="person-chip-photo"
-                />
-                <div>
-                  <strong>{person.name}</strong>
-                  <span>
-                    {person.component
-                      ? `${person.component} · ${person.role}`
-                      : person.role}
-                  </span>
+            {[...team, ...supervisors].map((person) => {
+              const content = (
+                <>
+                  <ImageSlot
+                    name={person.photo}
+                    alt=""
+                    className="person-chip-photo"
+                  />
+                  <div>
+                    <strong>{person.name}</strong>
+                    <span>
+                      {person.component
+                        ? `${person.component} · ${person.role}`
+                        : person.role}
+                    </span>
+                  </div>
+                </>
+              );
+              // Supervisors link out to their institutional profiles.
+              return person.profile ? (
+                <a
+                  className="person-chip person-chip--link"
+                  key={person.name}
+                  href={person.profile}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`${person.name}, ${person.role} (profile opens in a new tab)`}
+                >
+                  {content}
+                </a>
+              ) : (
+                <div className="person-chip" key={person.name}>
+                  {content}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </Reveal>
           <div className="button-row">
             <Link className="button button--ghost" to="/team">
@@ -232,6 +221,8 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <ContactSection />
 
       <section
         className="section section--paper2 closing"

@@ -93,6 +93,14 @@ export const images = {
     prompt:
       "Seven soft lanterns glowing along a path through misty hills at dawn (four student lights, three guiding lights slightly higher), wide composition.",
   },
+  bannerContact: {
+    path: "/images/banners/contact.webp",
+    ratio: "21 / 9",
+    size: "2400 × 1030",
+    usedOn: "Contact page header background",
+    prompt:
+      "An open wooden gate on a hillside path at dawn leading toward a quiet valley in soft mist, welcoming mood, wide composition, empty sky.",
+  },
   appAura: {
     path: "/images/system/aura-app.webp",
     ratio: "9 / 16",

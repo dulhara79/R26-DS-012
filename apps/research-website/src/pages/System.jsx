@@ -2,6 +2,7 @@ import PageHero from "../components/ui/PageHero";
 import Reveal from "../components/ui/Reveal";
 import ImageSlot from "../components/ui/ImageSlot";
 import SectionHead from "../components/ui/SectionHead";
+import ArchitectureOverview from "../components/research/ArchitectureOverview";
 import { architecture, aura, clinanx } from "../data/system";
 import { commitments } from "../data/research";
 
@@ -15,11 +16,13 @@ export default function System() {
         image="bannerSystem"
       />
 
-      <section className="section" aria-labelledby="arch-title">
+      <ArchitectureOverview id="system-architecture" detailed />
+
+      <section className="section section--paper2" aria-labelledby="arch-title">
         <div className="shell">
           <SectionHead
             id="arch-title"
-            eyebrow="Architecture"
+            eyebrow="Deployment layers"
             title="Every model call happens server-side."
             lead="The apps are presentation layers. They never compute a score, hold a weight table or call a component directly."
           />
@@ -43,7 +46,7 @@ export default function System() {
         </div>
       </section>
 
-      <section className="section section--paper2" aria-labelledby="aura-title">
+      <section className="section" aria-labelledby="aura-title">
         <div className="shell app-block">
           <Reveal className="app-media app-media--phone">
             <ImageSlot name="appAura" alt="Aura participant app" />
@@ -98,7 +101,7 @@ export default function System() {
         </div>
       </section>
 
-      <section className="section" aria-labelledby="clinanx-title">
+      <section className="section section--paper2" aria-labelledby="clinanx-title">
         <div className="shell app-block app-block--flip">
           <Reveal className="app-media">
             <ImageSlot name="appClinAnx" alt="ClinAnx clinician console" />

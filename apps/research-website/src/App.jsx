@@ -10,6 +10,7 @@ import System from "./pages/System";
 import Findings from "./pages/Findings";
 import Documents from "./pages/Documents";
 import Team from "./pages/Team";
+import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
 
 export default function App() {
@@ -46,6 +47,7 @@ export default function App() {
             element={<Navigate to="/documents" replace />}
           />
           <Route path="/team" element={<Team />} />
+          <Route path="/contact" element={<Contact />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
