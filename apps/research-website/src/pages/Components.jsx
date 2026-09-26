@@ -1,3 +1,73 @@
-import { components } from '../data/research'
-function Figure({id}){return <div className="mini-figure" aria-hidden="true"><span>{id}</span><div className="figure-axis"/><div className="figure-mark m1"/><div className="figure-mark m2"/><div className="figure-mark m3"/></div>}
-export default function Components(){return <main className="internal shell"><header className="page-intro"><p className="eyebrow">02 / SYSTEM</p><h1>Research system</h1><p>Each component is presented as a research question, method and evidence status—not as a product feature.</p></header>{components.map(c=><section className="component-section" key={c.id}><div className="component-id large">{c.id}</div><div className="component-copy"><p className="eyebrow">{c.owner}</p><h2>{c.title}</h2><h3>{c.question}</h3><dl><div><dt>Method</dt><dd>{c.method}</dd></div><div><dt>Data</dt><dd>{c.data}</dd></div><div><dt>Evidence / status</dt><dd>{c.evidence}</dd></div>{c.limitation&&<div><dt>Limitation</dt><dd>{c.limitation}</dd></div>}</dl><p className="status-line">{c.status}</p></div><Figure id={c.id}/></section>)}</main>}
+import { Link } from "react-router-dom";
+import { ArrowRight } from "lucide-react";
+import PageHero from "../components/ui/PageHero";
+import Reveal from "../components/ui/Reveal";
+import ImageSlot from "../components/ui/ImageSlot";
+import SectionHead from "../components/ui/SectionHead";
+import FusionStates from "../components/research/FusionStates";
+import { components } from "../data/components";
+
+export default function Components() {
+  return (
+    <>
+      <PageHero
+        eyebrow="Research components"
+        title="Four studies. One framework."
+        lead="Physiology, behaviour, clinical language and context, each studied with the learning paradigm and evaluation protocol that suits the signal."
+        image="bannerComponents"
+      />
+
+      <section className="section" aria-label="Components">
+        <div className="shell component-rows">
+          {components.map((component, index) => (
+            <Reveal
+              className={`component-row ${index % 2 ? "component-row--flip" : ""}`}
+              key={component.id}
+            >
+              <ImageSlot name={component.image} alt="" />
+              <div>
+                <p className="eyebrow">
+                  {component.id} · {component.modality} · {component.timescale}
+                </p>
+                <h2
+                  className="display"
+                  style={{ fontSize: "clamp(2rem,3.6vw,3.2rem)" }}
+                >
+                  {component.title}
+                </h2>
+                <p className="lead">{component.tagline}</p>
+                <p className="muted" style={{ marginTop: 16 }}>
+                  {component.owner} · {component.studentId}
+                </p>
+                <p className="component-role">{component.fusionRole}</p>
+                <div className="button-row">
+                  <Link
+                    className="button button--ink"
+                    to={`/components/${component.slug}`}
+                  >
+                    Open {component.id} <ArrowRight size={18} />
+                  </Link>
+                </div>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </section>
+
+      <section
+        className="section section--paper2"
+        aria-labelledby="integration-title"
+      >
+        <div className="shell">
+          <SectionHead
+            id="integration-title"
+            eyebrow="How they connect"
+            title="Component outputs meet in one fusion rule."
+            lead="Fusion consumes component-level outputs and status metadata, not raw modality streams."
+          />
+          <FusionStates />
+        </div>
+      </section>
+    </>
+  );
+}

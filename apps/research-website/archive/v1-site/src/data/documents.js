@@ -1,0 +1,38 @@
+export const documents = [
+  {
+    category: "Project",
+    type: "Repository",
+    title: "R26-DS-012 research repository",
+    year: "2026",
+    authors: "Research team",
+    status: "Public source of truth",
+    url: "https://github.com/dulhara79/R26-DS-012",
+  },
+  {
+    category: "Project",
+    type: "Architecture",
+    title: "Project framework diagram",
+    year: "2026",
+    authors: "Research team",
+    status: "Public repository artifact",
+    url: "https://github.com/dulhara79/R26-DS-012/blob/main/full.png",
+  },
+  {
+    category: "Individual Research",
+    type: "Technical source",
+    title: "Clinical NLP / TC-WPN research source",
+    year: "2026",
+    authors: "Kaushalya I.G.D.",
+    status: "Public repository material",
+    url: "https://github.com/dulhara79/R26-DS-012/tree/main/Anxiety_Detection_TC_WPN",
+  },
+  {
+    category: "Project",
+    type: "Website source",
+    title: "Research website repository",
+    year: "2026",
+    authors: "R26-DS-012 team",
+    status: "Public source",
+    url: "https://github.com/dulhara79/anxiety_research_website",
+  },
+];
