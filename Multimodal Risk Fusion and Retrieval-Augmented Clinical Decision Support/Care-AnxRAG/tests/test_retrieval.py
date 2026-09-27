@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-
 from conftest import write_document
-
+from care_anxrag.evidence import applicability_score
+from care_anxrag.models import KnowledgeLayer
+from care_anxrag.query import QueryAnalyzer
 
 GAD = """
 # Generalized anxiety disorder
@@ -64,3 +65,862 @@ def test_out_of_scope_query_abstains(runtime, project: Path) -> None:
     runtime.ingestion.sync(source_ids=["test_core"], force=True)
     result = runtime.rag.answer("How do I repair a diesel fuel injector?")
     assert result.abstained
+def test_applicability_strongly_penalizes_wrong_anxiety_subtype() -> None:
+    analyzer = QueryAnalyzer()
+
+    query = analyzer.analyze(
+        "What evidence supports CBT for generalized anxiety disorder?"
+    )
+
+    gad_score = applicability_score(
+        topics=[
+            "anxiety",
+            "generalized_anxiety_disorder",
+            "Cognitive Behavioral Therapy",
+        ],
+        query=query,
+        layer=KnowledgeLayer.RESEARCH_FRONTIER,
+    )
+
+    social_anxiety_score = applicability_score(
+        topics=[
+            "anxiety",
+            "social_anxiety_disorder",
+            "Cognitive Behavioral Therapy",
+        ],
+        query=query,
+        layer=KnowledgeLayer.RESEARCH_FRONTIER,
+    )
+
+    print("GAD applicability:", gad_score)
+    print("Wrong subtype applicability:", social_anxiety_score)
+
+    assert gad_score == 1.0
+    assert social_anxiety_score <= 0.50
+def test_query_analyzer_identifies_cbt_treatment() -> None:
+    analyzer = QueryAnalyzer()
+
+    analysis = analyzer.analyze(
+        "What evidence supports CBT for generalized anxiety disorder?"
+    )
+
+    data = analysis.model_dump()
+
+    assert data.get("treatments") == [
+        "cognitive_behavioral_therapy"
+    ]
+
+def test_query_analyzer_expands_clinical_terms_for_retrieval() -> None:
+    analyzer = QueryAnalyzer()
+
+    analysis = analyzer.analyze(
+        "What evidence supports CBT for GAD?"
+    )
+
+    assert analysis.original_query == (
+        "What evidence supports CBT for GAD?"
+    )
+
+    assert "cognitive behavioral therapy" in analysis.retrieval_query
+    assert "cognitive behavioural therapy" in analysis.retrieval_query
+    assert "generalized anxiety disorder" in analysis.retrieval_query
+
+def test_retriever_uses_expanded_query_for_dense_and_lexical_search(
+    runtime,
+    monkeypatch,
+) -> None:
+    captured: dict[str, str] = {}
+
+    def fake_embed(texts: list[str]) -> list[list[float]]:
+        captured["dense_query"] = texts[0]
+        return [[0.0]]
+
+    def fake_dense_search(query_embedding, preferred_layers):
+        return []
+
+    def fake_lexical_search(query: str):
+        captured["lexical_query"] = query
+        return []
+
+    monkeypatch.setattr(
+        runtime.retriever.embedder,
+        "embed",
+        fake_embed,
+    )
+    monkeypatch.setattr(
+        runtime.retriever,
+        "_dense_search",
+        fake_dense_search,
+    )
+    monkeypatch.setattr(
+        runtime.retriever,
+        "_lexical_search",
+        fake_lexical_search,
+    )
+
+    runtime.retriever.retrieve(
+        "What evidence supports CBT for GAD?"
+    )
+
+    assert "cognitive behavioral therapy" in captured["dense_query"]
+    assert "generalized anxiety disorder" in captured["dense_query"]
+
+    assert "cognitive behavioral therapy" in captured["lexical_query"]
+    assert "generalized anxiety disorder" in captured["lexical_query"]
+
+def test_explicit_wrong_subtype_is_penalized_in_final_scoring(runtime) -> None:
+    analyzer = QueryAnalyzer()
+
+    query = analyzer.analyze(
+        "What evidence supports CBT for generalized anxiety disorder?"
+    )
+
+    assert query.anxiety_subtypes == [
+        "generalized_anxiety_disorder"
+    ]
+
+    exact = applicability_score(
+        topics=[
+            "anxiety",
+            "generalized_anxiety_disorder",
+            "Cognitive Behavioral Therapy",
+        ],
+        query=query,
+        layer=KnowledgeLayer.RESEARCH_FRONTIER,
+    )
+
+    wrong = applicability_score(
+        topics=[
+            "anxiety",
+            "social_anxiety_disorder",
+            "Cognitive Behavioral Therapy",
+        ],
+        query=query,
+        layer=KnowledgeLayer.RESEARCH_FRONTIER,
+    )
+
+    exact_adjustment = runtime.retriever._clinical_compatibility_adjustment(
+        exact
+    )
+
+    wrong_adjustment = runtime.retriever._clinical_compatibility_adjustment(
+        wrong
+    )
+
+    assert exact_adjustment == 1.0
+    assert wrong_adjustment < 0.70
+
+def test_care_score_strongly_penalizes_explicit_wrong_subtype(runtime) -> None:
+    from types import SimpleNamespace
+
+    common = {
+        "dense_score": 0.55,
+        "lexical_score": 1.0,
+        "rrf_normalized": 1.0,
+        "rerank_score": 0.92,
+        "freshness_score": 0.80,
+    }
+
+    chunk = SimpleNamespace(
+        authority_score=0.80,
+        evidence_score=0.82,
+    )
+
+    exact_hit = SimpleNamespace(
+        **common,
+        applicability_score=1.0,
+        chunk=chunk,
+    )
+
+    wrong_hit = SimpleNamespace(
+        **common,
+        applicability_score=0.4375,
+        chunk=chunk,
+    )
+
+    exact_score = runtime.retriever._care_score(exact_hit)
+    wrong_score = runtime.retriever._care_score(wrong_hit)
+
+    print("Exact subtype CARE:", exact_score)
+    print("Wrong subtype CARE:", wrong_score)
+
+    assert wrong_score <= exact_score * 0.65
+
+def test_care_score_penalizes_explicit_wrong_treatment(runtime) -> None:
+    from types import SimpleNamespace
+
+    analyzer = QueryAnalyzer()
+
+    query = analyzer.analyze(
+        "What evidence supports CBT for generalized anxiety disorder?"
+    )
+
+    common = {
+        "dense_score": 0.55,
+        "lexical_score": 0.80,
+        "rrf_normalized": 0.90,
+        "rerank_score": 0.85,
+        "freshness_score": 0.80,
+        "applicability_score": 1.0,
+    }
+
+    cbt_hit = SimpleNamespace(
+        **common,
+        chunk=SimpleNamespace(
+            authority_score=0.80,
+            evidence_score=0.82,
+            title=(
+                "Randomized controlled trial of cognitive-behavioral "
+                "therapy for generalized anxiety disorder"
+            ),
+        ),
+    )
+
+    mct_hit = SimpleNamespace(
+        **common,
+        chunk=SimpleNamespace(
+            authority_score=0.80,
+            evidence_score=0.82,
+            title=(
+                "The effectiveness of metacognitive therapy "
+                "in patients with generalized anxiety disorder"
+            ),
+        ),
+    )
+
+    cbt_score = runtime.retriever._care_score(
+        cbt_hit,
+        query,
+    )
+
+    mct_score = runtime.retriever._care_score(
+        mct_hit,
+        query,
+    )
+
+    print("CBT CARE:", cbt_score)
+    print("MCT CARE:", mct_score)
+
+    assert mct_score <= cbt_score * 0.70
+
+
+
+def test_query_analyzer_identifies_multiple_supported_treatment_families() -> None:
+    analyzer = QueryAnalyzer()
+
+    analysis = analyzer.analyze(
+        "Compare CBT and metacognitive therapy for GAD"
+    )
+
+    assert set(analysis.treatments) == {
+        "cognitive_behavioral_therapy",
+        "metacognitive_therapy",
+    }
+    assert analysis.anxiety_subtypes == [
+        "generalized_anxiety_disorder"
+    ]
+
+
+def test_care_score_penalizes_explicit_population_mismatch(runtime) -> None:
+    from types import SimpleNamespace
+
+    analyzer = QueryAnalyzer()
+    query = analyzer.analyze(
+        "What evidence supports CBT for older adults with GAD?"
+    )
+
+    common = {
+        "dense_score": 0.70,
+        "lexical_score": 0.90,
+        "rrf_normalized": 0.90,
+        "rerank_score": 0.90,
+        "freshness_score": 0.80,
+        "applicability_score": 1.0,
+    }
+
+    matching = SimpleNamespace(
+        **common,
+        chunk=SimpleNamespace(
+            authority_score=0.90,
+            evidence_score=0.90,
+            title="CBT for GAD in older adults",
+            section_heading="Abstract",
+            text=(
+                "Adults aged 65 years and above with generalized anxiety "
+                "disorder received cognitive behavioural therapy."
+            ),
+        ),
+    )
+    mismatch = SimpleNamespace(
+        **common,
+        chunk=SimpleNamespace(
+            authority_score=0.90,
+            evidence_score=0.90,
+            title="CBT for GAD in adolescents",
+            section_heading="Abstract",
+            text=(
+                "Adolescents with generalized anxiety disorder received "
+                "cognitive behavioural therapy."
+            ),
+        ),
+    )
+
+    matching_score = runtime.retriever._care_score(
+        matching,
+        query,
+    )
+    mismatch_score = runtime.retriever._care_score(
+        mismatch,
+        query,
+    )
+
+    assert mismatch_score < matching_score
+
+
+def test_abstention_requires_joint_subtype_and_treatment_support(runtime) -> None:
+    from types import SimpleNamespace
+
+    analysis = QueryAnalyzer().analyze(
+        "What evidence supports CBT for generalized anxiety disorder?"
+    )
+
+    def hit(
+        source_id: str,
+        title: str,
+        text: str,
+        topics: list[str],
+    ):
+        return SimpleNamespace(
+            relevance_score=0.90,
+            care_score=0.90,
+            chunk=SimpleNamespace(
+                source_id=source_id,
+                topics=topics,
+                title=title,
+                section_heading="Abstract",
+                text=text,
+            ),
+        )
+
+    split_evidence = [
+        hit(
+            "source-gad-mct",
+            "Metacognitive therapy for GAD",
+            "Metacognitive therapy was evaluated in generalized anxiety disorder.",
+            ["anxiety", "generalized_anxiety_disorder"],
+        ),
+        hit(
+            "source-social-cbt",
+            "CBT for social anxiety",
+            "Cognitive behavioural therapy was evaluated in social anxiety disorder.",
+            ["anxiety", "social_anxiety_disorder"],
+        ),
+    ]
+
+    should_abstain, reason = runtime.retriever._abstention(
+        split_evidence,
+        confidence=0.90,
+        unresolved_conflict=0.0,
+        analysis=analysis,
+    )
+
+    assert should_abstain
+    assert reason == "insufficient_direct_evidence_for_requested_treatment"
+
+
+def test_abstention_accepts_direct_subtype_and_treatment_support(runtime) -> None:
+    from types import SimpleNamespace
+
+    analysis = QueryAnalyzer().analyze(
+        "What evidence supports CBT for generalized anxiety disorder?"
+    )
+    direct_hit = SimpleNamespace(
+        relevance_score=0.90,
+        care_score=0.90,
+        chunk=SimpleNamespace(
+            source_id="source-gad-cbt",
+            topics=["anxiety", "generalized_anxiety_disorder"],
+            title="CBT for GAD",
+            section_heading="Abstract",
+            text=(
+                "Cognitive behavioural therapy was evaluated in adults with "
+                "generalized anxiety disorder."
+            ),
+        ),
+    )
+
+    should_abstain, reason = runtime.retriever._abstention(
+        [direct_hit],
+        confidence=0.90,
+        unresolved_conflict=0.0,
+        analysis=analysis,
+    )
+
+    assert not should_abstain
+    assert reason is None
+
+
+
+def test_abstention_requires_support_for_each_requested_treatment(runtime) -> None:
+    from types import SimpleNamespace
+
+    analysis = QueryAnalyzer().analyze(
+        "Compare CBT and metacognitive therapy for GAD"
+    )
+
+    def hit(source_id: str, title: str, text: str):
+        return SimpleNamespace(
+            relevance_score=0.90,
+            care_score=0.90,
+            chunk=SimpleNamespace(
+                source_id=source_id,
+                topics=["anxiety", "generalized_anxiety_disorder"],
+                title=title,
+                section_heading="Abstract",
+                text=text,
+            ),
+        )
+
+    cbt_only = [
+        hit(
+            "source-gad-cbt",
+            "CBT for GAD",
+            "Cognitive behavioural therapy was evaluated in generalized anxiety disorder.",
+        )
+    ]
+
+    should_abstain, reason = runtime.retriever._abstention(
+        cbt_only,
+        confidence=0.90,
+        unresolved_conflict=0.0,
+        analysis=analysis,
+    )
+
+    assert should_abstain
+    assert reason == "insufficient_direct_evidence_for_requested_treatment"
+
+    both_treatments = cbt_only + [
+        hit(
+            "source-gad-mct",
+            "Metacognitive therapy for GAD",
+            "Metacognitive therapy was evaluated in generalized anxiety disorder.",
+        )
+    ]
+
+    should_abstain, reason = runtime.retriever._abstention(
+        both_treatments,
+        confidence=0.90,
+        unresolved_conflict=0.0,
+        analysis=analysis,
+    )
+
+    assert not should_abstain
+    assert reason is None
+
+
+
+def test_dense_only_mode_disables_lexical_rerank_care_and_nli(runtime, monkeypatch) -> None:
+    runtime.settings.retrieval_mode = "dense_only"
+    calls = {"lexical": 0, "rerank": 0, "nli": 0, "care": 0}
+
+    monkeypatch.setattr(
+        runtime.retriever,
+        "_lexical_search",
+        lambda query: calls.__setitem__("lexical", calls["lexical"] + 1) or [],
+    )
+    monkeypatch.setattr(
+        runtime.retriever.reranker,
+        "score",
+        lambda query, hits: calls.__setitem__("rerank", calls["rerank"] + 1) or [],
+    )
+    monkeypatch.setattr(
+        runtime.retriever.nli,
+        "classify",
+        lambda pairs: calls.__setitem__("nli", calls["nli"] + 1) or [],
+    )
+    monkeypatch.setattr(
+        runtime.retriever,
+        "_care_score",
+        lambda hit, analysis=None: calls.__setitem__("care", calls["care"] + 1) or 0.0,
+    )
+    monkeypatch.setattr(runtime.retriever.embedder, "embed", lambda texts: [[0.0]])
+    monkeypatch.setattr(runtime.retriever, "_dense_search", lambda embedding, layers: [])
+
+    runtime.retriever.retrieve("panic disorder treatment")
+
+    assert calls == {"lexical": 0, "rerank": 0, "nli": 0, "care": 0}
+
+
+def test_lexical_only_mode_does_not_embed_query(runtime, monkeypatch) -> None:
+    runtime.settings.retrieval_mode = "lexical_only"
+    calls = {"embed": 0, "dense": 0}
+
+    monkeypatch.setattr(
+        runtime.retriever.embedder,
+        "embed",
+        lambda texts: calls.__setitem__("embed", calls["embed"] + 1) or [[0.0]],
+    )
+    monkeypatch.setattr(
+        runtime.retriever,
+        "_dense_search",
+        lambda embedding, layers: calls.__setitem__("dense", calls["dense"] + 1) or [],
+    )
+    monkeypatch.setattr(runtime.retriever, "_lexical_search", lambda query: [])
+
+    runtime.retriever.retrieve("panic disorder treatment")
+
+    assert calls == {"embed": 0, "dense": 0}
+
+
+def test_hybrid_rrf_mode_disables_reranker_care_and_nli(runtime, monkeypatch) -> None:
+    runtime.settings.retrieval_mode = "hybrid_rrf"
+    calls = {"rerank": 0, "nli": 0, "care": 0}
+
+    monkeypatch.setattr(runtime.retriever.embedder, "embed", lambda texts: [[0.0]])
+    monkeypatch.setattr(runtime.retriever, "_dense_search", lambda embedding, layers: [])
+    monkeypatch.setattr(runtime.retriever, "_lexical_search", lambda query: [])
+    monkeypatch.setattr(
+        runtime.retriever.reranker,
+        "score",
+        lambda query, hits: calls.__setitem__("rerank", calls["rerank"] + 1) or [],
+    )
+    monkeypatch.setattr(
+        runtime.retriever.nli,
+        "classify",
+        lambda pairs: calls.__setitem__("nli", calls["nli"] + 1) or [],
+    )
+    monkeypatch.setattr(
+        runtime.retriever,
+        "_care_score",
+        lambda hit, analysis=None: calls.__setitem__("care", calls["care"] + 1) or 0.0,
+    )
+
+    runtime.retriever.retrieve("panic disorder treatment")
+
+    assert calls == {"rerank": 0, "nli": 0, "care": 0}
+
+
+def test_settings_reject_unknown_retrieval_mode(project) -> None:
+    from care_anxrag.config import Settings
+
+    import pytest
+
+    with pytest.raises(ValueError, match="CARE_RETRIEVAL_MODE"):
+        Settings.from_env(
+            project_root=project,
+            environ={
+                "CARE_RETRIEVAL_MODE": "magic",
+                "CARE_VECTOR_BACKEND": "sqlite",
+                "CARE_EMBEDDING_PROVIDER": "hash",
+                "CARE_GENERATOR_PROVIDER": "extractive",
+                "CARE_RERANKER_PROVIDER": "heuristic",
+                "CARE_NLI_PROVIDER": "heuristic",
+            },
+        )
+
+
+
+def test_retrieval_reports_stage_timings(runtime) -> None:
+    result = runtime.retriever.retrieve("panic disorder treatment")
+
+    expected = {
+        "analysis",
+        "embedding",
+        "dense_search",
+        "lexical_search",
+        "fusion",
+        "reranking",
+        "care_scoring",
+        "nli_conflict",
+        "selection",
+        "total",
+    }
+
+    assert expected <= set(result.timings_ms)
+    assert all(value >= 0.0 for value in result.timings_ms.values())
+
+
+def test_lexical_only_timing_marks_embedding_as_skipped(runtime, monkeypatch) -> None:
+    runtime.settings.retrieval_mode = "lexical_only"
+
+    def fail_embed(texts):
+        raise AssertionError("lexical-only mode must not embed the query")
+
+    monkeypatch.setattr(runtime.retriever.embedder, "embed", fail_embed)
+
+    result = runtime.retriever.retrieve("panic disorder treatment")
+
+    assert result.timings_ms["embedding"] == 0.0
+    assert result.timings_ms["dense_search"] == 0.0
+    assert result.timings_ms["lexical_search"] >= 0.0
+
+
+
+def test_query_analyzer_extracts_outcomes_and_comorbidities() -> None:
+    analysis = QueryAnalyzer().analyze(
+        "For adults with GAD and major depressive disorder, "
+        "what evidence supports CBT for remission and quality of life?"
+    )
+
+    assert analysis.comorbidities == [
+        "major_depressive_disorder"
+    ]
+    assert set(analysis.outcomes) == {
+        "remission",
+        "quality_of_life",
+    }
+
+
+def test_query_analyzer_extracts_adverse_effect_outcome_for_medication() -> None:
+    analysis = QueryAnalyzer().analyze(
+        "What are the side effects of SSRIs for panic disorder?"
+    )
+
+    assert analysis.intent.value == "medication"
+    assert analysis.treatments == ["ssri"]
+    assert analysis.outcomes == ["adverse_effects"]
+
+
+def test_query_analyzer_does_not_invent_outcome_or_comorbidity() -> None:
+    analysis = QueryAnalyzer().analyze(
+        "What evidence supports CBT for GAD?"
+    )
+
+    assert analysis.outcomes == []
+    assert analysis.comorbidities == []
+
+
+
+def test_care_score_penalizes_explicit_outcome_mismatch(runtime) -> None:
+    from types import SimpleNamespace
+
+    analysis = QueryAnalyzer().analyze(
+        "What evidence supports CBT for GAD remission?"
+    )
+
+    common = {
+        "dense_score": 0.75,
+        "lexical_score": 0.80,
+        "rrf_normalized": 0.90,
+        "rerank_score": 0.90,
+        "freshness_score": 0.85,
+        "applicability_score": 1.0,
+    }
+
+    def hit(outcomes):
+        return SimpleNamespace(
+            **common,
+            chunk=SimpleNamespace(
+                authority_score=0.90,
+                evidence_score=0.90,
+                title="CBT for generalized anxiety disorder",
+                section_heading="Results",
+                text="Cognitive behavioural therapy was evaluated in GAD.",
+                metadata={
+                    "clinical_facets": {
+                        "outcomes": outcomes,
+                        "comorbidities": [],
+                    }
+                },
+            ),
+        )
+
+    matching = runtime.retriever._care_score(
+        hit(["remission"]),
+        analysis,
+    )
+    mismatch = runtime.retriever._care_score(
+        hit(["quality_of_life"]),
+        analysis,
+    )
+    unknown = runtime.retriever._care_score(
+        hit([]),
+        analysis,
+    )
+
+    assert mismatch < unknown < matching
+
+
+def test_care_score_penalizes_explicit_comorbidity_mismatch(runtime) -> None:
+    from types import SimpleNamespace
+
+    analysis = QueryAnalyzer().analyze(
+        "What evidence supports CBT for GAD with major depressive disorder?"
+    )
+
+    common = {
+        "dense_score": 0.75,
+        "lexical_score": 0.80,
+        "rrf_normalized": 0.90,
+        "rerank_score": 0.90,
+        "freshness_score": 0.85,
+        "applicability_score": 1.0,
+    }
+
+    def hit(comorbidities):
+        return SimpleNamespace(
+            **common,
+            chunk=SimpleNamespace(
+                authority_score=0.90,
+                evidence_score=0.90,
+                title="CBT for generalized anxiety disorder",
+                section_heading="Results",
+                text="Cognitive behavioural therapy was evaluated in GAD.",
+                metadata={
+                    "clinical_facets": {
+                        "outcomes": [],
+                        "comorbidities": comorbidities,
+                    }
+                },
+            ),
+        )
+
+    matching = runtime.retriever._care_score(
+        hit(["major_depressive_disorder"]),
+        analysis,
+    )
+    mismatch = runtime.retriever._care_score(
+        hit(["insomnia"]),
+        analysis,
+    )
+    unknown = runtime.retriever._care_score(
+        hit([]),
+        analysis,
+    )
+
+    assert mismatch < unknown < matching
+
+
+
+def test_abstention_rejects_split_outcome_and_comorbidity_evidence(runtime) -> None:
+    from types import SimpleNamespace
+
+    analysis = QueryAnalyzer().analyze(
+        "What evidence supports CBT for GAD with major depressive disorder "
+        "for remission?"
+    )
+
+    def hit(source_id, outcomes, comorbidities):
+        return SimpleNamespace(
+            relevance_score=0.90,
+            care_score=0.90,
+            chunk=SimpleNamespace(
+                source_id=source_id,
+                topics=["anxiety", "generalized_anxiety_disorder"],
+                title="CBT for generalized anxiety disorder",
+                section_heading="Results",
+                text=(
+                    "Cognitive behavioural therapy was evaluated in "
+                    "generalized anxiety disorder."
+                ),
+                metadata={
+                    "clinical_facets": {
+                        "outcomes": outcomes,
+                        "comorbidities": comorbidities,
+                    }
+                },
+            ),
+        )
+
+    split_evidence = [
+        hit(
+            "remission-only",
+            ["remission"],
+            [],
+        ),
+        hit(
+            "depression-only",
+            ["quality_of_life"],
+            ["major_depressive_disorder"],
+        ),
+    ]
+
+    should_abstain, reason = runtime.retriever._abstention(
+        split_evidence,
+        confidence=0.90,
+        unresolved_conflict=0.0,
+        analysis=analysis,
+    )
+
+    assert should_abstain
+    assert reason == (
+        "insufficient_direct_evidence_for_requested_clinical_context"
+    )
+
+
+def test_abstention_accepts_joint_outcome_and_comorbidity_evidence(runtime) -> None:
+    from types import SimpleNamespace
+
+    analysis = QueryAnalyzer().analyze(
+        "What evidence supports CBT for GAD with major depressive disorder "
+        "for remission?"
+    )
+
+    direct_hit = SimpleNamespace(
+        relevance_score=0.90,
+        care_score=0.90,
+        chunk=SimpleNamespace(
+            source_id="joint-evidence",
+            topics=["anxiety", "generalized_anxiety_disorder"],
+            title="CBT for GAD with depression",
+            section_heading="Results",
+            text=(
+                "Cognitive behavioural therapy was evaluated in "
+                "generalized anxiety disorder."
+            ),
+            metadata={
+                "clinical_facets": {
+                    "outcomes": ["remission"],
+                    "comorbidities": ["major_depressive_disorder"],
+                }
+            },
+        ),
+    )
+
+    should_abstain, reason = runtime.retriever._abstention(
+        [direct_hit],
+        confidence=0.90,
+        unresolved_conflict=0.0,
+        analysis=analysis,
+    )
+
+    assert not should_abstain
+    assert reason is None
+
+
+def test_abstention_checks_outcome_comorbidity_without_named_treatment(runtime) -> None:
+    from types import SimpleNamespace
+
+    analysis = QueryAnalyzer().analyze(
+        "What remission evidence exists for GAD with major depressive disorder?"
+    )
+
+    irrelevant_context = SimpleNamespace(
+        relevance_score=0.90,
+        care_score=0.90,
+        chunk=SimpleNamespace(
+            source_id="wrong-context",
+            topics=["anxiety", "generalized_anxiety_disorder"],
+            title="GAD evidence",
+            section_heading="Results",
+            text="Generalized anxiety disorder was evaluated.",
+            metadata={
+                "clinical_facets": {
+                    "outcomes": ["quality_of_life"],
+                    "comorbidities": [],
+                }
+            },
+        ),
+    )
+
+    should_abstain, reason = runtime.retriever._abstention(
+        [irrelevant_context],
+        confidence=0.90,
+        unresolved_conflict=0.0,
+        analysis=analysis,
+    )
+
+    assert should_abstain
+    assert reason == (
+        "insufficient_direct_evidence_for_requested_clinical_context"
+    )

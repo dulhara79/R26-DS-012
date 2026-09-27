@@ -32,6 +32,8 @@ dev = [
   "build>=1.2,<2",
   "coverage>=7,<8",
   "pytest>=8,<10",
+  "setuptools>=75",
+  "wheel",
 ]
 
 [project.scripts]

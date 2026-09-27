@@ -178,8 +178,12 @@ class ChunkRecord(StrictModel):
 class QueryAnalysis(StrictModel):
     original_query: str
     normalized_query: str
+    retrieval_query: str
     intent: QueryIntent
     anxiety_subtypes: list[str] = Field(default_factory=list)
+    treatments: list[str] = Field(default_factory=list)
+    outcomes: list[str] = Field(default_factory=list)
+    comorbidities: list[str] = Field(default_factory=list)
     population: str | None = None
     wants_recent: bool = False
     preferred_layers: list[KnowledgeLayer] = Field(default_factory=list)
@@ -221,6 +225,7 @@ class RetrievalResult(StrictModel):
     abstention_reason: str | None = None
     latest_evidence_at: datetime | None = None
     knowledge_base_last_sync_at: datetime | None = None
+    timings_ms: dict[str, float] = Field(default_factory=dict)
 
 
 class Citation(StrictModel):
@@ -253,6 +258,7 @@ class AnswerResponse(StrictModel):
     safety_message: str | None = None
     latest_evidence_at: datetime | None = None
     knowledge_base_last_sync_at: datetime | None = None
+    timings_ms: dict[str, float] = Field(default_factory=dict)
     retrieval: RetrievalResult | None = None
 
 

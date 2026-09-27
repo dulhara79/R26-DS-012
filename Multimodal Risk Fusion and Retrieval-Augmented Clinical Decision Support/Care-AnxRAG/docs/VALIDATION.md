@@ -29,7 +29,7 @@ This validates orchestration and safety properties without network/model nondete
 - independent relevance abstention;
 - contradiction detection and abstention;
 - crisis, urgent, negation, and academic-context routing;
-- citation generation/validation and citation-repair context retention;
+- citation generation/validation and exact-source grounding with citation-context retention;
 - FastAPI behavior and admin protection;
 - Chroma adapter configuration and pagination contracts;
 - Ollama embed/chat request contracts;
@@ -38,7 +38,7 @@ This validates orchestration and safety properties without network/model nondete
 - conservative PMC licence handling, including restricted-marker precedence;
 - recursive secret redaction and rejection of plaintext registry credentials;
 - packaged project scaffolding resources;
-- evaluation accounting for abstention-only items through `retrieval_evaluable_count`;
+- evaluation accounting for abstention-only items through `retrieval_evaluable_count`;\n- retrieval ablation modes, pipeline timings, safety-router evaluation, corpus coverage auditing, and experiment reproducibility snapshots;
 - wheel/source-distribution contents, install/import, CLI, and packaged self-check.
 
 ## Environment limitations

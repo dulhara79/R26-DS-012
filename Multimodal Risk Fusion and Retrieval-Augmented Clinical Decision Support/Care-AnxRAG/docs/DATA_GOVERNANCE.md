@@ -77,3 +77,20 @@ For each experiment, archive:
 - benchmark version and annotation protocol;
 - code commit and dependency lock;
 - evaluation report.
+
+
+## PubMed linked corrections and integrity events
+
+PubMed's `CommentsCorrectionsList` relationships are retained as provenance metadata.
+
+CARE-AnxRAG applies a conservative policy:
+
+- `RetractionOf`: if the referenced PMID is currently active in the same configured PubMed source, its active version is marked withdrawn and its vectors are removed from active retrieval. The historical version remains in the ledger for reproducibility.
+- `ExpressionOfConcernFor`: do not automatically withdraw the referenced article. Create an evidence-review alert so a reviewer can inspect the concern and subsequent outcome.
+- `ErratumFor`, `UpdateOf`, `CorrectedandRepublishedFrom`, and `RetractedandRepublishedFrom`: retain the relationship and create a review alert when the referenced article exists in the corpus. These relationships are not treated as equivalent to a retraction.
+- A relation pointing to a PMID that is not present in the controlled corpus does not create or infer evidence for that PMID.
+- Dry-run synchronization reports discoverable relationships but does not withdraw evidence or write review alerts.
+
+Retraction notices that contain a valid linked PMID are retained for relationship processing even when the notice has no abstract. They are not promoted merely because they exist; normal validation and review rules still apply.
+
+The relationship metadata is included in the version fingerprint so a newly added or changed PubMed integrity relationship can create a new auditable version even if the article abstract itself is unchanged.

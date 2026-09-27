@@ -219,6 +219,10 @@ class SectionAwareChunker:
                             "section_hash": section.content_hash,
                             "external_id": version.external_id,
                             "content_hash": version.content_hash,
+                            "clinical_facets": version.metadata.get(
+                                "clinical_facets",
+                                {},
+                            ),
                         },
                     )
                 )

@@ -12,6 +12,11 @@ from .util import clamp, content_tokens
 class NliClassifier(Protocol):
     def classify(self, pairs: Sequence[tuple[SearchHit, SearchHit]]) -> list[EvidenceRelation]: ...
 
+    def classify_text_pairs(
+        self,
+        pairs: Sequence[tuple[str, str]],
+    ) -> list[tuple[RelationLabel, float]]: ...
+
 
 class HeuristicNliClassifier:
     """Deterministic offline NLI used only for tests and smoke checks.
@@ -62,14 +67,17 @@ class HeuristicNliClassifier:
             return 0.0
         return len(left_tokens & right_tokens) / max(1, min(len(left_tokens), len(right_tokens)))
 
-    def classify(self, pairs: Sequence[tuple[SearchHit, SearchHit]]) -> list[EvidenceRelation]:
-        relations: list[EvidenceRelation] = []
-        for left, right in pairs:
+    def classify_text_pairs(
+        self,
+        pairs: Sequence[tuple[str, str]],
+    ) -> list[tuple[RelationLabel, float]]:
+        results: list[tuple[RelationLabel, float]] = []
+        for left_text, right_text in pairs:
             best_contradiction = 0.0
             best_entailment = 0.0
-            for left_sentence in self._sentences(left.chunk.text):
+            for left_sentence in self._sentences(left_text):
                 left_polarity = self._polarity(left_sentence)
-                for right_sentence in self._sentences(right.chunk.text):
+                for right_sentence in self._sentences(right_text):
                     overlap = self._overlap(left_sentence, right_sentence)
                     if overlap < 0.20:
                         continue
@@ -80,9 +88,14 @@ class HeuristicNliClassifier:
                             clamp(0.58 + 0.50 * overlap),
                         )
                     elif overlap >= 0.42 and (
-                        left_polarity == right_polarity or left_polarity == 0 or right_polarity == 0
+                        left_polarity == right_polarity
+                        or left_polarity == 0
+                        or right_polarity == 0
                     ):
-                        best_entailment = max(best_entailment, clamp(0.45 + 0.50 * overlap))
+                        best_entailment = max(
+                            best_entailment,
+                            clamp(0.45 + 0.50 * overlap),
+                        )
 
             if best_contradiction >= best_entailment and best_contradiction > 0.0:
                 label = RelationLabel.CONTRADICTION
@@ -91,19 +104,30 @@ class HeuristicNliClassifier:
                 label = RelationLabel.ENTAILMENT
                 confidence = best_entailment
             else:
-                chunk_overlap = self._overlap(left.chunk.text, right.chunk.text)
+                chunk_overlap = self._overlap(left_text, right_text)
                 label = RelationLabel.NEUTRAL
                 confidence = clamp(0.50 + (1.0 - chunk_overlap) * 0.15)
 
-            relations.append(
-                EvidenceRelation(
-                    left_chunk_id=left.chunk.chunk_id,
-                    right_chunk_id=right.chunk.chunk_id,
-                    label=label,
-                    confidence=confidence,
-                )
+            results.append((label, confidence))
+        return results
+
+    def classify(self, pairs: Sequence[tuple[SearchHit, SearchHit]]) -> list[EvidenceRelation]:
+        labels = self.classify_text_pairs(
+            [(left.chunk.text, right.chunk.text) for left, right in pairs]
+        )
+        return [
+            EvidenceRelation(
+                left_chunk_id=left.chunk.chunk_id,
+                right_chunk_id=right.chunk.chunk_id,
+                label=label,
+                confidence=confidence,
             )
-        return relations
+            for (left, right), (label, confidence) in zip(
+                pairs,
+                labels,
+                strict=True,
+            )
+        ]
 
 
 class CrossEncoderNliClassifier:
@@ -154,12 +178,14 @@ class CrossEncoderNliClassifier:
             "or use the validated default model."
         )
 
-    def classify(self, pairs: Sequence[tuple[SearchHit, SearchHit]]) -> list[EvidenceRelation]:
+    def classify_text_pairs(
+        self,
+        pairs: Sequence[tuple[str, str]],
+    ) -> list[tuple[RelationLabel, float]]:
         if not pairs:
             return []
-        text_pairs = [(left.chunk.text, right.chunk.text) for left, right in pairs]
         logits = np.asarray(
-            self.model.predict(text_pairs, show_progress_bar=False),
+            self.model.predict(list(pairs), show_progress_bar=False),
             dtype=np.float64,
         )
         if logits.ndim == 1 and len(pairs) == 1 and logits.size == 3:
@@ -172,15 +198,32 @@ class CrossEncoderNliClassifier:
         logits = logits - logits.max(axis=1, keepdims=True)
         probabilities = np.exp(logits)
         probabilities /= probabilities.sum(axis=1, keepdims=True)
-        relations: list[EvidenceRelation] = []
-        for (left, right), probability in zip(pairs, probabilities, strict=True):
+
+        output: list[tuple[RelationLabel, float]] = []
+        for probability in probabilities:
             index = int(probability.argmax())
-            relations.append(
-                EvidenceRelation(
-                    left_chunk_id=left.chunk.chunk_id,
-                    right_chunk_id=right.chunk.chunk_id,
-                    label=self.labels[index],
-                    confidence=clamp(float(probability[index])),
+            output.append(
+                (
+                    self.labels[index],
+                    clamp(float(probability[index])),
                 )
             )
-        return relations
+        return output
+
+    def classify(self, pairs: Sequence[tuple[SearchHit, SearchHit]]) -> list[EvidenceRelation]:
+        labels = self.classify_text_pairs(
+            [(left.chunk.text, right.chunk.text) for left, right in pairs]
+        )
+        return [
+            EvidenceRelation(
+                left_chunk_id=left.chunk.chunk_id,
+                right_chunk_id=right.chunk.chunk_id,
+                label=label,
+                confidence=confidence,
+            )
+            for (left, right), (label, confidence) in zip(
+                pairs,
+                labels,
+                strict=True,
+            )
+        ]
