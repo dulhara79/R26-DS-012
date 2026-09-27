@@ -22,8 +22,8 @@ class Generator(Protocol):
     def ping(self) -> bool: ...
 
 
-class RuleBasedGenerator:
-    """Deterministic generator for tests and end-to-end offline validation."""
+class EvidenceOnlyGenerator:
+    """Extractive answer renderer: returns source sentences verbatim with citations."""
 
     def generate(
         self,
@@ -44,24 +44,21 @@ class RuleBasedGenerator:
         for index, hit in enumerate(hits[:3], start=1):
             source_id = f"S{index}"
             excerpt = _best_sentence(hit.chunk.text, question)
-            sentences.append(f"{excerpt} [{source_id}]")
+            sentences.append(f"- {excerpt} [{source_id}]")
             cited.append(source_id)
 
-        uncertainty = None
-        if retrieval.conflict_score > 0.0:
-            uncertainty = (
-                f"The retrieved evidence had a conflict score of "
-                f"{retrieval.conflict_score:.2f}; interpret the synthesis cautiously."
-            )
-
         return GeneratedPayload(
-            answer=" ".join(sentences),
+            answer="\n".join(sentences),
             cited_source_ids=cited,
-            uncertainty=uncertainty,
+            uncertainty=None,
         )
 
     def ping(self) -> bool:
         return True
+
+
+# Backward-compatible name for existing deterministic tests and offline scripts.
+RuleBasedGenerator = EvidenceOnlyGenerator
 
 
 class OllamaGenerator:
@@ -120,6 +117,8 @@ Non-negotiable rules:
 10. The cited_source_ids array must contain exactly the source IDs that appear as bracket citations in the answer.
 11. Do not put a source ID in cited_source_ids unless the answer contains that exact bracket citation.
 12. Do not use a bracket citation in the answer unless that same ID appears in cited_source_ids.
+13. Keep each substantive medical statement as an atomic factual sentence rather than combining unrelated claims.
+14. Every citation attached to a sentence must individually support the entire claim in that sentence.
 """
 
         user_prompt = f"""QUESTION:
@@ -296,6 +295,7 @@ def _first_sentence(
     text: str,
     max_characters: int = 280,
 ) -> str:
+    del max_characters  # retained for compatibility; extractive text is never truncated.
     normalized = normalize_whitespace(text)
 
     match = re.search(
@@ -303,15 +303,7 @@ def _first_sentence(
         normalized,
     )
 
-    sentence = match.group(1) if match else normalized
-
-    if len(sentence) > max_characters:
-        sentence = (
-            sentence[: max_characters - 1].rstrip()
-            + "…"
-        )
-
-    return sentence
+    return match.group(1) if match else normalized
 
 
 def _best_sentence(
@@ -361,12 +353,6 @@ def _best_sentence(
         candidates,
         key=score,
     )
-
-    if len(selected) > max_characters:
-        selected = (
-            selected[: max_characters - 1].rstrip()
-            + "…"
-        )
 
     return selected
 

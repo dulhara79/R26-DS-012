@@ -11,11 +11,20 @@ from typing import Annotated
 import typer
 import uvicorn
 
+from .benchmark_review import compile_adjudicated_benchmark, write_annotation_sheet
 from .config import Settings
+from .coverage import audit_corpus_coverage
+from .corpus_freeze import build_corpus_freeze
 from .evaluation import evaluate as run_evaluation
+from .evaluation import evaluate_ablation as run_ablation
 from .evaluation import load_benchmark
+from .experiment_bundle import run_experiment_bundle, run_final_experiment_bundle
 from .logging_utils import configure_logging
+from .reproducibility import build_experiment_snapshot
 from .runtime import build_runtime
+from .safety import SafetyRouter
+from .safety_evaluation import evaluate_safety as run_safety_evaluation
+from .safety_evaluation import load_safety_benchmark
 from .scaffold import scaffold_project
 from .util import redact_sensitive_settings, utc_now
 
@@ -109,6 +118,28 @@ def stats(project_root: Annotated[Path | None, typer.Option()] = None) -> None:
     typer.echo(_json(runtime.database.stats()))
 
 
+@app.command("coverage")
+def coverage(
+    subtype: Annotated[
+        str | None,
+        typer.Option(help="Optional normalized anxiety subtype to inspect"),
+    ] = None,
+    treatment: Annotated[
+        str | None,
+        typer.Option(help="Optional normalized treatment to inspect"),
+    ] = None,
+    project_root: Annotated[Path | None, typer.Option()] = None,
+) -> None:
+    """Audit direct clinical coverage in active evidence chunks."""
+    runtime = _runtime(project_root)
+    report = audit_corpus_coverage(
+        runtime.database,
+        subtype=subtype,
+        treatment=treatment,
+    )
+    typer.echo(_json(report.as_dict()))
+
+
 @app.command()
 def sources(project_root: Annotated[Path | None, typer.Option()] = None) -> None:
     runtime = _runtime(project_root)
@@ -199,6 +230,201 @@ def evaluate(
     runtime = _runtime(project_root)
     report = run_evaluation(runtime.retriever, runtime.rag, load_benchmark(benchmark))
     typer.echo(_json(report.as_dict()))
+
+
+@app.command("evaluate-ablation")
+def evaluate_ablation_command(
+    benchmark: Annotated[Path, typer.Argument(help="Benchmark JSONL file")],
+    project_root: Annotated[Path | None, typer.Option()] = None,
+) -> None:
+    runtime = _runtime(project_root)
+    reports = run_ablation(
+        runtime.retriever,
+        runtime.rag,
+        load_benchmark(benchmark),
+    )
+    typer.echo(
+        _json(
+            {
+                label: report.as_dict()
+                for label, report in reports.items()
+            }
+        )
+    )
+
+
+@app.command("experiment-bundle")
+def experiment_bundle_command(
+    benchmark: Annotated[Path, typer.Argument(help="Benchmark JSONL file")],
+    output_dir: Annotated[Path, typer.Argument(help="Immutable experiment output directory")],
+    code_revision: Annotated[
+        str,
+        typer.Option(help="Exact code revision/commit used for the experiment"),
+    ],
+    project_root: Annotated[Path | None, typer.Option()] = None,
+) -> None:
+    """Run ablation, coverage, timings, and reproducibility capture together."""
+    runtime = _runtime(project_root)
+    result = run_experiment_bundle(
+        runtime,
+        benchmark,
+        output_dir,
+        code_revision=code_revision,
+    )
+    typer.echo(_json(result))
+
+
+@app.command("freeze-corpus")
+def freeze_corpus_command(
+    output: Annotated[Path, typer.Argument(help="Output corpus freeze JSON path")],
+    code_revision: Annotated[
+        str,
+        typer.Option(help="Exact code revision/commit used for the freeze"),
+    ],
+    benchmark: Annotated[
+        Path | None,
+        typer.Option(help="Optional benchmark scaffold to fingerprint"),
+    ] = None,
+    project_root: Annotated[Path | None, typer.Option()] = None,
+) -> None:
+    """Audit, reconcile, and fingerprint the current corpus for research use."""
+    runtime = _runtime(project_root)
+    report = build_corpus_freeze(
+        runtime,
+        code_revision=code_revision,
+        benchmark_path=benchmark,
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(_json(report) + "\n", encoding="utf-8")
+    typer.echo(_json({"output": str(output), "ready_to_freeze": report["ready_to_freeze"]}))
+    if not report["ready_to_freeze"]:
+        raise typer.Exit(code=1)
+
+
+
+@app.command("experiment-final")
+def experiment_final_command(
+    benchmark: Annotated[Path, typer.Argument(help="Adjudicated benchmark JSONL file")],
+    output_dir: Annotated[Path, typer.Argument(help="Immutable final experiment directory")],
+    corpus_freeze: Annotated[
+        Path,
+        typer.Option(help="Successful corpus freeze JSON produced by freeze-corpus"),
+    ],
+    code_revision: Annotated[
+        str,
+        typer.Option(help="Exact code revision/commit used for the experiment"),
+    ],
+    project_root: Annotated[Path | None, typer.Option()] = None,
+) -> None:
+    """Run B0-B5 + CARE_full only after strict final-experiment preflight."""
+    runtime = _runtime(project_root)
+    result = run_final_experiment_bundle(
+        runtime,
+        benchmark,
+        output_dir,
+        code_revision=code_revision,
+        corpus_freeze_path=corpus_freeze,
+    )
+    typer.echo(_json(result))
+
+
+
+@app.command("evaluate-safety")
+def evaluate_safety_command(
+    benchmark: Annotated[Path, typer.Argument(help="Safety benchmark JSONL file")],
+) -> None:
+    """Evaluate the deterministic pre-retrieval safety router."""
+    report = run_safety_evaluation(
+        SafetyRouter(),
+        load_safety_benchmark(benchmark),
+    )
+    typer.echo(_json(report.as_dict()))
+
+
+@app.command("snapshot-experiment")
+def snapshot_experiment_command(
+    output: Annotated[Path, typer.Argument(help="Output JSON path")],
+    code_revision: Annotated[
+        str | None,
+        typer.Option(help="Code revision/commit used for the experiment"),
+    ] = None,
+    benchmark: Annotated[
+        Path | None,
+        typer.Option(help="Optional benchmark file to fingerprint"),
+    ] = None,
+    project_root: Annotated[Path | None, typer.Option()] = None,
+) -> None:
+    """Write a reproducibility snapshot for the current runtime and corpus."""
+    runtime = _runtime(project_root)
+    snapshot = build_experiment_snapshot(
+        runtime,
+        code_revision=code_revision,
+        benchmark_path=benchmark,
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(_json(snapshot) + "\n", encoding="utf-8")
+    typer.echo(_json({"output": str(output), "snapshot": snapshot}))
+
+
+@app.command("evaluate-safety")
+def evaluate_safety_command(
+    benchmark: Annotated[Path, typer.Argument(help="Safety benchmark JSONL file")],
+) -> None:
+    """Evaluate the deterministic pre-retrieval safety router."""
+    report = run_safety_evaluation(
+        SafetyRouter(),
+        load_safety_benchmark(benchmark),
+    )
+    typer.echo(_json(report.as_dict()))
+
+
+@app.command("snapshot-experiment")
+def snapshot_experiment_command(
+    output: Annotated[Path, typer.Argument(help="Output JSON file")],
+    code_revision: Annotated[
+        str | None,
+        typer.Option(help="Exact code revision used for the experiment"),
+    ] = None,
+    benchmark: Annotated[
+        Path | None,
+        typer.Option(help="Optional benchmark file to fingerprint"),
+    ] = None,
+    project_root: Annotated[Path | None, typer.Option()] = None,
+) -> None:
+    """Write a reproducibility snapshot for a research run."""
+    runtime = _runtime(project_root)
+    snapshot = build_experiment_snapshot(
+        runtime,
+        code_revision=code_revision,
+        benchmark_path=benchmark,
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(_json(snapshot) + "\n", encoding="utf-8")
+    typer.echo(_json({"output": str(output.resolve())}))
+
+
+
+@app.command("benchmark-scaffold")
+def benchmark_scaffold_command(
+    output: Annotated[Path, typer.Argument(help="Reviewer CSV output path")],
+    split: Annotated[str, typer.Option(help="development or test")] = "development",
+) -> None:
+    """Create an unlabeled benchmark review sheet; no clinical gold is fabricated."""
+    written = write_annotation_sheet(output, split=split)
+    typer.echo(_json({"output": str(written), "split": split}))
+
+
+@app.command("benchmark-compile")
+def benchmark_compile_command(
+    review_sheet: Annotated[Path, typer.Argument(help="Completed reviewer CSV")],
+    output: Annotated[Path, typer.Argument(help="Adjudicated benchmark JSONL output")],
+    project_root: Annotated[Path | None, typer.Option()] = None,
+) -> None:
+    """Compile a reviewed sheet only after strict human/corpus validation."""
+    runtime = _runtime(project_root)
+    items = compile_adjudicated_benchmark(runtime, review_sheet, output)
+    typer.echo(_json({"output": str(output), "count": len(items)}))
+
 
 
 @app.command()

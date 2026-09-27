@@ -1,14 +1,14 @@
 {
-  "generated_at": "2026-08-16T21:11:22.196738+00:00",
+  "generated_at": "2026-09-27T17:42:02.425334+00:00",
   "status": "passed",
   "project": {
     "name": "care-anxrag",
     "version": "0.1.0"
   },
   "environment": {
-    "python": "3.13.5",
-    "platform": "Linux-6.18.35-x86_64-with-glibc2.41",
-    "sqlite": "3.46.1"
+    "python": "3.12.14",
+    "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "sqlite": "3.45.1"
   },
   "static_audit": {
     "status": "passed",
@@ -32,16 +32,16 @@
     }
   },
   "tests": {
-    "total": 66,
+    "total": 157,
     "failures": 0,
     "errors": 0,
     "skipped": 0
   },
   "coverage": {
-    "percent_covered": 75.17942583732058,
-    "covered_lines": 2514,
-    "missing_lines": 830,
-    "num_statements": 3344,
+    "percent_covered": 79.23406279733587,
+    "covered_lines": 3331,
+    "missing_lines": 873,
+    "num_statements": 4204,
     "required_minimum_percent": 70
   },
   "selfcheck": {
@@ -51,7 +51,7 @@
       "vector_store": true,
       "ollama": null,
       "details": {
-        "database_path": "/tmp/care-anxrag-validation.ZDCsMS/selfcheck/care.sqlite3",
+        "database_path": "/tmp/care-anxrag-validation.xaYxUE/selfcheck/care.sqlite3",
         "vector_backend": "sqlite",
         "embedding_provider": "hash",
         "generator_provider": "rule",
@@ -66,14 +66,14 @@
     },
     "database_integrity": "ok",
     "source_count": 7,
-    "weights_sum": 1.0
+    "weights_sum": 1
   },
   "offline_acceptance": {
     "status": "passed",
     "sync": {
-      "run_id": "ab5f560245b079f3aae252ab",
-      "started_at": "2026-08-16T21:11:13.854126Z",
-      "finished_at": "2026-08-16T21:11:13.865055Z",
+      "run_id": "f07a330184de3cf3f93c505a",
+      "started_at": "2026-09-27T17:41:58.902400Z",
+      "finished_at": "2026-09-27T17:41:58.922390Z",
       "source_ids": [
         "synthetic_demo"
       ],
@@ -91,7 +91,7 @@
     "answerable": {
       "abstained": false,
       "citation_count": 1,
-      "confidence": 0.5350066879777264
+      "confidence": 0.5347519481989711
     },
     "out_of_domain": {
       "abstained": true,
@@ -104,27 +104,56 @@
     "evaluation": {
       "count": 2,
       "retrieval_evaluable_count": 1,
-      "recall_at_5": 1.0,
-      "precision_at_5": 1.0,
-      "mrr": 1.0,
-      "ndcg_at_5": 1.0,
-      "abstention_accuracy": 1.0,
-      "conflict_accuracy": 1.0,
-      "citation_validity": 1.0,
+      "recall_at_5": 1,
+      "precision_at_5": 1,
+      "mrr": 1,
+      "ndcg_at_5": 1,
+      "abstention_accuracy": 1,
+      "conflict_accuracy": 1,
+      "citation_validity": 1,
+      "extractive_evaluable_count": 1,
+      "extractive_faithfulness": 1,
+      "gold_evidence_evaluable_count": 0,
+      "gold_evidence_coverage": 0,
+      "prohibited_evidence_evaluable_count": 0,
+      "prohibited_evidence_intrusion_rate": 0,
+      "active_version_evaluable_count": 2,
+      "active_version_accuracy": 1,
+      "stale_evidence_evaluable_count": 2,
+      "stale_evidence_intrusion_rate": 0,
+      "per_stratum": {
+        "out_of_domain": {
+          "count": 1,
+          "abstention_accuracy": 1,
+          "extractive_faithfulness": 0
+        },
+        "psychological_interventions": {
+          "count": 1,
+          "abstention_accuracy": 1,
+          "extractive_faithfulness": 1
+        }
+      },
       "per_item": [
         {
           "id": "example-answerable",
-          "recall_at_5": 1.0,
-          "precision_at_5": 1.0,
-          "reciprocal_rank": 1.0,
-          "ndcg_at_5": 1.0,
+          "recall_at_5": 1,
+          "precision_at_5": 1,
+          "reciprocal_rank": 1,
+          "ndcg_at_5": 1,
           "predicted_abstain": false,
           "expected_abstain": false,
-          "conflict_score": 0.0,
+          "conflict_score": 0,
           "expected_conflict": false,
           "citation_valid": true,
+          "extractive_faithful": true,
+          "gold_evidence_coverage": null,
+          "prohibited_evidence_intrusion": null,
+          "active_version_accuracy": 1,
+          "stale_evidence_intrusion_rate": 0,
+          "stratum": "psychological_interventions",
+          "split": "development",
           "retrieved_chunk_ids": [
-            "bff86ebaf73dc7e6a5aa41f7acd426f230736b58"
+            "4201633c6a506ad48f8c347086e2eee900f13857"
           ]
         },
         {
@@ -135,11 +164,18 @@
           "ndcg_at_5": null,
           "predicted_abstain": true,
           "expected_abstain": true,
-          "conflict_score": 0.0,
+          "conflict_score": 0,
           "expected_conflict": false,
           "citation_valid": true,
+          "extractive_faithful": null,
+          "gold_evidence_coverage": null,
+          "prohibited_evidence_intrusion": null,
+          "active_version_accuracy": 1,
+          "stale_evidence_intrusion_rate": 0,
+          "stratum": "out_of_domain",
+          "split": "development",
           "retrieved_chunk_ids": [
-            "bff86ebaf73dc7e6a5aa41f7acd426f230736b58"
+            "4201633c6a506ad48f8c347086e2eee900f13857"
           ]
         }
       ]
@@ -156,24 +192,24 @@
     "status": "passed",
     "wheel": {
       "name": "care_anxrag-0.1.0-py3-none-any.whl",
-      "size_bytes": 83034,
-      "sha256": "12f7c41315aab2c0ec627d61e6990d6da6593d765893e42311defbf8a79b1062",
-      "file_count": 41,
+      "size_bytes": 104206,
+      "sha256": "b36585f5e2aff2514d5de2e3bdccc13b5e9c23a174e3cf0f4ea33373df12fd50",
+      "file_count": 46,
       "required_files_present": true
     },
     "source_distribution": {
       "name": "care_anxrag-0.1.0.tar.gz",
-      "size_bytes": 113163,
-      "sha256": "87bfbe894413f975dcfda3474133e9f6e4d2403a52aa550d01083e669366f7ba",
-      "file_count": 99,
+      "size_bytes": 162997,
+      "sha256": "7ef2abe67800ae4af18e503a17f0e82d1496039fb03d5ac68930eab6e7c73d62",
+      "file_count": 123,
       "required_files_present": true
     },
     "isolated_target_install": "passed",
     "import_and_cli": "passed",
     "installed_wheel_init": {
       "scaffold": {
-        "/tmp/care-anxrag-validation.ZDCsMS/wheel-project/config/sources.yaml": "written",
-        "/tmp/care-anxrag-validation.ZDCsMS/wheel-project/.env.example": "written"
+        "/tmp/care-anxrag-validation.xaYxUE/wheel-project/config/sources.yaml": "written",
+        "/tmp/care-anxrag-validation.xaYxUE/wheel-project/.env.example": "written"
       },
       "health": {
         "status": "ok",
@@ -181,7 +217,7 @@
         "vector_store": true,
         "ollama": null,
         "details": {
-          "database_path": "/tmp/care-anxrag-validation.ZDCsMS/wheel-project/var/care.sqlite3",
+          "database_path": "/tmp/care-anxrag-validation.xaYxUE/wheel-project/var/care.sqlite3",
           "vector_backend": "sqlite",
           "embedding_provider": "hash",
           "generator_provider": "rule",
@@ -202,7 +238,7 @@
         "vector_store": true,
         "ollama": null,
         "details": {
-          "database_path": "/tmp/care-anxrag-validation.ZDCsMS/wheel-project/var/care.sqlite3",
+          "database_path": "/tmp/care-anxrag-validation.xaYxUE/wheel-project/var/care.sqlite3",
           "vector_backend": "sqlite",
           "embedding_provider": "hash",
           "generator_provider": "rule",
@@ -217,10 +253,10 @@
       },
       "database_integrity": "ok",
       "source_count": 7,
-      "weights_sum": 1.0
+      "weights_sum": 1
     }
   },
-  "release_source_tree_sha256": "61c8dfffca56d00aa6c2a5309d64b384cdabcbcb9b487c24aed1f87748bd8372",
+  "release_source_tree_sha256": "e5689dcda37ac2add783242f151cc5b7661ba37e45a96bc992cc8012e4655543",
   "not_executed_in_this_offline_environment": [
     "live NIMH/WHO/PubMed/PMC/NICE synchronization",
     "licensed NICE endpoint authentication",
