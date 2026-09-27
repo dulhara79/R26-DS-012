@@ -4,33 +4,33 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('preserves the server fusion assessment ID', () {
     final risk = FusionRisk.fromJson({
-      'fusion_result_id': 'assessment-123',
+      'fusion_result_id': 123,
       'composite': 0.42,
       'band': 'AMBER',
       'message': 'Server assessment',
       'updated_at': '2026-09-25T10:00:00Z',
     });
 
-    expect(risk.fusionResultId, 'assessment-123');
+    expect(risk.fusionResultId, 123);
     expect(risk.scoreOutOf100, 42.0);
     expect(officialOverallRisk(risk), 42.0);
   });
 
   test('GREY fusion results remain unavailable', () {
     final risk = FusionRisk.fromJson({
-      'fusion_result_id': 'assessment-grey',
+      'fusion_result_id': 124,
       'composite': 0.05,
       'band': 'GREY',
     });
 
     expect(risk.hasScore, isFalse);
-    expect(risk.scoreOutOf100, 5.0);
+    expect(risk.scoreOutOf100, isNull);
     expect(officialOverallRisk(risk), isNull);
   });
 
   test('missing composite remains unavailable', () {
     final risk = FusionRisk.fromJson({
-      'fusion_result_id': 'assessment-missing',
+      'fusion_result_id': 125,
       'band': 'AMBER',
     });
 

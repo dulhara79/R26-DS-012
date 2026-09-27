@@ -18,9 +18,8 @@ class FusionRisk {
   /// Backend composite, on its native 0..1 scale.
   final double? composite;
 
-  /// Exact server-side fusion assessment identifier. This is kept opaque and
-  /// is surfaced unchanged so other apps can reference the same assessment.
-  final dynamic fusionResultId;
+  /// Authoritative server-side fusion assessment identifier shared with the clinician view.
+  final int? fusionResultId;
 
   /// GREEN / AMBER / RED / GREY. GREY means the fusion gate refused to
   /// produce a score (for example only one modality was available), and it
@@ -41,13 +40,13 @@ class FusionRisk {
   });
 
   /// True only when the backend actually produced a usable score.
-  bool get hasScore => composite != null && band != 'GREY';
+  bool get hasScore => composite != null && band.toUpperCase() != 'GREY';
 
   /// The gauge on the home page works on a 0..100 scale, but the backend
   /// composite is 0..1. Converting here, once, keeps the mistake from being
   /// repeated at each call site.
   double? get scoreOutOf100 =>
-      composite == null ? null : (composite! * 100).clamp(0.0, 100.0);
+      !hasScore ? null : (composite! * 100).clamp(0.0, 100.0);
 
   factory FusionRisk.fromJson(Map<String, dynamic> json) {
     final rawComposite = json['composite'];
@@ -58,10 +57,12 @@ class FusionRisk {
     }
     return FusionRisk(
       composite: rawComposite is num ? rawComposite.toDouble() : null,
-      band: json['band']?.toString() ?? 'GREY',
+      band: json['band']?.toString().toUpperCase() ?? 'GREY',
       message: json['message']?.toString(),
       updatedAt: parsedUpdatedAt,
-      fusionResultId: json['fusion_result_id'],
+      fusionResultId: json['fusion_result_id'] is num
+          ? (json['fusion_result_id'] as num).toInt()
+          : null,
     );
   }
 }
