@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 
 import 'api_service.dart';
 import 'participant_identity_service.dart';
@@ -77,9 +75,9 @@ double? officialOverallRisk(FusionRisk? risk) {
 
 /// Reads the composite risk produced by the fusion engine.
 ///
-/// This endpoint is intentionally unauthenticated on the backend, so no token
-/// is sent. If the call fails for any reason the result is null: a missing
-/// score is shown as "Unavailable", never as a low score.
+/// The request uses the subject-bound patient session. If authentication or
+/// the network fails, the result is null: missing data is "Unavailable",
+/// never a client-generated low score.
 class FusionRiskService {
   FusionRiskService._();
 
@@ -101,34 +99,13 @@ class FusionRiskService {
       return null;
     }
 
-    final base = ApiService.centralBackendBaseUrl.trim().replaceFirst(
-      RegExp(r'/+$'),
-      '',
-    );
-    if (base.isEmpty) {
-      debugPrint('FusionRiskService: central backend base URL is not set.');
-      return null;
-    }
-
     try {
-      final response = await http
-          .get(
-            Uri.parse('$base/v1/patients/$subjectId/risk'),
-            headers: const {'Accept': 'application/json'},
-          )
-          .timeout(_timeout);
-
-      if (response.statusCode != 200) {
+      final decoded = await ApiService.getPatientRisk(
+        subjectId,
+      ).timeout(_timeout);
+      if (decoded == null) {
         latest.value = null;
-        debugPrint(
-          'FusionRiskService: backend returned ${response.statusCode}.',
-        );
-        return null;
-      }
-
-      final decoded = jsonDecode(response.body);
-      if (decoded is! Map<String, dynamic>) {
-        latest.value = null;
+        debugPrint('FusionRiskService: authenticated risk is unavailable.');
         return null;
       }
 

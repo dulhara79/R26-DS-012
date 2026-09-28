@@ -80,7 +80,7 @@ class PredictiveEscalationGate {
       futurePoints = List.generate(
         riskForecast.length,
         (index) => MapEntry(
-          forecastHorizonsMinutes![index],
+          forecastHorizonsMinutes[index],
           riskForecast[index].clamp(0.0, 100.0).toDouble(),
         ),
       );
@@ -183,10 +183,10 @@ class AnxietyAlertEvent {
   final String eventId;
   final String userId;
   final DateTime detectedAt;
-  final double initialRiskScore;
-  final double initialHr;
-  final double initialBr;
-  final double initialMotion;
+  final double? initialRiskScore;
+  final double? initialHr;
+  final double? initialBr;
+  final double? initialMotion;
   final String riskSource;
   final double? predictedRiskScore;
   final int? predictedLeadMinutes;
@@ -208,10 +208,10 @@ class AnxietyAlertEvent {
     required this.eventId,
     required this.userId,
     required this.detectedAt,
-    required this.initialRiskScore,
-    required this.initialHr,
-    required this.initialBr,
-    required this.initialMotion,
+    this.initialRiskScore,
+    this.initialHr,
+    this.initialBr,
+    this.initialMotion,
     this.riskSource = 'physiological',
     this.predictedRiskScore,
     this.predictedLeadMinutes,
@@ -235,10 +235,10 @@ class AnxietyAlertEvent {
       eventId: json['event_id'] as String,
       userId: json['user_id'] as String,
       detectedAt: DateTime.parse(json['detected_at'] as String),
-      initialRiskScore: (json['initial_risk_score'] as num).toDouble(),
-      initialHr: (json['initial_hr'] as num).toDouble(),
-      initialBr: (json['initial_br'] as num).toDouble(),
-      initialMotion: (json['initial_motion'] as num).toDouble(),
+      initialRiskScore: (json['initial_risk_score'] as num?)?.toDouble(),
+      initialHr: (json['initial_hr'] as num?)?.toDouble(),
+      initialBr: (json['initial_br'] as num?)?.toDouble(),
+      initialMotion: (json['initial_motion'] as num?)?.toDouble(),
       riskSource: json['risk_source'] as String? ?? 'physiological',
       predictedRiskScore: (json['predicted_risk_score'] as num?)?.toDouble(),
       predictedLeadMinutes: (json['predicted_lead_minutes'] as num?)?.toInt(),
@@ -266,13 +266,12 @@ class AnxietyAlertEvent {
     'event_id': eventId,
     'user_id': userId,
     'detected_at': detectedAt.toUtc().toIso8601String(),
-    'initial_risk_score': initialRiskScore,
-    'initial_hr': initialHr,
-    'initial_br': initialBr,
-    'initial_motion': initialMotion,
+    if (initialRiskScore != null) 'initial_risk_score': initialRiskScore,
+    if (initialHr != null) 'initial_hr': initialHr,
+    if (initialBr != null) 'initial_br': initialBr,
+    if (initialMotion != null) 'initial_motion': initialMotion,
     'risk_source': riskSource,
-    if (predictedRiskScore != null)
-      'predicted_risk_score': predictedRiskScore,
+    if (predictedRiskScore != null) 'predicted_risk_score': predictedRiskScore,
     if (predictedLeadMinutes != null)
       'predicted_lead_minutes': predictedLeadMinutes,
     if (forecastIncrease != null) 'forecast_increase': forecastIncrease,
@@ -305,10 +304,6 @@ class AnxietyFeedbackService {
   static const String _eventsKey = 'anxiety_alert_events_v1';
   static const String _pendingUploadsKey = 'anxiety_feedback_pending_v1';
   String? _userId;
-  StreamSubscription<ChestStrapReading>? _readingSubscription;
-  DateTime? _lastReadingAt;
-  final PredictiveEscalationGate _forecastGate = PredictiveEscalationGate();
-  Timer? _forecastTimer;
   bool _forecastRequestInFlight = false;
   DateTime? _latestForecastAt;
   double? _latestFusionRisk;
@@ -317,31 +312,17 @@ class AnxietyFeedbackService {
   final Map<String, Timer> _followupTimers = {};
 
   Future<void> initializeForUser(String userId) async {
-    if (_userId == userId && _readingSubscription != null) return;
+    if (_userId == userId) return;
     await stop();
     _userId = userId;
-    _readingSubscription = ChestStrapService().readingsStream.listen(
-      _observeReading,
-      onError: (error) => debugPrint('Anxiety alert monitor error: $error'),
-    );
     unawaited(retryPendingUploads());
-    unawaited(refreshForecast());
-    _forecastTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      unawaited(refreshForecast());
-    });
     await _restorePendingFollowups();
   }
 
   Future<void> stop() async {
-    await _readingSubscription?.cancel();
-    _readingSubscription = null;
-    _forecastTimer?.cancel();
-    _forecastTimer = null;
     _forecastRequestInFlight = false;
     _latestForecastAt = null;
     _userId = null;
-    _lastReadingAt = null;
-    _forecastGate.reset();
     _latestFusionRisk = null;
     _latestFusionAt = null;
     combinedRisk.value = null;
@@ -349,21 +330,6 @@ class AnxietyFeedbackService {
       timer.cancel();
     }
     _followupTimers.clear();
-  }
-
-  void _observeReading(ChestStrapReading reading) {
-    final userId = _userId;
-    if (userId == null || !reading.isWorn) {
-      _forecastGate.reset();
-      return;
-    }
-
-    final now = DateTime.now();
-    if (_lastReadingAt != null &&
-        now.difference(_lastReadingAt!) > const Duration(seconds: 10)) {
-      _forecastGate.reset();
-    }
-    _lastReadingAt = now;
   }
 
   void updateFusionRisk(double riskScore) {
@@ -424,67 +390,40 @@ class AnxietyFeedbackService {
       return;
     }
 
-    final forecast = rawForecast
-        .cast<num>()
-        .take(directForecast ? 2 : 10)
-        .map((value) => value.toDouble())
-        .toList();
-    final forecastHorizons = directForecast
-        ? rawHorizons.cast<num>().map((value) => value.toInt()).toList()
-        : null;
-    final currentFromApi = response['current_risk_index'];
-    final liveReading = ChestStrapService().hasLiveWornReading
-        ? ChestStrapService().lastReading
-        : null;
-    if (liveReading == null || !liveReading.isWorn) return;
-
-    final currentRisk = currentFromApi is num
-        ? currentFromApi.toDouble()
-        : liveReading.riskScore;
     final now = observedAt ?? DateTime.now();
     _latestForecastAt = now;
-    final escalation = _forecastGate.evaluate(
-      currentRisk: currentRisk,
-      riskForecast: forecast,
-      forecastHorizonsMinutes: forecastHorizons,
-      observedAt: now,
-    );
-    if (escalation == null) return;
-    final userId = _userId;
-    if (userId == null) return;
-    unawaited(_createPredictiveAlert(userId, liveReading, now, escalation));
+    // Forecasts can still inform the screen, but only the central backend may
+    // confirm/deduplicate an episode and create the AttentionEvent that alerts
+    // the patient and clinician clients.
   }
 
-  Future<void> _createPredictiveAlert(
-    String userId,
-    ChestStrapReading reading,
-    DateTime detectedAt,
-    PredictedEscalation escalation,
-  ) async {
+  Future<bool> ingestServerAttentionEvent({
+    required String eventId,
+    required DateTime createdAt,
+    required int leadMinutes,
+  }) async {
+    final userId = _userId;
+    if (userId == null || eventId.trim().isEmpty) return false;
+    if (await getEvent(eventId) != null) return true;
+    final reading = ChestStrapService().hasLiveWornReading
+        ? ChestStrapService().lastReading
+        : null;
     final event = AnxietyAlertEvent(
-      eventId: 'anx:${detectedAt.toUtc().millisecondsSinceEpoch}',
+      eventId: eventId,
       userId: userId,
-      detectedAt: detectedAt,
-      initialRiskScore: escalation.currentRisk,
-      initialHr: reading.meanHR,
-      initialBr: reading.meanBR,
-      initialMotion: reading.stdAccMag,
-      riskSource: 'physiological_forecast',
-      predictedRiskScore: escalation.predictedPeakRisk,
-      predictedLeadMinutes: escalation.leadMinutes,
-      forecastIncrease: escalation.increase,
+      detectedAt: createdAt,
+      initialRiskScore: latestFusionRisk,
+      initialHr: reading?.meanHR,
+      initialBr: reading?.meanBR,
+      initialMotion: reading?.stdAccMag,
+      riskSource: 'server_attention_event',
+      predictedLeadMinutes: leadMinutes,
     );
     await _upsertEvent(event);
-    final shown = await NotificationHelper.showAnxietyAlert(
+    return NotificationHelper.showAnxietyAlert(
       eventId: event.eventId,
-      leadMinutes: escalation.leadMinutes,
+      leadMinutes: leadMinutes,
     );
-    if (!shown) {
-      await _removeEvent(event.eventId);
-      _forecastGate.allowRetry();
-      return;
-    }
-    unawaited(_upload(event));
   }
 
   /// Exercises the complete Android notification and check-in route without
@@ -657,7 +596,9 @@ class AnxietyFeedbackService {
       'status': 'success',
       'alerts': events.length,
       'answered_alerts': answered.length,
-      'confirmation_rate': answered.isEmpty ? null : confirmed / answered.length,
+      'confirmation_rate': answered.isEmpty
+          ? null
+          : confirmed / answered.length,
       'common_activity': mostCommon(events.map((event) => event.activity)),
       'most_effective_action': mostCommon(
         helpfulActions.map(
@@ -745,9 +686,9 @@ class AnxietyFeedbackService {
       signalsImproved:
           event.followupRiskScore != null &&
           (event.predictedRiskScore == null
-              ? event.followupRiskScore! <= event.initialRiskScore - 10.0
-              : event.followupRiskScore! <=
-                    event.predictedRiskScore! - 10.0),
+              ? event.initialRiskScore != null &&
+                    event.followupRiskScore! <= event.initialRiskScore! - 10.0
+              : event.followupRiskScore! <= event.predictedRiskScore! - 10.0),
     );
   }
 

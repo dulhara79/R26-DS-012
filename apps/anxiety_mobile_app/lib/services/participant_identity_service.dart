@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'patient_session_service.dart';
+
 /// Keeps a participant's research identifier separate from their display name.
 ///
 /// Only [participantIdKey] is used in API, InfluxDB, and model requests. The
@@ -125,5 +127,6 @@ class ParticipantIdentityService {
     await prefs.remove(legacyUserIdKey);
     await prefs.remove(centralSubjectIdKey);
     await prefs.remove('user_id');
+    await PatientSessionService.instance.clearAll();
   }
 }

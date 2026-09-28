@@ -77,8 +77,9 @@ class ShareParticipantIdPage extends StatelessWidget {
       pairingCode: pairingCode,
     );
     if (result['success'] == true) {
+      final subjectId = await ApiService.selfEnrol(participantId);
       await ParticipantIdentityService.saveCentralSubjectId(
-        result['subject_id'].toString(),
+        subjectId ?? result['subject_id'].toString(),
       );
     }
 

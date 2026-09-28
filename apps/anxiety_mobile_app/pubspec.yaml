@@ -22,6 +22,7 @@ dependencies:
 
   # Data Storage
   shared_preferences: ^2.2.0
+  flutter_secure_storage: ^9.2.4
   crypto: ^3.0.3
   intl: ^0.18.1
   connectivity_plus: ^4.0.1
@@ -73,4 +74,3 @@ flutter:
   assets:
     - assets/meditation_hero.jpg
     - assets/welcome_illustration.png
-
