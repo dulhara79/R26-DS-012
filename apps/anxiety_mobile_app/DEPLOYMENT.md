@@ -8,17 +8,17 @@ We use **GitHub Actions** to automate our workflow. There are two main workflows
 
 ### A. Pull Request Validation (`validate_and_build.yml`)
 - **Trigger**: Every time a Pull Request is opened or updated against the `main` branch.
-- **Actions**: 
+- **Actions** (Flutter 3.47.5):
   - Runs `flutter analyze` to check for code quality issues.
   - Runs `flutter test` to execute widget and unit tests.
-  - Builds a debug APK to ensure the code is buildable.
+  - Runs formatting and analysis on changed Dart files, all Flutter tests, and a debug Android APK build.
 
 ### B. Sync and Release (`sync_and_release.yml`)
 - **Trigger**: Every time code is pushed or merged into the `main` branch.
 - **Actions**:
   1. **Research Repo Sync**: Automatically clones `dulhara79/R26-DS-012` and copies the latest code into `apps/anxiety_mobile_app/`.
-  2. **Production Build**: Builds a release APK with obfuscation and debug info splitting.
-  3. **Artifact Upload**: The resulting `app-release.apk` is uploaded to the GitHub Actions run as an artifact.
+  2. **Validation Build**: Builds a debug APK without production configuration.
+  3. **Production Build**: Requires signing and `BACKEND_BASE`; fails the main-branch release job when absent. Builds signed release APK and AAB with obfuscation and debug info splitting.
 
 ---
 
@@ -29,8 +29,8 @@ To make the pipeline work, you **must** add the following secrets to your GitHub
 | Secret Name | Description |
 | :--- | :--- |
 | `RESEARCH_REPO_PAT` | A Personal Access Token (PAT) with `repo` scope to allow pushing to the research repository. |
-| `SCRIPT_URL` | The Google Apps Script URL used for data collection. |
-| `AUTH_TOKEN` | The authentication token for the backend API. |
+| `BACKEND_BASE` | HTTPS URL of the Central Backend (required for production builds). |
+| `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_PASSWORD`, `KEY_ALIAS` | Android release signing material (all required for production artifacts). |
 
 ---
 
@@ -43,11 +43,13 @@ To build a signed APK for distribution (e.g., via Play Store or manual install),
 2. Follow the template in `android/key.properties.example`.
 3. Place your `.jks` or `.keystore` file in `android/app/`.
 
-### CI Setup (Optional)
-If you want the GitHub Action to produce a **signed** APK, you will need to:
+### CI Setup
+For GitHub Actions to produce a signed release, you need to:
 1. Encode your keystore file to Base64.
 2. Add the Base64 string and credentials to GitHub Secrets.
-3. Update the `sync_and_release.yml` to decode and use these secrets.
+3. Set `BACKEND_BASE` as a GitHub Actions secret. The workflow decodes signing material and fails the release job if signing or backend configuration is absent.
+
+An Android release build uses the `release` signing config. Keep `android/key.properties` and keystores outside Git. Review the patient and clinician flow against a staged backend before distributing a build. Removing a published token from the source tree does not revoke it; rotate it in the deployed Apps Script properties.
 
 ---
 

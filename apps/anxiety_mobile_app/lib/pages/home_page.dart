@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../services/fusion_risk_service.dart';
 import '../services/chest_strap_service.dart';
 import '../services/api_service.dart';
@@ -13,7 +14,7 @@ import '../services/anxiety_level_update_throttle.dart';
 /// Displays:
 ///   • Aura branding & subtitle
 ///   • Meditation hero image (from assets)
-///   • Overall anxiety status card (combined physiological + phenotyping risk)
+///   • Server-assessed current risk (C1/C3/C4) and a separate C1 forecast
 ///   • Notification bell for anxiety escalation alerts
 class HomePage extends StatefulWidget {
   final String? userId;
@@ -38,6 +39,7 @@ class HomePageState extends State<HomePage> with TickerProviderStateMixin {
   final AnxietyLevelUpdateThrottle _notificationThrottle =
       AnxietyLevelUpdateThrottle();
   Timer? _notificationThrottleTimer;
+  Timer? _forecastExpiryTimer;
   bool _hasUnread = false;
 
   // ── Animation ──────────────────────────────────────────────
@@ -74,7 +76,9 @@ class HomePageState extends State<HomePage> with TickerProviderStateMixin {
     _lastReading = _chestStrap.hasLiveWornReading
         ? _chestStrap.lastReading
         : null;
-    _notificationThrottle.seed(_labelForScore(_overallRisk));
+    _notificationThrottle.seed(
+      FusionRiskService.instance.latest.value?.displayTier ?? 'Unavailable',
+    );
     _readingSubscription = _chestStrap.readingsStream.listen((reading) {
       if (mounted) {
         setState(() => _lastReading = reading);
@@ -149,19 +153,30 @@ class HomePageState extends State<HomePage> with TickerProviderStateMixin {
     _chestStrap.liveReadingAvailable.removeListener(_onLiveAvailabilityChanged);
     _readingSubscription?.cancel();
     _notificationThrottleTimer?.cancel();
+    _forecastExpiryTimer?.cancel();
     _fadeController.dispose();
     _pulseController.dispose();
     FusionRiskService.instance.latest.removeListener(_onFusionRiskChanged);
+    FusionRiskService.instance.stopPolling();
     super.dispose();
   }
 
-void _onFusionRiskChanged() {
-    if (mounted) setState(() {});
-}
-  // ── Combined Risk Logic ─────────────────────────────────────
-  bool get _hasLiveReading =>
-      _chestStrap.hasLiveWornReading && (_lastReading?.isWorn ?? false);
+  void _onFusionRiskChanged() {
+    _forecastExpiryTimer?.cancel();
+    final expiresAt =
+        FusionRiskService.instance.latest.value?.forecast?.validUntil;
+    if (expiresAt != null && expiresAt.isAfter(DateTime.now())) {
+      _forecastExpiryTimer = Timer(expiresAt.difference(DateTime.now()), () {
+        if (mounted) setState(() {});
+      });
+    }
+    if (mounted) {
+      _observeOverallLevel();
+      setState(() {});
+    }
+  }
 
+  // ── Server assessment ───────────────────────────────────────
   /// The app-wide overall risk is server-authoritative. It must come
   /// exclusively from the latest fusion assessment.
   double? get _overallRisk =>
@@ -169,43 +184,36 @@ void _onFusionRiskChanged() {
 
   bool get _hasOverallRisk => _overallRisk != null;
 
-  String _labelForScore(double? score) {
-    if (score == null) return 'Unavailable';
-    if (score <= 20) return 'Low';
-    if (score <= 45) return 'Moderate';
-    if (score <= 70) return 'Elevated';
-    return 'High';
-  }
-
-  Color _overallColor(double score) {
-    if (score <= 20) return const Color(0xFF4CAF50);
-    if (score <= 45) return const Color(0xFFFFA726);
-    if (score <= 70) return const Color(0xFFFF7043);
-    return const Color(0xFFEF5350);
-  }
-
-  IconData _overallIcon(double score) {
-    if (!_hasOverallRisk) return Icons.sensors_off_rounded;
-    if (score <= 20) return Icons.sentiment_very_satisfied_rounded;
-    if (score <= 45) return Icons.sentiment_satisfied_rounded;
-    if (score <= 70) return Icons.sentiment_neutral_rounded;
-    return Icons.sentiment_very_dissatisfied_rounded;
-  }
-
-  String _overallMessage(double score) {
-    if (!_hasOverallRisk) {
-      return 'Connect and wear the chest strap to see your current readings.';
-    }
-    if (score <= 20) {
-      return 'Your recent readings look settled. Keep doing what helps you feel comfortable.';
-    } else if (score <= 45) {
-      return 'Your recent readings have shifted a little. A slow breath or short pause may feel helpful.';
-    } else if (score <= 70) {
-      return 'A gentle pause may help. Try a calming activity if that feels right for you.';
-    } else {
-      return 'Take a moment to check in with yourself. Breathe slowly, and contact someone you trust if you would like support.';
+  Color _overallColor(String band) {
+    switch (band) {
+      case 'GREEN':
+        return const Color(0xFF4CAF50);
+      case 'AMBER':
+        return const Color(0xFFFFA726);
+      case 'RED':
+        return const Color(0xFFEF5350);
+      default:
+        return Colors.grey;
     }
   }
+
+  IconData _overallIcon(String? tier) {
+    switch (tier) {
+      case 'Low':
+        return Icons.sentiment_satisfied_rounded;
+      case 'Medium':
+        return Icons.sentiment_neutral_rounded;
+      case 'High':
+        return Icons.sentiment_very_dissatisfied_rounded;
+      default:
+        return Icons.sensors_off_rounded;
+    }
+  }
+
+  String get _overallMessage => _hasOverallRisk
+      ? (FusionRiskService.instance.latest.value?.message ??
+            'Current assessment from your care team is available.')
+      : 'Current assessment is unavailable. Check your connection or ask your care team.';
 
   void _addNotification(String msg) {
     if (!mounted) return;
@@ -218,7 +226,7 @@ void _onFusionRiskChanged() {
   void _observeOverallLevel() {
     final now = DateTime.now();
     final update = _notificationThrottle.observe(
-      _labelForScore(_overallRisk),
+      FusionRiskService.instance.latest.value?.displayTier ?? 'Unavailable',
       now,
     );
     if (update != null) _addNotification(update.message);
@@ -264,8 +272,12 @@ void _onFusionRiskChanged() {
   @override
   Widget build(BuildContext context) {
     final risk = _overallRisk ?? 0.0;
-    final riskCol = _hasOverallRisk ? _overallColor(risk) : Colors.grey;
-    final label = _labelForScore(_overallRisk);
+    final assessment = FusionRiskService.instance.latest.value;
+    final riskCol = _hasOverallRisk
+        ? _overallColor(assessment?.band ?? '')
+        : Colors.grey;
+    final label = assessment?.displayTier ?? 'Unavailable';
+    final forecast = assessment?.forecast;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -469,7 +481,9 @@ void _onFusionRiskChanged() {
                                     ),
                                   ),
                                   child: Icon(
-                                    _overallIcon(risk),
+                                    _overallIcon(
+                                      _hasOverallRisk ? assessment?.tier : null,
+                                    ),
                                     color: Colors.white,
                                     size: 30,
                                   ),
@@ -573,22 +587,9 @@ void _onFusionRiskChanged() {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                _riskLabel(
-                                  'Low',
-                                  _hasOverallRisk && risk <= 20,
-                                ),
-                                _riskLabel(
-                                  'Moderate',
-                                  _hasOverallRisk && risk > 20 && risk <= 45,
-                                ),
-                                _riskLabel(
-                                  'Elevated',
-                                  _hasOverallRisk && risk > 45 && risk <= 70,
-                                ),
-                                _riskLabel(
-                                  'High',
-                                  _hasOverallRisk && risk > 70,
-                                ),
+                                _riskLabel('Low', label == 'Low'),
+                                _riskLabel('Medium', label == 'Medium'),
+                                _riskLabel('High', label == 'High'),
                               ],
                             ),
                             const SizedBox(height: 16),
@@ -605,7 +606,7 @@ void _onFusionRiskChanged() {
                                 ),
                               ),
                               child: Text(
-                                _overallMessage(risk),
+                                _overallMessage,
                                 style: GoogleFonts.poppins(
                                   fontSize: 13,
                                   color: Colors.white.withValues(alpha: 0.9),
@@ -623,6 +624,43 @@ void _onFusionRiskChanged() {
                   ),
 
                   const SizedBox(height: 24),
+
+                  if (forecast != null &&
+                      forecast.isValidAt(DateTime.now())) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Physiological forecast · ${forecast.horizonMinutes} min',
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '${forecast.tier} · ${forecast.scoreOutOf100.toStringAsFixed(0)}',
+                            style: GoogleFonts.poppins(color: Colors.white),
+                          ),
+                          Text(
+                            'Based on recent sensor readings; valid until ${forecast.validUntil.toLocal().hour.toString().padLeft(2, '0')}:${forecast.validUntil.toLocal().minute.toString().padLeft(2, '0')}.',
+                            style: GoogleFonts.poppins(
+                              color: Colors.white70,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
 
                   _buildWeeklyInsightsCard(),
 

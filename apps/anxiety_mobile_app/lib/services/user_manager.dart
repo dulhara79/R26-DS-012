@@ -1,14 +1,15 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 import 'sensor_manager.dart';
 import 'chest_strap_service.dart';
 import 'ble_bridge.dart';
 import 'anxiety_feedback_service.dart';
 import 'patient_attention_event_service.dart';
+import 'fusion_risk_service.dart';
 
-class UserManager {
+class UserManager with WidgetsBindingObserver {
   // This is the magic line that creates the single, permanent instance of UserManager
   static final UserManager _instance = UserManager._internal();
 
@@ -45,6 +46,8 @@ class UserManager {
     }
 
     sensorManager?.stopCollection();
+    PatientAttentionEventService.instance.stopPolling();
+    FusionRiskService.instance.clear();
     BleBridge().unwireChestStrap();
     _currentUserId = userId;
     debugPrint('User session initialized for identity: $userId');
@@ -61,8 +64,14 @@ class UserManager {
 
     // Wire chest strap data to SensorManager via BleBridge
     BleBridge().wireChestStrap();
-    unawaited(AnxietyFeedbackService().initializeForUser(userId));
-    PatientAttentionEventService.instance.startPolling();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(
+      AnxietyFeedbackService().initializeForUser(userId).then((_) {
+        if (_currentUserId == userId) {
+          PatientAttentionEventService.instance.startPolling();
+        }
+      }),
+    );
   }
 
   // LOGOUT METHOD: Call this if the user wants to switch identities
@@ -77,11 +86,25 @@ class UserManager {
     BleBridge().unwireChestStrap();
     unawaited(AnxietyFeedbackService().stop());
     PatientAttentionEventService.instance.stopPolling();
+    FusionRiskService.instance.clear();
+    WidgetsBinding.instance.removeObserver(this);
 
     // Disconnect bluetooth
     ChestStrapService().disconnect();
 
     // Clear out the user ID completely
     _currentUserId = null;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!isLoggedIn) return;
+    if (state == AppLifecycleState.resumed) {
+      PatientAttentionEventService.instance.startPolling();
+      unawaited(FusionRiskService.instance.fetch());
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      PatientAttentionEventService.instance.stopPolling();
+    }
   }
 }

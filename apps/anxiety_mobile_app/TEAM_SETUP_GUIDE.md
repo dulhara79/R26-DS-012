@@ -21,7 +21,7 @@ The app uses a custom Google Apps Script to handle data. **One person** should h
 3.  Copy the code from `google_apps_script/doPost.gs` into the editor.
 4.  **Initialize Security**:
     *   Find the function `setupScript()` in the script editor.
-    *   Select it in the toolbar and click **Run**. This creates the study folder and sets the `AUTH_TOKEN`.
+    *   Select it in the toolbar and click **Run**. This creates the study folder. Set `AUTH_TOKEN` to a new random value in **Project Settings > Script Properties** before deploying.
 5.  **Deploy**:
     *   Click **Deploy > New Deployment**.
     *   Select **Web App**.
@@ -34,13 +34,13 @@ The app uses a custom Google Apps Script to handle data. **One person** should h
 ## 3. Building the Application
 To protect research methodology, we use **Obfuscated Builds**. Use the following values for all team builds:
 
-*   **Master Auth Token**: `7c09db655b5f697a4faf0b18a517d5fb` (Set by `setupScript`)
+*   **Backend base**: An HTTPS Central Backend URL, supplied through `BACKEND_BASE`.
+*   **Script token**: The legacy Apps Script requires a private `AUTH_TOKEN` Script Property. The current patient app does not call this script or embed its token.
 
 ### Build Command (Windows PowerShell):
 ```powershell
-flutter build apk --obfuscate --split-debug-info=./debug-info `
-  --dart-define=SCRIPT_URL="YOUR_WEB_APP_URL" `
-  --dart-define=AUTH_TOKEN="7c09db655b5f697a4faf0b18a517d5fb"
+flutter build apk --release --obfuscate --split-debug-info=./debug-info `
+  --dart-define=BACKEND_BASE="https://your-central-backend.example"
 ```
 
 ---
@@ -62,7 +62,7 @@ When testing the app, follow this sequence:
 ---
 
 ## 6. Common Issues & Fixes
-*   **"Unauthorized" Error**: Your `AUTH_TOKEN` in the build command does not match the one in Google Script. Run `diagnoseSetup()` in Apps Script to verify.
+*   **Legacy script "Unauthorized" error**: Check its private Script Properties with `diagnoseSetup()`; never log the value. Rotate the previously published token in any deployed script. The current patient app uses a server-issued patient identity for Central Backend requests.
 *   **Missing Data**: Ensure you have a stable internet connection for the first sync. The app will queue data offline if the connection is lost.
 *   **Build Failure**: Run `flutter clean` then `flutter pub get` to reset the build cache.
 

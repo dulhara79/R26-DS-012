@@ -54,7 +54,7 @@ function doGet(e) {
   var props    = PropertiesService.getScriptProperties();
   var token    = props.getProperty("AUTH_TOKEN");
   var received = e && e.parameter && e.parameter.token;
-  if (token && received !== token) return jsonErr("Unauthorized");
+  if (!token || received !== token) return jsonErr("Unauthorized");
   return jsonOk({ status: "healthy", study: "SLIIT Anxiety Research" });
 }
 
@@ -81,14 +81,13 @@ function doPost(e) {
 
   // 3. Auth
   var authToken = props.getProperty("AUTH_TOKEN");
-  if (authToken) {
-    var received = entries[0] && entries[0].token;
-    if (received !== authToken) {
-      console.warn("[AUTH FAIL] hash=" + hashString(String(received || "")));
-      return jsonErr("Unauthorized");
-    }
-    entries = entries.map(stripToken);
+  var received = entries[0] && entries[0].token;
+  if (!authToken || received !== authToken ||
+      !entries.every(function(entry) { return entry && entry.token === authToken; })) {
+    console.warn("[AUTH FAIL]");
+    return jsonErr("Unauthorized");
   }
+  entries = entries.map(stripToken);
 
   // 4. Sanitize
   entries = entries.map(sanitizeEntry);
@@ -613,7 +612,7 @@ function setupScript() {
   catch(e) { Logger.log("Restrict folder manually in Drive: " + e); }
 
   props.setProperty("DRIVE_FOLDER_ID",    folder.getId());
-  props.setProperty("AUTH_TOKEN",         "7c09db655b5f697a4faf0b18a517d5fb");
+  // Configure AUTH_TOKEN separately in Script Properties before deployment.
   props.setProperty("RESEARCHER_EMAILS",
     "it22130648@my.sliit.lk,it22171542@my.sliit.lk,it22107596@my.sliit.lk,it22093950@my.sliit.lk,dulhara.kaushalya79@gmail.com");
 
@@ -835,7 +834,7 @@ function listAllParticipants() {
 function rotateAuthToken(newToken) {
   if (!newToken || newToken.length < 16) { Logger.log("Token must be ≥16 chars."); return; }
   PropertiesService.getScriptProperties().setProperty("AUTH_TOKEN", newToken);
-  Logger.log("Rotated. Update _authToken in background_service_helper.dart and rebuild APK.");
+  Logger.log("Rotated. Update the AUTH_TOKEN build secret and rebuild the app.");
 }
 
 function generateAndSetNewToken() {
@@ -845,8 +844,7 @@ function generateAndSetNewToken() {
   // Save it using your existing function
   rotateAuthToken(newToken);
   
-  Logger.log("✅ NEW TOKEN GENERATED: " + newToken);
-  Logger.log("Copy the token above and update _authToken in your Flutter/Dart code!");
+  Logger.log("New token saved. Set the matching AUTH_TOKEN build secret securely.");
 }
 
 function deleteTestData() {

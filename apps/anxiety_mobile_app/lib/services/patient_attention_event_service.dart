@@ -64,28 +64,69 @@ class PatientAttentionEventService {
       PatientAttentionEventService._();
 
   static const Duration _pollInterval = Duration(minutes: 1);
+  static const Duration _maximumRetryInterval = Duration(minutes: 5);
   Timer? _timer;
   bool _requestInFlight = false;
+  bool _active = false;
+  int _generation = 0;
+  int _failures = 0;
 
   void startPolling() {
     _timer?.cancel();
-    unawaited(fetchOpenEvents());
-    _timer = Timer.periodic(_pollInterval, (_) => unawaited(fetchOpenEvents()));
+    _active = true;
+    _failures = 0;
+    final generation = ++_generation;
+    unawaited(_poll(generation));
   }
 
   void stopPolling() {
+    _active = false;
+    _generation++;
     _timer?.cancel();
     _timer = null;
   }
 
-  Future<List<PatientAttentionEvent>> fetchOpenEvents() async {
-    if (_requestInFlight) return const [];
+  Future<void> refreshNow() async {
+    if (!_active) return;
+    _timer?.cancel();
+    await _poll(_generation);
+  }
+
+  Future<void> _poll(int generation) async {
+    if (!_active || generation != _generation) return;
+    final result = await fetchOpenEvents(generation: generation);
+    if (!_active || generation != _generation) return;
+    if (result == null) {
+      _failures = (_failures + 1).clamp(0, 4);
+    } else {
+      _failures = 0;
+    }
+    final retry = Duration(seconds: 15 * (1 << _failures));
+    final delay = _failures == 0
+        ? _pollInterval
+        : retry > _maximumRetryInterval
+        ? _maximumRetryInterval
+        : retry;
+    _timer?.cancel();
+    _timer = Timer(delay, () => unawaited(_poll(generation)));
+  }
+
+  Future<List<PatientAttentionEvent>?> fetchOpenEvents({
+    int? generation,
+  }) async {
+    if (_requestInFlight) return null;
     _requestInFlight = true;
     try {
       final payloads = await ApiService.getOpenAttentionEvents();
-      if (payloads == null) return const [];
+      if (payloads == null) return null;
+      if (generation != null && (!_active || generation != _generation)) {
+        return const [];
+      }
       final events = <PatientAttentionEvent>[];
       for (final payload in payloads) {
+        if (generation != null && (!_active || generation != _generation)) {
+          break;
+        }
         try {
           final event = PatientAttentionEvent.fromJson(payload);
           events.add(event);
@@ -99,6 +140,9 @@ class PatientAttentionEventService {
         }
       }
       return events;
+    } catch (error) {
+      debugPrint('Patient attention polling failed: $error');
+      return null;
     } finally {
       _requestInFlight = false;
     }

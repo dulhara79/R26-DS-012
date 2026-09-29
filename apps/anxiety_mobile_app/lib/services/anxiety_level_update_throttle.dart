@@ -2,10 +2,7 @@ class AnxietyLevelUpdate {
   final String fromLevel;
   final String toLevel;
 
-  const AnxietyLevelUpdate({
-    required this.fromLevel,
-    required this.toLevel,
-  });
+  const AnxietyLevelUpdate({required this.fromLevel, required this.toLevel});
 
   String get message =>
       'Your anxiety level changed from $fromLevel to $toLevel.';
@@ -20,6 +17,7 @@ class AnxietyLevelUpdate {
 class AnxietyLevelUpdateThrottle {
   static const Set<String> _validLevels = {
     'Low',
+    'Medium',
     'Moderate',
     'Elevated',
     'High',
@@ -89,11 +87,7 @@ class AnxietyLevelUpdateThrottle {
     return remaining.isNegative ? Duration.zero : remaining;
   }
 
-  AnxietyLevelUpdate _deliver(
-    String from,
-    String to,
-    DateTime deliveredAt,
-  ) {
+  AnxietyLevelUpdate _deliver(String from, String to, DateTime deliveredAt) {
     _lastDeliveredAt = deliveredAt;
     _lastDeliveredLevel = to;
     _pendingLevel = null;

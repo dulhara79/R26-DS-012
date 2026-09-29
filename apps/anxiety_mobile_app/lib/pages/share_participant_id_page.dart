@@ -4,6 +4,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../services/api_service.dart';
 import '../services/participant_identity_service.dart';
+import '../services/patient_session_service.dart';
 
 class ShareParticipantIdPage extends StatelessWidget {
   final String participantId;
@@ -72,15 +73,15 @@ class ShareParticipantIdPage extends StatelessWidget {
       ),
     );
 
-    final result = await ApiService.pairWithCentralBackend(
-      participantId: participantId,
+    final expectedSubject =
+        await ParticipantIdentityService.getCentralSubjectId();
+    final subjectId = await ApiService.selfEnrol(
+      participantId,
       pairingCode: pairingCode,
+      expectedSubjectId: expectedSubject,
     );
-    if (result['success'] == true) {
-      final subjectId = await ApiService.selfEnrol(participantId);
-      await ParticipantIdentityService.saveCentralSubjectId(
-        subjectId ?? result['subject_id'].toString(),
-      );
+    if (subjectId != null) {
+      await ParticipantIdentityService.saveCentralSubjectId(subjectId);
     }
 
     if (!context.mounted) return;
@@ -88,10 +89,81 @@ class ShareParticipantIdPage extends StatelessWidget {
     messenger.showSnackBar(
       SnackBar(
         content: Text(
-          result['success'] == true
+          subjectId != null
               ? 'Aura is now connected to your doctor.'
-              : result['message']?.toString() ?? 'Could not connect Aura.',
+              : 'Could not confirm this code. Ask your doctor for a fresh pairing code.',
         ),
+      ),
+    );
+  }
+
+  Future<void> _inviteClinician(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    var session = await PatientSessionService.instance.currentSession();
+    if (session == null) {
+      final expected = await ParticipantIdentityService.getCentralSubjectId();
+      final subject = await ApiService.selfEnrol(
+        participantId,
+        expectedSubjectId: expected,
+      );
+      if (subject != null) {
+        await ParticipantIdentityService.saveCentralSubjectId(subject);
+        session = await PatientSessionService.instance.currentSession();
+      }
+    }
+    if (session == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Patient session unavailable. If your doctor enrolled first, enter their pairing code.',
+          ),
+        ),
+      );
+      return;
+    }
+    final invite = await ApiService.createAssignmentInvite();
+    if (!context.mounted) return;
+    if (invite == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not create an invitation. Check your connection and try again.',
+          ),
+        ),
+      );
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Clinician invitation'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Give this one-use code to your doctor. It does not contain your name or readings.',
+            ),
+            const SizedBox(height: 12),
+            SelectableText(invite.code),
+            const SizedBox(height: 8),
+            Text(
+              'Expires at ${invite.expiresAt.toLocal().hour.toString().padLeft(2, '0')}:${invite.expiresAt.toLocal().minute.toString().padLeft(2, '0')}',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: invite.code));
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
+            },
+            child: const Text('Copy code'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
       ),
     );
   }
@@ -195,6 +267,12 @@ class ShareParticipantIdPage extends StatelessWidget {
                   height: 1.45,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
+              ),
+              const SizedBox(height: 14),
+              OutlinedButton.icon(
+                onPressed: () => _inviteClinician(context),
+                icon: const Icon(Icons.person_add_alt_1_outlined),
+                label: const Text('Give clinician a code'),
               ),
               const SizedBox(height: 14),
               FilledButton.icon(

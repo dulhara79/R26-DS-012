@@ -120,6 +120,12 @@ class ParticipantIdentityService {
     return prefs.getString(centralSubjectIdKey);
   }
 
+  static Future<String?> getParticipantId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final id = prefs.getString(participantIdKey);
+    return id != null && isParticipantId(id) ? id : null;
+  }
+
   static Future<void> clearLocalIdentity() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(participantIdKey);

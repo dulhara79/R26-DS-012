@@ -22,6 +22,8 @@ import 'services/user_manager.dart';
 import 'services/participant_identity_service.dart';
 import 'services/api_service.dart';
 import 'services/anxiety_feedback_service.dart';
+import 'services/fusion_risk_service.dart';
+import 'services/patient_attention_event_service.dart';
 import 'services/research_permission_service.dart';
 import 'services/background/background_service.dart' as bg;
 import 'services/background/service_config.dart';
@@ -186,6 +188,20 @@ void main() async {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+      if (kReleaseMode && ApiService.backendRoot() == null) {
+        runApp(
+          const MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: Text(
+                  'This app has no secure clinical connection configured. Contact the study team.',
+                ),
+              ),
+            ),
+          ),
+        );
+        return;
+      }
       await ThemeController.instance.initialize();
 
       // Local notifications and background callbacks are mobile-only here.
@@ -220,6 +236,10 @@ void main() async {
                   : event != ConnectivityResult.none;
               if (connected && await _hasCurrentConsent()) {
                 await BackgroundServiceHelper.retryOfflineQueue();
+                if (UserManager().isLoggedIn) {
+                  unawaited(PatientAttentionEventService.instance.refreshNow());
+                  unawaited(FusionRiskService.instance.fetch());
+                }
               }
             } catch (e) {
               debugPrint('Connectivity callback error: $e');

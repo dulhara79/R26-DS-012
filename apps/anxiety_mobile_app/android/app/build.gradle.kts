@@ -55,7 +55,7 @@ android {
     buildTypes {
         // KOTLIN DSL UPDATE: Using getByName for modifying existing build types
         getByName("release") {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false 
             isShrinkResources = false
         }

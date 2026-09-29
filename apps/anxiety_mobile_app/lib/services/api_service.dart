@@ -4,18 +4,43 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'patient_session_service.dart';
+import 'participant_identity_service.dart';
+
+class AssignmentInvite {
+  const AssignmentInvite(this.code, this.expiresAt);
+  final String code;
+  final DateTime expiresAt;
+}
 
 class ApiService {
   // Replace this with your actual Hugging Face Space URL
   static const String baseUrl =
       'https://dewdu-physiological-anxiety-escalation.hf.space';
 
-  // The shared R26-DS-012 central backend used by both patient and clinician
-  // apps. BACKEND_BASE can override this default when the deployment changes.
+  // Backend URLs are injected per environment; an old tunnel is never a safe
+  // release fallback. Local HTTP is permitted only during development.
   static const String centralBackendBaseUrl = String.fromEnvironment(
     'BACKEND_BASE',
-    defaultValue: 'https://finalize-humbly-monastery.ngrok-free.dev',
+    defaultValue: '',
   );
+
+  static String? backendRoot([String? override]) {
+    final raw = (override ?? centralBackendBaseUrl).trim();
+    final uri = Uri.tryParse(raw);
+    if (uri == null ||
+        uri.host.isEmpty ||
+        (uri.scheme != 'https' &&
+            (kReleaseMode ||
+                uri.scheme != 'http' ||
+                !const [
+                  'localhost',
+                  '127.0.0.1',
+                  '10.0.2.2',
+                ].contains(uri.host)))) {
+      return null;
+    }
+    return raw.replaceFirst(RegExp(r'/$'), '');
+  }
 
   // INGEST ENDPOINT: Sends averaged features directly to the server
   static Future<bool> sendFeatureData({
@@ -69,64 +94,6 @@ class ApiService {
     } catch (e) {
       debugPrint('Network exception during feature ingest: $e');
       return false;
-    }
-  }
-
-  /// Links this app's pseudonymous participant ID to the subject created by
-  /// the clinician. The central backend intentionally exposes this pairing route
-  /// without the clinician bearer token because the short-lived code is the
-  /// credential being redeemed by the patient.
-  static Future<Map<String, dynamic>> pairWithCentralBackend({
-    required String participantId,
-    required String pairingCode,
-  }) async {
-    final backendBase = centralBackendBaseUrl.trim().replaceFirst(
-      RegExp(r'/$'),
-      '',
-    );
-    if (backendBase.isEmpty) {
-      return {
-        'success': false,
-        'message': 'The central backend is not configured in this app build.',
-      };
-    }
-
-    try {
-      final response = await http
-          .post(
-            Uri.parse('$backendBase/v1/subjects/pair'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'pairing_code': pairingCode.trim().toUpperCase(),
-              'app_user_id': participantId,
-            }),
-          )
-          .timeout(const Duration(seconds: 15));
-
-      Map<String, dynamic> decoded = <String, dynamic>{};
-      if (response.body.isNotEmpty) {
-        final body = jsonDecode(response.body);
-        if (body is Map) {
-          decoded = Map<String, dynamic>.from(body);
-        }
-      }
-
-      final subjectId = decoded['subject_id']?.toString() ?? '';
-      if (response.statusCode == 200 && subjectId.isNotEmpty) {
-        return {'success': true, 'subject_id': subjectId};
-      }
-
-      return {
-        'success': false,
-        'message':
-            decoded['detail']?.toString() ??
-            'The central backend rejected the pairing request.',
-      };
-    } catch (_) {
-      return {
-        'success': false,
-        'message': 'Could not connect to the central backend.',
-      };
     }
   }
 
@@ -247,18 +214,25 @@ class ApiService {
   // These methods talk to the R26-DS-012 central backend (the RAGF fusion
   // engine). They replace the dead sendToFusionModel placeholder.
 
-  static String get _backendRoot =>
-      centralBackendBaseUrl.trim().replaceFirst(RegExp(r'/$'), '');
-
   /// Claims a subject for this AURA installation on the central backend.
   /// Idempotent — safe to retry on every app launch.
-  static Future<String?> selfEnrol(String participantId) async {
+  static Future<String?> selfEnrol(
+    String participantId, {
+    String? pairingCode,
+    String? expectedSubjectId,
+    http.Client? client,
+    PatientSessionService? sessionService,
+    String? backendBase,
+  }) async {
+    final transport = client ?? http.Client();
     try {
-      final installationSecret = await PatientSessionService.instance
-          .getOrCreateInstallationSecret();
-      final res = await http
+      final root = backendRoot(backendBase);
+      if (root == null) return null;
+      final session = sessionService ?? PatientSessionService.instance;
+      final installationSecret = await session.getOrCreateInstallationSecret();
+      final res = await transport
           .post(
-            Uri.parse('$_backendRoot/v1/subjects/self'),
+            Uri.parse('$root/v1/subjects/self'),
             headers: const {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
@@ -266,6 +240,8 @@ class ApiService {
             body: jsonEncode({
               'app_user_id': participantId,
               'installation_secret': installationSecret,
+              if (pairingCode != null)
+                'pairing_code': pairingCode.trim().toUpperCase(),
             }),
           )
           .timeout(const Duration(seconds: 20));
@@ -277,10 +253,13 @@ class ApiService {
         final expiresAt = DateTime.tryParse(
           body['expires_at']?.toString() ?? '',
         );
-        if (subjectId.isEmpty || accessToken.isEmpty || expiresAt == null) {
+        if (subjectId.isEmpty ||
+            accessToken.isEmpty ||
+            expiresAt == null ||
+            (expectedSubjectId != null && subjectId != expectedSubjectId)) {
           return null;
         }
-        await PatientSessionService.instance.saveSession(
+        await session.saveSession(
           subjectId: subjectId,
           accessToken: accessToken,
           expiresAt: expiresAt,
@@ -288,6 +267,48 @@ class ApiService {
         return subjectId;
       }
       return null;
+    } catch (_) {
+      return null;
+    } finally {
+      if (client == null) transport.close();
+    }
+  }
+
+  /// Existing patient-first subjects authorize clinicians through a short-lived
+  /// patient-issued invite; the clinician app redeems the code with its JWT.
+  static Future<AssignmentInvite?> createAssignmentInvite({
+    http.Client? client,
+    PatientSessionService? sessionService,
+    String? participantId,
+    String? backendBase,
+  }) async {
+    final root = backendRoot(backendBase);
+    if (root == null) return null;
+    final expectedSubject =
+        await ParticipantIdentityService.getCentralSubjectId() ??
+        (await (sessionService ?? PatientSessionService.instance)
+                .currentSession())
+            ?.subjectId;
+    if (expectedSubject == null) return null;
+    try {
+      final res = await _requestWithRecovery(
+        Uri.parse('$root/v1/patients/me/assignment-invites'),
+        expectedSubjectId: expectedSubject,
+        postBody: '{}',
+        client: client,
+        sessionService: sessionService,
+        participantId: participantId,
+        backendBase: backendBase,
+      );
+      if (res == null) return null;
+      if (res.statusCode != 200) return null;
+      final body = jsonDecode(res.body);
+      if (body is! Map || body['invite_code'] is! String) return null;
+      final expiry = DateTime.tryParse(body['expires_at']?.toString() ?? '');
+      if (expiry == null || !expiry.isAfter(DateTime.now().toUtc())) {
+        return null;
+      }
+      return AssignmentInvite(body['invite_code'] as String, expiry);
     } catch (_) {
       return null;
     }
@@ -303,9 +324,9 @@ class ApiService {
     String? edu,
   }) async {
     try {
-      final headers = await PatientSessionService.instance
-          .authenticatedHeaders();
-      if (headers == null) return false;
+      final root = backendRoot();
+      final subjectId = await ParticipantIdentityService.getCentralSubjectId();
+      if (root == null || subjectId == null) return false;
       final payload = <String, dynamic>{
         'app_user_id': participantId,
         'gad7_items': gad7Items,
@@ -313,14 +334,12 @@ class ApiService {
       if (gender != null) payload['gender'] = gender.toLowerCase();
       if (age != null) payload['age'] = age;
       if (edu != null) payload['edu'] = edu;
-      final res = await http
-          .post(
-            Uri.parse('$_backendRoot/v1/ingest/contextual'),
-            headers: headers,
-            body: jsonEncode(payload),
-          )
-          .timeout(const Duration(seconds: 20));
-      return res.statusCode == 200;
+      final res = await _requestWithRecovery(
+        Uri.parse('$root/v1/ingest/contextual'),
+        expectedSubjectId: subjectId,
+        postBody: jsonEncode(payload),
+      );
+      return res?.statusCode == 200;
     } catch (_) {
       return false;
     }
@@ -331,20 +350,18 @@ class ApiService {
     required String participantId,
   }) async {
     try {
-      final headers = await PatientSessionService.instance
-          .authenticatedHeaders();
-      if (headers == null) return false;
-      final res = await http
-          .post(
-            Uri.parse('$_backendRoot/v1/ingest/physiological'),
-            headers: headers,
-            body: jsonEncode({
-              'app_user_id': participantId,
-              'device_user_id': participantId,
-            }),
-          )
-          .timeout(const Duration(seconds: 20));
-      return res.statusCode == 200;
+      final root = backendRoot();
+      final subjectId = await ParticipantIdentityService.getCentralSubjectId();
+      if (root == null || subjectId == null) return false;
+      final res = await _requestWithRecovery(
+        Uri.parse('$root/v1/ingest/physiological'),
+        expectedSubjectId: subjectId,
+        postBody: jsonEncode({
+          'app_user_id': participantId,
+          'device_user_id': participantId,
+        }),
+      );
+      return res?.statusCode == 200;
     } catch (_) {
       return false;
     }
@@ -352,17 +369,25 @@ class ApiService {
 
   /// Reads the latest fusion composite for the AURA home page.
   /// Returns {composite, band, message} or null on failure.
-  static Future<Map<String, dynamic>?> getPatientRisk(String subjectId) async {
+  static Future<Map<String, dynamic>?> getPatientRisk(
+    String subjectId, {
+    http.Client? client,
+    PatientSessionService? sessionService,
+    String? participantId,
+    String? backendBase,
+  }) async {
     try {
-      final headers = await PatientSessionService.instance
-          .authenticatedHeaders();
-      if (headers == null) return null;
-      final res = await http
-          .get(
-            Uri.parse('$_backendRoot/v1/patients/$subjectId/risk'),
-            headers: headers,
-          )
-          .timeout(const Duration(seconds: 15));
+      final root = backendRoot(backendBase);
+      if (root == null) return null;
+      final res = await _requestWithRecovery(
+        Uri.parse('$root/v1/patients/${Uri.encodeComponent(subjectId)}/risk'),
+        expectedSubjectId: subjectId,
+        client: client,
+        sessionService: sessionService,
+        participantId: participantId,
+        backendBase: backendBase,
+      );
+      if (res == null) return null;
       if (res.statusCode == 200) {
         return jsonDecode(res.body) as Map<String, dynamic>;
       }
@@ -375,18 +400,14 @@ class ApiService {
   /// Reads the patient-safe projection of server-created OPEN events.
   static Future<List<Map<String, dynamic>>?> getOpenAttentionEvents() async {
     try {
-      final headers = await PatientSessionService.instance.authenticatedHeaders(
-        includeJsonContentType: false,
+      final root = backendRoot();
+      final subjectId = await ParticipantIdentityService.getCentralSubjectId();
+      if (root == null || subjectId == null) return null;
+      final res = await _requestWithRecovery(
+        Uri.parse('$root/v1/patients/me/attention-events?status=OPEN'),
+        expectedSubjectId: subjectId,
       );
-      if (headers == null) return null;
-      final res = await http
-          .get(
-            Uri.parse(
-              '$_backendRoot/v1/patients/me/attention-events?status=OPEN',
-            ),
-            headers: headers,
-          )
-          .timeout(const Duration(seconds: 15));
+      if (res == null) return null;
       if (res.statusCode != 200) return null;
       final decoded = jsonDecode(res.body);
       if (decoded is! Map || decoded['events'] is! List) return null;
@@ -399,59 +420,109 @@ class ApiService {
     }
   }
 
-  // ─── FUSION ENDPOINT ─────────────────────────────────────────────────────────
-  // Sends our physiological trajectory to the teammate's multi-modal fusion model.
-  // The fusion model receives our 10-step forecast and a single aggregated
-  // physiological risk score, then weights and combines them with other modalities
-  // (e.g. digital phenotyping) to produce a final holistic risk decision.
-  //
-  // TODO: Replace [fusionBaseUrl] with the teammate's actual endpoint URL
-  //       once their Hugging Face Space is deployed.
-  static const String _fusionBaseUrl =
-      'https://PLACEHOLDER_FUSION_ENDPOINT.hf.space'; // ← swap this URL
+  static Future<bool>? _renewalInFlight;
+  static String? _renewalSubject;
 
-  static Future<Map<String, dynamic>> sendToFusionModel({
-    required String userId,
-    required List<double> trajectory,
-    required double physiologicalRiskScore,
+  static Future<bool> _renewSession(
+    String expectedSubjectId, {
+    http.Client? client,
+    PatientSessionService? sessionService,
+    String? participantId,
+    String? backendBase,
   }) async {
-    if (_fusionBaseUrl.contains('PLACEHOLDER_FUSION_ENDPOINT')) {
-      return {
-        'success': false,
-        'status': 'not_configured',
-        'message': 'Fusion endpoint is not configured yet',
-      };
+    final pending = _renewalInFlight;
+    if (client == null && sessionService == null && pending != null) {
+      return _renewalSubject == expectedSubjectId ? pending : false;
     }
-
+    final refresh = () async {
+      final id =
+          participantId ?? await ParticipantIdentityService.getParticipantId();
+      if (id == null) return false;
+      return (await selfEnrol(
+            id,
+            expectedSubjectId: expectedSubjectId,
+            client: client,
+            sessionService: sessionService,
+            backendBase: backendBase,
+          )) ==
+          expectedSubjectId;
+    }();
+    if (client == null && sessionService == null) {
+      _renewalInFlight = refresh;
+      _renewalSubject = expectedSubjectId;
+    }
     try {
-      final response = await http
-          .post(
-            Uri.parse('$_fusionBaseUrl/fuse'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'user_id': userId,
-              // 10-step future anxiety trajectory from our LSTM-AE
-              'physiological_trajectory': trajectory,
-              // Single aggregated risk score (0–100) derived from the trajectory
-              'physiological_risk_score': physiologicalRiskScore,
-              'timestamp': DateTime.now().toIso8601String(),
-            }),
-          )
-          .timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-        debugPrint('[Fusion] Score received: $decoded');
-        return {'success': true, ...decoded};
-      } else {
-        debugPrint('[Fusion] Endpoint rejected request: ${response.body}');
-        return {'success': false, 'message': 'Fusion endpoint error'};
+      return await refresh;
+    } finally {
+      if (identical(_renewalInFlight, refresh)) {
+        _renewalInFlight = null;
+        _renewalSubject = null;
       }
-    } catch (e) {
-      // Silently fail — fusion is a cross-team integration and should never
-      // crash our own app if the teammate's server is offline.
-      debugPrint('[Fusion] Could not reach fusion endpoint: $e');
-      return {'success': false, 'message': 'Fusion offline'};
+    }
+  }
+
+  /// One installation-proof renewal and one retry at most. The old subject ID
+  /// is checked before storing a new JWT; a mismatched response cannot retarget
+  /// a cached clinical view to a different patient.
+  static Future<http.Response?> _requestWithRecovery(
+    Uri url, {
+    required String expectedSubjectId,
+    String? postBody,
+    http.Client? client,
+    PatientSessionService? sessionService,
+    String? participantId,
+    String? backendBase,
+  }) async {
+    final sessions = sessionService ?? PatientSessionService.instance;
+    final transport = client ?? http.Client();
+    try {
+      var current = await sessions.currentSession();
+      if (current == null) {
+        if (!await _renewSession(
+          expectedSubjectId,
+          client: client,
+          sessionService: sessionService,
+          participantId: participantId,
+          backendBase: backendBase,
+        )) {
+          return null;
+        }
+        current = await sessions.currentSession();
+      }
+      if (current == null || current.subjectId != expectedSubjectId) {
+        return null;
+      }
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final headers = {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer ${current!.accessToken}',
+          if (postBody != null) 'Content-Type': 'application/json',
+        };
+        final result =
+            await (postBody == null
+                    ? transport.get(url, headers: headers)
+                    : transport.post(url, headers: headers, body: postBody))
+                .timeout(const Duration(seconds: 20));
+        if (result.statusCode != 401) return result;
+        await sessions.clearSession();
+        if (attempt == 1 ||
+            !await _renewSession(
+              expectedSubjectId,
+              client: client,
+              sessionService: sessionService,
+              participantId: participantId,
+              backendBase: backendBase,
+            )) {
+          return null;
+        }
+        current = await sessions.currentSession();
+        if (current == null || current.subjectId != expectedSubjectId) {
+          return null;
+        }
+      }
+      return null;
+    } finally {
+      if (client == null) transport.close();
     }
   }
 }

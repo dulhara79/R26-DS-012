@@ -91,9 +91,9 @@ class _LoginPageState extends State<LoginPage> {
         destination = MainNavigationPage(userId: account.participantId);
       }
 
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => destination),
-      );
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => destination));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -123,9 +123,9 @@ class _LoginPageState extends State<LoginPage> {
       await _startCollectionIfPossible();
 
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const ProfilePage()),
-      );
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const ProfilePage()));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -202,7 +202,7 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Sign in to continue, or create a simple demo account.',
+                      'Use your account on this device to continue.',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.poppins(
                         fontSize: 13.5,
@@ -223,10 +223,9 @@ class _LoginPageState extends State<LoginPage> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surface
-                            .withValues(alpha: 0.72),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surface.withValues(alpha: 0.72),
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: Row(
@@ -240,8 +239,7 @@ class _LoginPageState extends State<LoginPage> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Demo authentication only: no JWT, refresh token, or server session is used. '
-                              'The account exists only on this device. Research data still uses a separate random Participant ID.',
+                              'This account exists only on this device. Your clinical connection uses a separate, secure patient session and Participant ID.',
                               style: GoogleFonts.poppins(
                                 fontSize: 10.5,
                                 height: 1.45,
@@ -385,7 +383,7 @@ class _LoginPageState extends State<LoginPage> {
             ),
             const SizedBox(height: 10),
             Text(
-              'For the demo, log in with an account previously created on this device.',
+              'Log in with the account previously created on this device.',
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(
                 fontSize: 10.5,
@@ -541,37 +539,33 @@ class _LoginPageState extends State<LoginPage> {
       autovalidateMode: AutovalidateMode.onUserInteraction,
       onFieldSubmitted: onSubmitted,
       style: GoogleFonts.poppins(fontSize: 13.5),
-      decoration: _inputDecoration(
-        label,
-        'Enter your password',
-        Icons.lock_outline_rounded,
-      ).copyWith(
-        suffixIcon: IconButton(
-          onPressed: onVisibilityChanged,
-          icon: Icon(
-            visible
-                ? Icons.visibility_off_outlined
-                : Icons.visibility_outlined,
+      decoration:
+          _inputDecoration(
+            label,
+            'Enter your password',
+            Icons.lock_outline_rounded,
+          ).copyWith(
+            suffixIcon: IconButton(
+              onPressed: onVisibilityChanged,
+              icon: Icon(
+                visible
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+              ),
+            ),
           ),
-        ),
-      ),
     );
   }
 
-  InputDecoration _inputDecoration(
-    String label,
-    String hint,
-    IconData icon,
-  ) {
+  InputDecoration _inputDecoration(String label, String hint, IconData icon) {
     return InputDecoration(
       labelText: label,
       hintText: hint,
       prefixIcon: Icon(icon),
       filled: true,
-      fillColor: Theme.of(context)
-          .colorScheme
-          .surfaceContainerHighest
-          .withValues(alpha: 0.52),
+      fillColor: Theme.of(
+        context,
+      ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.52),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide.none,
@@ -584,10 +578,7 @@ class _LoginPageState extends State<LoginPage> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(
-          color: AppTheme.kPrimaryDeep,
-          width: 1.5,
-        ),
+        borderSide: const BorderSide(color: AppTheme.kPrimaryDeep, width: 1.5),
       ),
     );
   }
@@ -616,7 +607,9 @@ class _LoginPageState extends State<LoginPage> {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppTheme.kPrimaryDeep,
           foregroundColor: Colors.white,
-          disabledBackgroundColor: AppTheme.kPrimaryDeep.withValues(alpha: 0.55),
+          disabledBackgroundColor: AppTheme.kPrimaryDeep.withValues(
+            alpha: 0.55,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
