@@ -1,9 +1,9 @@
 // lib/features/alerts/alerts_screen.dart
 //
-// The escalation queue. Every RED and DARK RED composite raises an alert here,
-// and an alert is only cleared when a named clinician acknowledges it — the app
-// never claims someone has been notified, only that a notice was raised and
-// whether anyone has picked it up.
+// Legacy local alert-history UI retained for compatibility with older local
+// records. It is not part of the active ClinAnx shell and is not an authoritative
+// escalation/event source. The Central Backend AttentionEvent lifecycle owns
+// current urgency, acknowledgement and resolution.
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -15,7 +15,7 @@ import '../../core/design/tokens.dart';
 import '../../data/local/stores.dart';
 import '../../domain/models.dart';
 import '../../state/controllers.dart';
-import '../shell.dart';
+import '../chart/patient_chart_screen.dart';
 
 class AlertsScreen extends StatelessWidget {
   const AlertsScreen({super.key});
@@ -76,7 +76,7 @@ class _AlertRow extends StatelessWidget {
                 final p = roster.patients
                     .where((x) => x.mrn == alert.patientMrn)
                     .firstOrNull;
-                if (p != null) openChart(context, p);
+                if (p != null) _openLegacyChart(context, p);
               },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -139,4 +139,14 @@ class _AlertRow extends StatelessWidget {
     if (d.inDays < 7) return '${d.inDays}d ago';
     return DateFormat('d MMM').format(t);
   }
+}
+
+
+void _openLegacyChart(BuildContext context, Patient patient) {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => PatientChartScreen(patient: patient),
+    ),
+  );
 }

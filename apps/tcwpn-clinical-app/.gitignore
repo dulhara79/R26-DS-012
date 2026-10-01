@@ -78,8 +78,16 @@ app.*.map.json
 *.key
 *.mobileprovision
 
+# Firebase / push provider local configuration
+# Phase 7 uses --dart-define values in reviewed builds; never commit service
+# accounts or downloaded per-project native config files accidentally.
+**/google-services.json
+**/GoogleService-Info.plist
+*firebase-adminsdk*.json
+*service-account*.json
+
 BUILD.md
 .env
-.env
-.env
 .env.bak
+android/app/google-services-primary.json
+android/app/google-services-secondary.json

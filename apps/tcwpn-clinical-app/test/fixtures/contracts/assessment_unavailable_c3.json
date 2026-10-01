@@ -1,0 +1,40 @@
+{
+  "subject_id": "subject-003",
+  "fusion_result_id": 125,
+  "current_assessment": {"score": null, "tier": null, "band": "GREY"},
+  "forecast": null,
+  "confidence": null,
+  "assessment_status": "unavailable",
+  "modalities": [
+    {
+      "component_id": "c1_physiological",
+      "score": null,
+      "available": false,
+      "included_in_fusion": false,
+      "status": "stale"
+    },
+    {
+      "component_id": "c2_behavioral",
+      "score": null,
+      "available": false,
+      "included_in_fusion": false,
+      "status": "not_validated"
+    },
+    {
+      "component_id": "c3_clinical_nlp",
+      "score": null,
+      "available": false,
+      "included_in_fusion": false,
+      "status": "no_support_set"
+    },
+    {
+      "component_id": "c4_demographic",
+      "score": 0.43,
+      "available": true,
+      "included_in_fusion": false,
+      "status": "ok"
+    }
+  ],
+  "computed_at": "2026-09-15T10:00:00Z",
+  "model_version": "ragf-v0.4"
+}
