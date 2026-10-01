@@ -1,0 +1,19 @@
+{
+  "subject_id": "subject-001",
+  "display_id": "Patient A",
+  "fusion_result_id": 123,
+  "current": {"score": 0.58, "tier": "Medium", "band": "AMBER"},
+  "forecast": {
+    "forecast_result_id": "fcst-001",
+    "scope": "physiological",
+    "horizon_minutes": 10,
+    "score": 0.84,
+    "tier": "High",
+    "escalation_predicted": true,
+    "generated_at": "2026-09-15T10:00:00Z",
+    "valid_until": "2026-09-15T10:10:00Z"
+  },
+  "assessment_status": "complete",
+  "last_updated": "2026-09-15T10:00:00Z",
+  "open_event_count": 1
+}

@@ -218,10 +218,12 @@ class _LoginScreenState extends State<LoginScreen> {
         clinicianId: session.clinicianId,
         clinicianName: session.displayName,
         token: session.token,
+        expiresAt: session.expiresAt,
       );
       Session.set(
         token: session.token,
         clinicianId: session.clinicianId,
+        expiresAt: session.expiresAt,
       );
       // Links the acceptance record to the clinician. One-way: fills a null
       // field only, never overwrites.
@@ -292,13 +294,11 @@ class _DevHint extends StatelessWidget {
           children: [
             Text('DEVELOPMENT CREDENTIALS', style: AppTheme.eyebrow),
             const SizedBox(height: Ds.s2),
-            Text('DR001  ·  clinanx-dev',
-                style: AppTheme.data(size: 12, weight: FontWeight.w600)),
-            Text('DR002  ·  clinanx-dev',
+            Text('Configure demo accounts with AUTH_LOCAL.',
                 style: AppTheme.data(size: 12, weight: FontWeight.w600)),
             const SizedBox(height: Ds.s2),
             const Text(
-              'Demo/local credentials. Never use this branch with real patient data.',
+              'Local authentication is for development only. Never use it with real patient data.',
               style: TextStyle(fontSize: 11, color: Ds.inkFaint),
             ),
           ],
