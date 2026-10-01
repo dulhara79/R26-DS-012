@@ -15,6 +15,11 @@ void main() {
 
     expect(find.byType(QrImageView), findsOneWidget);
     expect(
+      find.textContaining('does not give a clinician access'),
+      findsOneWidget,
+    );
+    expect(find.text('Give clinician a code'), findsOneWidget);
+    expect(
       find.byWidgetPredicate(
         (widget) => widget is SelectableText && widget.data == participantId,
       ),

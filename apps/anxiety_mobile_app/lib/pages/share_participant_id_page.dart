@@ -178,7 +178,7 @@ class ShareParticipantIdPage extends StatelessWidget {
           child: Column(
             children: [
               Text(
-                'Ask your doctor to scan this code',
+                'Share your participant ID',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w700,
@@ -186,8 +186,8 @@ class ShareParticipantIdPage extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               Text(
-                'The code contains only your Aura Participant ID. '
-                'It does not contain your name, readings, or diagnosis.',
+                'This QR contains only your Aura Participant ID. It does not give a clinician access to your record. '
+                'To link a clinician, use “Give clinician a code” below. It does not contain your name, readings, or diagnosis.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   height: 1.5,

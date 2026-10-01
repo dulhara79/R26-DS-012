@@ -87,12 +87,20 @@ presented as a clinical anxiety probability.
 
 ## Build
 
+Use an approved HTTPS Central Backend URL and protected Android release signing
+configuration. Set `BACKEND_BASE` in the local environment and create untracked
+`android/key.properties` with `storeFile`, `storePassword`, `keyAlias`, and
+`keyPassword` pointing to the approved keystore. The main release workflow
+requires the corresponding repository secrets and fails if any are missing.
+Do not place signing credentials in `--dart-define` values or source control.
+
 ```powershell
 flutter pub get
 
 flutter build apk --release `
   --obfuscate `
   --split-debug-info=./debug-info `
+  --dart-define=BACKEND_BASE="$env:BACKEND_BASE" `
   --dart-define=SUPABASE_URL="YOUR_SUPABASE_URL" `
   --dart-define=SUPABASE_PUBLISHABLE_KEY="YOUR_PUBLISHABLE_KEY" `
   --dart-define=COMPONENT2_API_URL="https://YOUR_COMPONENT2_BACKEND/api"
