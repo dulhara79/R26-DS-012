@@ -62,17 +62,35 @@ RAG_TIMEOUT_S = float(os.getenv("RAG_TIMEOUT_S", "60"))
 # backstop, not the primary safety mechanism; CARE-AnxRAG's own safety_level
 # is the primary one.
 _CRISIS_PATTERNS = [
-    r"suicid", r"self[\s-]?harm", r"kill (him|her|them|my)self",
-    r"end (his|her|their|my) life", r"overdose", r"\bod\b",
-    r"hurt (him|her|them|my)self",
+    r"\bkill myself\b",
+    r"\bend my life\b",
+    r"\b(?:wanting|wants?|plans?|intends?|going) to end (?:his|her|their) life\b",
+    r"\b(?:wanting|wants?|plans?|intends?|going) to kill (?:himself|herself|themselves)\b",
+    r"\bi(?:'m| am| feel| have been)?\s+suicidal\b",
+    r"\bmy suicidal (?:thoughts|plan|intent)\b",
+    r"\b(?:want|plan|intend|going) to (?:die|kill myself|end my life)\b",
+    r"\bself[- ]?harm(?:ing)? myself\b",
+    r"\bhurt myself\b",
+    r"\boverdose myself\b",
+    r"\bno reason to live\b",
 ]
+
+
+def _has_non_negated_match(text: str, patterns: list[str]) -> bool:
+    for pattern in patterns:
+        for match in re.finditer(pattern, text):
+            prefix = text[max(0, match.start() - 24):match.start()]
+            if re.search(r"\b(not|never|no longer|without|do not|don't|am not|i'm not)\s+$", prefix):
+                continue
+            return True
+    return False
 
 
 def local_crisis_prescreen(question: Optional[str]) -> bool:
     if not question:
         return False
     q = question.lower()
-    return any(re.search(p, q) for p in _CRISIS_PATTERNS)
+    return _has_non_negated_match(q, _CRISIS_PATTERNS)
 
 
 @dataclass
@@ -98,6 +116,7 @@ class RagResult:
     safety_message: Optional[str] = None
     local_crisis_bypass: bool = False      # True = our pre-screen fired, RAG never called
     error: Optional[str] = None
+    latest_evidence_at: Optional[str] = None
     knowledge_base_last_sync_at: Optional[str] = None
     latency_ms: Optional[int] = None
 
@@ -114,6 +133,7 @@ class RagResult:
             "safety_message": self.safety_message,
             "local_crisis_bypass": self.local_crisis_bypass,
             "error": self.error,
+            "latest_evidence_at": self.latest_evidence_at,
             "knowledge_base_last_sync_at": self.knowledge_base_last_sync_at,
             "latency_ms": self.latency_ms,
         }
@@ -122,7 +142,7 @@ class RagResult:
 def _headers() -> dict:
     h = {"Content-Type": "application/json"}
     if RAG_TOKEN:
-        h["Authorization"] = f"Bearer {RAG_TOKEN}"
+        h["X-Admin-Key"] = RAG_TOKEN
     return h
 
 
@@ -164,6 +184,7 @@ def call_rag(question: str, client: Optional[httpx.Client] = None) -> RagResult:
             abstention_reason=body.get("abstention_reason"),
             safety_level=body.get("safety_level", "unknown"),
             safety_message=body.get("safety_message"),
+            latest_evidence_at=body.get("latest_evidence_at"),
             knowledge_base_last_sync_at=body.get("knowledge_base_last_sync_at"),
             latency_ms=latency)
     except httpx.TimeoutException:
