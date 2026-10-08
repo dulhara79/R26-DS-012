@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -52,9 +51,8 @@ class ChestStrapReading {
       rmssd: double.parse(parts[4].trim()),
       meanBR: double.parse(parts[5].trim()),
       stdBR: double.parse(parts[6].trim()),
-      // Keep temperature in the required 36.0-38.0 °C range regardless of
-      // the raw chest-strap temperature reading.
-      meanTemp: 36.0 + Random().nextDouble() * 2.0,
+      // Use the actual chest-strap temperature, adjusted down by 4 °C.
+      meanTemp: double.parse(parts[7].trim()) - 4.0,
       stdTemp: double.parse(parts[8].trim()),
       meanAccMag: double.parse(parts[9].trim()),
       stdAccMag: double.parse(parts[10].trim()),
@@ -84,8 +82,7 @@ class ChestStrapReading {
 
   factory ChestStrapReading.fromJson(Map<String, dynamic> json) {
     final double meanHR = (json['meanHR'] as num).toDouble();
-    // Regenerate on load so persisted values also stay within the range.
-    final double meanTemp = 36.0 + Random().nextDouble() * 2.0;
+    final double meanTemp = (json['meanTemp'] as num).toDouble();
     return ChestStrapReading(
       timestamp: json['timestamp'] as int,
       meanHR: meanHR,
