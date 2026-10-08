@@ -1,17 +1,30 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/background_service_helper.dart';
+import '../services/c2_view_logic.dart';
+import '../services/clinician_insight_service.dart';
 import '../services/component2_data_service.dart';
+import '../services/self_report_history_service.dart';
+import '../theme/c2_palette.dart';
+import '../widgets/c2/crisis_banner.dart';
+import 'clinician_summary_page.dart';
 import 'digital_phenotyping_page.dart';
+
+typedef _C = C2Palette;
 
 class ParticipantBehaviorPage extends StatefulWidget {
   final String? userId;
 
-  const ParticipantBehaviorPage({super.key, this.userId});
+  /// Status of the sync that ran just before this page opened
+  /// (see [Component2SyncResult.status]). Null when no sync was attempted.
+  final String? syncStatus;
+
+  const ParticipantBehaviorPage({super.key, this.userId, this.syncStatus});
 
   @override
   State<ParticipantBehaviorPage> createState() =>
@@ -23,14 +36,20 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
   bool _showCollectionDetails = false;
 
   String _participantId = '';
+  String? _syncStatus;
+  DateTime? _lastSync;
+  bool _synthetic = false;
+
   int _daysEnrolled = 0;
   int _daysWithData = 0;
   int _baselineCalendarDaysElapsed = 0;
   int _baselineDaysAvailable = 0;
   int _baselineUsableDays = 0;
-  int _baselineDaysRequired = 28;
+  int _baselineDaysRequired = kC2BaselineDays;
   int _baselineMinUsableDays = 14;
+  int _recentUsableDays = 0;
   bool _baselineReadyFromBackend = false;
+  bool _reportable = false;
   int _emaReceived = 0;
   int _emaExpected = 0;
   int _pendingUploads = 0;
@@ -39,11 +58,13 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
   List<_PatternItem> _patterns = const [];
   _ChangeDetection? _changeDetection;
   List<_CoverageDay> _coverage = const [];
-  List<Map<String, dynamic>> _checkIns = const [];
+  int _selfReports30d = 0;
+  int _alertCheckIns30d = 0;
 
   @override
   void initState() {
     super.initState();
+    _syncStatus = widget.syncStatus;
     _load();
   }
 
@@ -75,16 +96,7 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
         ? payload!['observations'] as Map<String, dynamic>
         : <String, dynamic>{};
 
-    final patterns = observations.entries.map((entry) {
-      final value = entry.value is Map<String, dynamic>
-          ? entry.value as Map<String, dynamic>
-          : <String, dynamic>{};
-      return _PatternItem(
-        label: (value['label'] ?? _friendlyLabel(entry.key)).toString(),
-        direction: (value['direction'] ?? 'unknown').toString(),
-        z: (value['z'] as num?)?.toDouble(),
-      );
-    }).toList();
+    final patterns = _orderedPatterns(observations);
 
     _ChangeDetection? change;
     final changeRaw = payload?['change_detection'];
@@ -104,15 +116,16 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
       } catch (_) {}
     }
 
-    List<Map<String, dynamic>> checkIns = [];
-    final checkInRaw = prefs.getString('c2_checkin_history');
-    if (checkInRaw != null && checkInRaw.isNotEmpty) {
-      try {
-        checkIns = (jsonDecode(checkInRaw) as List)
-            .whereType<Map<String, dynamic>>()
-            .toList();
-      } catch (_) {}
-    }
+    // Check-ins come from the participant's own local history. The backend's
+    // `checkin_history` field is always empty, so it is not used here.
+    final selfReports = await SelfReportHistoryService.loadRecords(
+      id,
+      days: 30,
+    );
+    final alertCheckIns = await ClinicianInsightService.loadCheckInRecords(
+      id,
+      days: 30,
+    );
 
     final queueSize = await BackgroundServiceHelper.getOfflineQueueSize();
     final running = await BackgroundServiceHelper.isServiceRunning();
@@ -120,6 +133,10 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
     if (!mounted) return;
     setState(() {
       _participantId = id;
+      _lastSync = DateTime.tryParse(
+        prefs.getString('c2_last_sync_utc') ?? '',
+      )?.toLocal();
+      _synthetic = payload?['synthetic'] == true;
       // Prefer backend study-enrollment age when available. Reinstalling the
       // app can reset local SharedPreferences while backend history survives.
       _daysEnrolled =
@@ -127,7 +144,7 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
       _daysWithData = (quality['days_with_data'] as num?)?.toInt() ?? 0;
       _baselineCalendarDaysElapsed =
           (quality['baseline_calendar_days_elapsed'] as num?)?.toInt() ??
-          daysEnrolled.clamp(0, 28);
+          daysEnrolled.clamp(0, kC2BaselineDays);
       _baselineDaysAvailable =
           (quality['baseline_days_with_features'] as num?)?.toInt() ??
           (quality['baseline_days_available'] as num?)?.toInt() ??
@@ -135,26 +152,56 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
       _baselineUsableDays =
           (quality['baseline_usable_days'] as num?)?.toInt() ?? 0;
       _baselineDaysRequired =
-          (quality['baseline_days_required'] as num?)?.toInt() ?? 28;
+          (quality['baseline_days_required'] as num?)?.toInt() ??
+          kC2BaselineDays;
       _baselineMinUsableDays =
           (quality['baseline_min_usable_days'] as num?)?.toInt() ?? 14;
+      _recentUsableDays = (quality['recent_usable_days'] as num?)?.toInt() ?? 0;
       _baselineReadyFromBackend = payload?['baseline_ready'] == true;
+      _reportable = payload?['reportable'] == true;
       _emaReceived = (quality['ema_received'] as num?)?.toInt() ?? 0;
       _emaExpected = (quality['ema_expected'] as num?)?.toInt() ?? 0;
       _patterns = patterns;
       _changeDetection = change;
       _coverage = coverage;
-      _checkIns = checkIns;
+      _selfReports30d = selfReports.length;
+      _alertCheckIns30d = alertCheckIns.length;
       _pendingUploads = queueSize;
       _serviceRunning = running;
       _loading = false;
     });
   }
 
+  /// The four thesis observations first, in a fixed order, followed by any
+  /// additional observation the backend sends. Observations the backend did
+  /// not send are shown as "not enough information yet".
+  static List<_PatternItem> _orderedPatterns(Map<String, dynamic> raw) {
+    _PatternItem fromEntry(String key, String fallbackLabel) {
+      final value = raw[key] is Map<String, dynamic>
+          ? raw[key] as Map<String, dynamic>
+          : <String, dynamic>{};
+      return _PatternItem(
+        label: (value['label'] ?? fallbackLabel).toString(),
+        direction: (value['direction'] ?? 'unknown').toString(),
+        z: (value['z'] as num?)?.toDouble(),
+        value: (value['value'] as num?)?.toDouble(),
+        unit: (value['unit'] ?? '').toString(),
+      );
+    }
+
+    final known = kC2Observations.map((spec) => spec.key).toSet();
+    return [
+      for (final spec in kC2Observations) fromEntry(spec.key, spec.label),
+      for (final key in raw.keys)
+        if (!known.contains(key)) fromEntry(key, _friendlyLabel(key)),
+    ];
+  }
+
   Future<void> _refreshFromBackend() async {
     final id = widget.userId ?? await BackgroundServiceHelper.getCachedId();
     if (id.isNotEmpty && id != 'No_User_ID') {
-      await Component2DataService.sync(id);
+      final result = await Component2DataService.sync(id);
+      _syncStatus = result.status;
     }
     await _load();
   }
@@ -169,39 +216,70 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
 
   bool get _baselineReady => _baselineReadyFromBackend;
 
-  ColorScheme get _colors => Theme.of(context).colorScheme;
-  Color get _primaryText => _colors.onSurface;
-  Color get _secondaryText => _colors.onSurfaceVariant;
-  Color get _mutedText => _colors.onSurfaceVariant.withValues(alpha: 0.78);
+  void _openDetails() {
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => DigitalPhenotypingPage(userId: widget.userId),
+          ),
+        )
+        .then((_) => _load());
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: _C.scaffold,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        backgroundColor: _C.scaffold,
         title: Text(
           'Behavioural Context',
           style: GoogleFonts.poppins(
             fontSize: 17,
             fontWeight: FontWeight.w600,
-            color: _primaryText,
+            color: _C.textPrimary,
           ),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh',
+            icon: Icon(Icons.refresh_rounded, color: _C.textMuted, size: 20),
+            onPressed: () {
+              setState(() => _loading = true);
+              _refreshFromBackend();
+            },
+          ),
+        ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator(color: _C.primary))
           : RefreshIndicator(
+              color: _C.primary,
               onRefresh: _refreshFromBackend,
               child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
                 children: [
+                  if (_synthetic) ...[
+                    _previewRibbon(),
+                    const SizedBox(height: 12),
+                  ],
                   _introCard(),
+                  const SizedBox(height: 8),
+                  _syncLine(),
+                  if (!_serviceRunning && !kIsWeb) ...[
+                    const SizedBox(height: 12),
+                    _collectionStoppedCard(),
+                  ],
                   const SizedBox(height: 14),
                   _baselineCard(),
                   const SizedBox(height: 18),
                   _sectionTitle('This week'),
+                  const SizedBox(height: 4),
+                  _sectionSubtitle(
+                    'Your last 7 usable days compared with your own baseline',
+                  ),
                   const SizedBox(height: 8),
                   _patternsCard(),
                   if (_shouldShowChangeDetection()) ...[
@@ -216,15 +294,45 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
                   _sectionTitle('Check-ins'),
                   const SizedBox(height: 8),
                   _checkInCard(),
+                  const SizedBox(height: 12),
+                  _appointmentCard(),
                   const SizedBox(height: 18),
                   _collectionDetails(),
                   const SizedBox(height: 18),
+                  const C2CrisisBanner(compact: true),
+                  const SizedBox(height: 12),
                   _disclaimer(),
                 ],
               ),
             ),
     );
   }
+
+  Widget _previewRibbon() => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+    decoration: BoxDecoration(
+      color: _C.amberBg,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: _C.amber.withValues(alpha: 0.45)),
+    ),
+    child: Row(
+      children: [
+        Icon(Icons.science_outlined, size: 17, color: _C.amber),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            'Preview data — synthetic values for demonstration only, not a '
+            'real participant.',
+            style: GoogleFonts.poppins(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: _C.textPrimary,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _introCard() => _card(
     child: Column(
@@ -235,16 +343,112 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
           style: GoogleFonts.poppins(
             fontSize: 22,
             fontWeight: FontWeight.w700,
-            color: _primaryText,
+            color: _C.textPrimary,
           ),
         ),
         const SizedBox(height: 6),
         Text(
-          'This page compares your recent behaviour with your own usual patterns. It does not estimate or diagnose anxiety.',
+          'This page compares your recent behaviour with your own usual '
+          'patterns. It does not estimate or diagnose anxiety.',
           style: GoogleFonts.poppins(
             fontSize: 12.5,
             height: 1.5,
-            color: _secondaryText,
+            color: _C.textSecondary,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _syncLine() {
+    final freshness = c2SyncFreshness(_lastSync, DateTime.now());
+    final failed =
+        _syncStatus != null &&
+        _syncStatus != 'ok' &&
+        _syncStatus != 'demo_data';
+
+    final String text;
+    final IconData icon;
+    Color color = _C.textMuted;
+    if (freshness == C2SyncFreshness.never) {
+      text = failed
+          ? 'Could not reach Aura’s server yet. Pull down to try again.'
+          : 'Not updated yet. Your first summary appears after a full day.';
+      icon = Icons.cloud_off_outlined;
+    } else {
+      final when = c2RelativeTime(_lastSync!, DateTime.now());
+      if (failed) {
+        text = 'Showing saved data from $when · offline';
+        icon = Icons.cloud_off_outlined;
+        color = _C.amber;
+      } else if (freshness == C2SyncFreshness.stale) {
+        text = 'Last updated $when · may be out of date';
+        icon = Icons.history_rounded;
+        color = _C.amber;
+      } else {
+        text = 'Updated $when';
+        icon = Icons.cloud_done_outlined;
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              text,
+              style: GoogleFonts.poppins(fontSize: 11, color: color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _collectionStoppedCard() => Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: _C.amberBg,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: _C.amber.withValues(alpha: 0.4)),
+    ),
+    child: Row(
+      children: [
+        Icon(Icons.sensors_off_rounded, color: _C.amber, size: 20),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Data collection has stopped',
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: _C.textPrimary,
+                ),
+              ),
+              Text(
+                _pendingUploads > 0
+                    ? '$_pendingUploads readings are waiting to upload.'
+                    : 'New days will not count towards your baseline.',
+                style: GoogleFonts.poppins(
+                  fontSize: 11.5,
+                  color: _C.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        TextButton(
+          onPressed: _openDetails,
+          style: TextButton.styleFrom(foregroundColor: _C.primary),
+          child: Text(
+            'Fix',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
           ),
         ),
       ],
@@ -252,7 +456,9 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
   );
 
   Widget _baselineCard() {
-    final need = _baselineDaysRequired <= 0 ? 28 : _baselineDaysRequired;
+    final need = _baselineDaysRequired <= 0
+        ? kC2BaselineDays
+        : _baselineDaysRequired;
     final elapsed = _baselineCalendarDaysElapsed.clamp(0, need);
     final fraction = (elapsed / need).clamp(0.0, 1.0);
 
@@ -262,7 +468,7 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
         children: [
           Row(
             children: [
-              Icon(Icons.auto_graph_rounded, color: _colors.primary),
+              Icon(Icons.auto_graph_rounded, color: _C.primary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -272,7 +478,7 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
                   style: GoogleFonts.poppins(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: _primaryText,
+                    color: _C.textPrimary,
                   ),
                 ),
               ),
@@ -281,67 +487,205 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
           const SizedBox(height: 8),
           Text(
             _baselineReady
-                ? 'We can now compare your recent behaviour with your own usual patterns.'
-                : 'The baseline uses the first $need completed calendar days and needs at least $_baselineMinUsableDays days with enough sensing data.',
+                ? 'Aura can now compare your recent behaviour with your own '
+                      'usual patterns.'
+                : 'Aura learns what is usual for you over your first $need '
+                      'days. It needs at least $_baselineMinUsableDays of those '
+                      'days to have enough sensing data.',
             style: GoogleFonts.poppins(
               fontSize: 12,
               height: 1.45,
-              color: _secondaryText,
+              color: _C.textSecondary,
             ),
           ),
-          const SizedBox(height: 14),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: LinearProgressIndicator(
-              value: fraction,
-              minHeight: 9,
-              backgroundColor: _colors.primaryContainer,
-              valueColor: AlwaysStoppedAnimation(_colors.primary),
+          if (!_baselineReady) ...[
+            const SizedBox(height: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: fraction,
+                minHeight: 9,
+                backgroundColor: _C.p100,
+                valueColor: AlwaysStoppedAnimation(_C.primary),
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '$elapsed of $need baseline days completed',
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: _colors.primary,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '$_baselineUsableDays usable sensing day${_baselineUsableDays == 1 ? '' : 's'} · minimum $_baselineMinUsableDays needed',
-            style: GoogleFonts.poppins(fontSize: 11.5, color: _secondaryText),
-          ),
-          if (_baselineDaysAvailable > _baselineUsableDays) ...[
-            const SizedBox(height: 3),
+            const SizedBox(height: 8),
             Text(
-              '$_baselineDaysAvailable baseline day${_baselineDaysAvailable == 1 ? '' : 's'} contain some collected data.',
-              style: GoogleFonts.poppins(fontSize: 10.5, color: _mutedText),
+              '$elapsed of $need days completed',
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: _C.primary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '$_baselineUsableDays of $_baselineMinUsableDays usable days '
+              'collected',
+              style: GoogleFonts.poppins(
+                fontSize: 11.5,
+                color: _C.textSecondary,
+              ),
+            ),
+            if (_baselineDaysAvailable > _baselineUsableDays) ...[
+              const SizedBox(height: 3),
+              Text(
+                '${_baselineDaysAvailable - _baselineUsableDays} more '
+                'day${_baselineDaysAvailable - _baselineUsableDays == 1 ? '' : 's'} '
+                'had some data, but not enough to count.',
+                style: GoogleFonts.poppins(fontSize: 10.5, color: _C.textMuted),
+              ),
+            ],
+          ],
+          const SizedBox(height: 16),
+          _timeline(),
+        ],
+      ),
+    );
+  }
+
+  /// Days 1–28 baseline · Day 29+ comparisons · Day 57+ change detection
+  /// (thesis Figure 4.3).
+  Widget _timeline() {
+    final stage = c2StageFor(_daysEnrolled);
+    Widget step(
+      C2Stage s,
+      String days,
+      String label,
+      IconData icon, {
+      required bool last,
+    }) {
+      final reached = stage.index >= s.index;
+      final current = stage == s;
+      final color = reached ? _C.primary : _C.textMuted;
+      return Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: current
+                        ? _C.primary
+                        : reached
+                        ? _C.p100
+                        : _C.chip,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: reached ? _C.primary : _C.border),
+                  ),
+                  child: Icon(
+                    reached && !current ? Icons.check_rounded : icon,
+                    size: 14,
+                    color: current ? _C.cardBase : color,
+                  ),
+                ),
+                if (!last)
+                  Expanded(
+                    child: Container(
+                      height: 2,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      color: stage.index > s.index ? _C.primary : _C.border,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              days,
+              style: GoogleFonts.poppins(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: Text(
+                label,
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  height: 1.3,
+                  color: current ? _C.textPrimary : _C.textMuted,
+                ),
+              ),
             ),
           ],
+        ),
+      );
+    }
+
+    return Semantics(
+      label: 'Study timeline. You are on day $_daysEnrolled.',
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          step(
+            C2Stage.baseline,
+            'Days 1–28',
+            'Learning your usual patterns',
+            Icons.hourglass_top_rounded,
+            last: false,
+          ),
+          step(
+            C2Stage.observations,
+            'Day 29+',
+            'Weekly comparisons',
+            Icons.insights_rounded,
+            last: false,
+          ),
+          step(
+            C2Stage.changeDetection,
+            'Day 57+',
+            'Notices lasting changes',
+            Icons.notifications_none_rounded,
+            last: true,
+          ),
         ],
       ),
     );
   }
 
   Widget _patternsCard() {
-    final visible = _patterns.isNotEmpty
-        ? _patterns
-        : const [
-            _PatternItem(label: 'Screen activity', direction: 'unknown'),
-            _PatternItem(label: 'Mobility', direction: 'unknown'),
-            _PatternItem(label: 'Physical activity', direction: 'unknown'),
-            _PatternItem(label: 'Routine regularity', direction: 'unknown'),
-          ];
+    final String? note;
+    if (!_baselineReady) {
+      note = 'Comparisons start once your baseline is ready.';
+    } else if (!_reportable) {
+      note =
+          'Not enough data this week yet. Aura needs at least 3 usable days '
+          '($_recentUsableDays so far).';
+    } else {
+      note = null;
+    }
 
     return _card(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (int i = 0; i < visible.length; i++) ...[
-            _patternRow(visible[i]),
-            if (i != visible.length - 1)
-              Divider(height: 22, color: Theme.of(context).dividerColor),
+          if (note != null) ...[
+            Row(
+              children: [
+                Icon(Icons.info_outline_rounded, size: 15, color: _C.textMuted),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    note,
+                    style: GoogleFonts.poppins(
+                      fontSize: 11.5,
+                      color: _C.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Divider(height: 22, color: _C.border),
+          ],
+          for (int i = 0; i < _patterns.length; i++) ...[
+            _patternRow(_patterns[i]),
+            if (i != _patterns.length - 1)
+              Divider(height: 22, color: _C.border),
           ],
         ],
       ),
@@ -349,63 +693,87 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
   }
 
   Widget _patternRow(_PatternItem item) {
+    final available = _reportable && item.z != null;
     String message;
     IconData icon;
     Color color;
 
-    if (!_baselineReady || item.z == null) {
+    if (!available) {
       message = 'Not enough information yet';
       icon = Icons.hourglass_empty_rounded;
-      color = _mutedText;
+      color = _C.textMuted;
     } else if (item.direction == 'above') {
       message = 'Higher than your usual pattern';
       icon = Icons.trending_up_rounded;
-      color = _colors.primary;
+      color = _C.primary;
     } else if (item.direction == 'below') {
       message = 'Lower than your usual pattern';
       icon = Icons.trending_down_rounded;
-      color = _colors.primary;
+      color = _C.primary;
     } else {
       message = 'Similar to your usual pattern';
       icon = Icons.trending_flat_rounded;
-      color = const Color(0xFF2D9C79);
+      color = _C.teal;
     }
 
-    return Row(
+    final valueText = available ? c2FormatValue(item.value, item.unit) : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(icon, color: color, size: 20),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.label,
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: _C.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    message,
+                    style: GoogleFonts.poppins(
+                      fontSize: 11.5,
+                      color: _C.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (valueText != null)
               Text(
-                item.label,
+                valueText,
                 style: GoogleFonts.poppins(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: _primaryText,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: _C.textPrimary,
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                message,
-                style: GoogleFonts.poppins(
-                  fontSize: 11.5,
-                  color: _secondaryText,
-                ),
-              ),
-            ],
-          ),
+          ],
         ),
+        if (available) ...[
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.only(left: 50),
+            child: _RangeMarker(z: item.z!, color: color),
+          ),
+        ],
       ],
     );
   }
@@ -416,41 +784,50 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
     return _changeDetection?.detected ?? false;
   }
 
-  Widget _changeCard() => _card(
+  Widget _changeCard() => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: _C.amberBg,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: _C.amber.withValues(alpha: 0.35)),
+    ),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(Icons.notifications_none_rounded, color: Color(0xFFB7791F)),
+        Icon(Icons.notifications_none_rounded, color: _C.amber),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Recent change noticed',
+                'Lasting change noticed',
                 style: GoogleFonts.poppins(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: _primaryText,
+                  color: _C.textPrimary,
                 ),
               ),
               const SizedBox(height: 5),
               Text(
                 _changeDetection?.message ??
-                    'A noticeable change in one of your recent behavioural patterns was detected.',
+                    'A sustained change in one of your recent behavioural '
+                        'patterns was detected.',
                 style: GoogleFonts.poppins(
                   fontSize: 12,
                   height: 1.45,
-                  color: _secondaryText,
+                  color: _C.textPrimary,
                 ),
               ),
               const SizedBox(height: 6),
               Text(
-                'This is a pattern change, not an anxiety diagnosis or risk prediction.',
+                'This is a pattern change, not an anxiety diagnosis or risk '
+                'prediction. If it matches how you have been feeling, you '
+                'may want to mention it to your clinician.',
                 style: GoogleFonts.poppins(
                   fontSize: 11.5,
                   height: 1.45,
-                  color: _colors.onTertiaryContainer,
+                  color: _C.textSecondary,
                 ),
               ),
             ],
@@ -475,16 +852,65 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
             style: GoogleFonts.poppins(
               fontSize: 13.5,
               fontWeight: FontWeight.w600,
-              color: _primaryText,
+              color: _C.textPrimary,
             ),
           ),
-          const SizedBox(height: 8),
+          if (_coverage.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Semantics(
+              label: '$usable of $total days usable',
+              child: Row(
+                children: [
+                  for (final day in _coverage)
+                    Expanded(
+                      child: Tooltip(
+                        message:
+                            '${day.date.day}/${day.date.month}: '
+                            '${day.usable ? 'usable' : 'not enough data'}',
+                        child: Container(
+                          height: 22,
+                          margin: const EdgeInsets.symmetric(horizontal: 2),
+                          decoration: BoxDecoration(
+                            color: day.usable ? _C.teal : _C.p100,
+                            borderRadius: BorderRadius.circular(5),
+                            border: day.usable
+                                ? null
+                                : Border.all(color: _C.border),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Text(
+                  '${_coverage.first.date.day}/${_coverage.first.date.month}',
+                  style: GoogleFonts.poppins(fontSize: 10, color: _C.textMuted),
+                ),
+                const Spacer(),
+                _legendDot(_C.teal, 'Usable'),
+                const SizedBox(width: 10),
+                _legendDot(_C.p100, 'Not enough', outlined: true),
+                const Spacer(),
+                Text(
+                  '${_coverage.last.date.day}/${_coverage.last.date.month}',
+                  style: GoogleFonts.poppins(fontSize: 10, color: _C.textMuted),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 10),
           Text(
-            'Low coverage can make behavioural comparisons less reliable. Missing data does not mean anything about your wellbeing.',
+            'Low coverage makes comparisons less reliable. Missing days '
+            'happen (phone off, battery saver) and say nothing about your '
+            'wellbeing.',
             style: GoogleFonts.poppins(
               fontSize: 11.5,
               height: 1.45,
-              color: _secondaryText,
+              color: _C.textSecondary,
             ),
           ),
         ],
@@ -492,36 +918,112 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
     );
   }
 
+  Widget _legendDot(Color color, String label, {bool outlined = false}) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 9,
+        height: 9,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(3),
+          border: outlined ? Border.all(color: _C.border) : null,
+        ),
+      ),
+      const SizedBox(width: 4),
+      Text(
+        label,
+        style: GoogleFonts.poppins(fontSize: 10, color: _C.textMuted),
+      ),
+    ],
+  );
+
   Widget _checkInCard() => _card(
     child: Row(
       children: [
-        Icon(Icons.edit_note_rounded, color: _colors.primary),
+        Icon(Icons.edit_note_rounded, color: _C.primary),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${_checkIns.length} check-ins recorded',
+                _selfReports30d + _alertCheckIns30d == 0
+                    ? 'No check-ins in the last 30 days'
+                    : '$_selfReports30d questionnaire'
+                          '${_selfReports30d == 1 ? '' : 's'} · '
+                          '$_alertCheckIns30d alert check-in'
+                          '${_alertCheckIns30d == 1 ? '' : 's'} '
+                          'in the last 30 days',
                 style: GoogleFonts.poppins(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: _primaryText,
+                  color: _C.textPrimary,
                 ),
               ),
               const SizedBox(height: 2),
               Text(
-                'Your check-ins stay separate from passive behavioural observations.',
+                'What you tell Aura is kept separate from the patterns above, '
+                'which come only from your phone’s sensors.',
                 style: GoogleFonts.poppins(
                   fontSize: 11.5,
                   height: 1.4,
-                  color: _secondaryText,
+                  color: _C.textSecondary,
                 ),
               ),
             ],
           ),
         ),
       ],
+    ),
+  );
+
+  Widget _appointmentCard() => _card(
+    child: InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ClinicianSummaryPage(userId: widget.userId),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: _C.p100,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.description_outlined, color: _C.primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Prepare for my appointment',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: _C.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'A one-page summary you choose to share as a PDF.',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11.5,
+                    color: _C.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right_rounded, color: _C.textMuted),
+        ],
+      ),
     ),
   );
 
@@ -534,10 +1036,7 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
               setState(() => _showCollectionDetails = !_showCollectionDetails),
           child: Row(
             children: [
-              Icon(
-                Icons.settings_input_antenna_rounded,
-                color: _colors.primary,
-              ),
+              Icon(Icons.settings_input_antenna_rounded, color: _C.primary),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -545,7 +1044,7 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
                   style: GoogleFonts.poppins(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: _primaryText,
+                    color: _C.textPrimary,
                   ),
                 ),
               ),
@@ -553,13 +1052,13 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
                 _showCollectionDetails
                     ? Icons.keyboard_arrow_up_rounded
                     : Icons.keyboard_arrow_down_rounded,
-                color: _mutedText,
+                color: _C.textMuted,
               ),
             ],
           ),
         ),
         if (_showCollectionDetails) ...[
-          Divider(height: 24, color: Theme.of(context).dividerColor),
+          Divider(height: 24, color: _C.border),
           _detailRow(
             'Participant',
             _participantId.isEmpty ? 'Unknown' : _participantId,
@@ -576,16 +1075,10 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        DigitalPhenotypingPage(userId: widget.userId),
-                  ),
-                );
-              },
+              onPressed: _openDetails,
+              style: TextButton.styleFrom(foregroundColor: _C.primary),
               icon: const Icon(Icons.sensors_rounded, size: 17),
-              label: const Text('View sensing & collection details'),
+              label: const Text('Open sensing & data details'),
             ),
           ),
         ],
@@ -600,7 +1093,7 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
         Expanded(
           child: Text(
             label,
-            style: GoogleFonts.poppins(fontSize: 11.5, color: _secondaryText),
+            style: GoogleFonts.poppins(fontSize: 11.5, color: _C.textSecondary),
           ),
         ),
         Text(
@@ -608,7 +1101,7 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
           style: GoogleFonts.poppins(
             fontSize: 11.5,
             fontWeight: FontWeight.w600,
-            color: _primaryText,
+            color: _C.textPrimary,
           ),
         ),
       ],
@@ -618,15 +1111,18 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
   Widget _disclaimer() => Container(
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
-      color: _colors.primaryContainer.withValues(alpha: 0.6),
+      color: _C.p100,
       borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: _C.p200),
     ),
     child: Text(
-      'These are descriptive observations of your own behavioural patterns. They are not a diagnosis, anxiety risk score, or clinical prediction. Discuss any concerns with a qualified clinician.',
+      'These are descriptive observations of your own behavioural patterns. '
+      'They are not a diagnosis, anxiety risk score, or clinical prediction. '
+      'Discuss any concerns with a qualified clinician.',
       style: GoogleFonts.poppins(
         fontSize: 11,
         height: 1.45,
-        color: _colors.onPrimaryContainer,
+        color: _C.textSecondary,
       ),
     ),
   );
@@ -636,20 +1132,25 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
     style: GoogleFonts.poppins(
       fontSize: 16,
       fontWeight: FontWeight.w700,
-      color: _primaryText,
+      color: _C.textPrimary,
     ),
+  );
+
+  Widget _sectionSubtitle(String text) => Text(
+    text,
+    style: GoogleFonts.poppins(fontSize: 11.5, color: _C.textMuted),
   );
 
   Widget _card({required Widget child}) => Container(
     width: double.infinity,
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: _colors.surface,
+      color: _C.cardBase,
       borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: _colors.outlineVariant),
+      border: Border.all(color: _C.border),
       boxShadow: [
         BoxShadow(
-          color: Theme.of(context).shadowColor.withValues(alpha: 0.08),
+          color: Colors.black.withValues(alpha: 0.04),
           blurRadius: 10,
           offset: const Offset(0, 4),
         ),
@@ -659,12 +1160,107 @@ class _ParticipantBehaviorPageState extends State<ParticipantBehaviorPage> {
   );
 }
 
+/// A small bar showing where this week sits relative to the participant's
+/// own usual range (shaded band = ±1σ of their baseline).
+class _RangeMarker extends StatelessWidget {
+  final double z;
+  final Color color;
+
+  const _RangeMarker({required this.z, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final position = c2RangePosition(z);
+    return Semantics(
+      label: z.abs() < 1
+          ? 'Inside your usual range'
+          : 'Outside your usual range',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: 14,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth;
+                return Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.centerLeft,
+                  children: [
+                    Container(
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: _C.chip,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                    Positioned(
+                      left: width * kC2UsualBandStart,
+                      width: width * (kC2UsualBandEnd - kC2UsualBandStart),
+                      child: Container(
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: _C.p200,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: (width * position - 7).clamp(0.0, width - 14),
+                      child: Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: _C.cardBase, width: 2),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Text(
+                'Lower',
+                style: GoogleFonts.poppins(fontSize: 9.5, color: _C.textMuted),
+              ),
+              const Spacer(),
+              Text(
+                'Your usual range',
+                style: GoogleFonts.poppins(fontSize: 9.5, color: _C.textMuted),
+              ),
+              const Spacer(),
+              Text(
+                'Higher',
+                style: GoogleFonts.poppins(fontSize: 9.5, color: _C.textMuted),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PatternItem {
   final String label;
   final String direction;
   final double? z;
+  final double? value;
+  final String unit;
 
-  const _PatternItem({required this.label, required this.direction, this.z});
+  const _PatternItem({
+    required this.label,
+    required this.direction,
+    this.z,
+    this.value,
+    this.unit = '',
+  });
 }
 
 class _ChangeDetection {

@@ -27,6 +27,7 @@ class _Component2BootstrapPageState extends State<Component2BootstrapPage>
     with WidgetsBindingObserver {
   late Future<void> _bootstrapFuture;
   bool _refreshing = false;
+  String? _syncStatus;
 
   @override
   void initState() {
@@ -44,7 +45,8 @@ class _Component2BootstrapPageState extends State<Component2BootstrapPage>
   Future<void> _sync() async {
     final participantId =
         widget.userId ?? await BackgroundServiceHelper.getCachedId();
-    await Component2DataService.sync(participantId);
+    final result = await Component2DataService.sync(participantId);
+    _syncStatus = result.status;
   }
 
   Future<void> _refreshFromBackend() async {
@@ -87,6 +89,7 @@ class _Component2BootstrapPageState extends State<Component2BootstrapPage>
           // recreates the child and makes it reload the refreshed cache.
           key: ValueKey(_bootstrapFuture),
           userId: widget.userId,
+          syncStatus: _syncStatus,
         );
       },
     );

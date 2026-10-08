@@ -48,10 +48,7 @@ class Component2DataService {
         debugPrint(
           '[Component2] Real backend not configured; loaded SYNTHETIC WEB DEMO data.',
         );
-        return const Component2SyncResult(
-          success: true,
-          status: 'demo_data',
-        );
+        return const Component2SyncResult(success: true, status: 'demo_data');
       }
 
       debugPrint(
@@ -227,10 +224,7 @@ class Component2DataService {
       'synthetic': true,
       'baseline_ready': true,
       'reportable': true,
-      'window': {
-        'start': _dateOnly(start),
-        'end': _dateOnly(now),
-      },
+      'window': {'start': _dateOnly(start), 'end': _dateOnly(now)},
       'observations': {
         'screen_activity': {
           'label': 'Screen activity',
@@ -248,19 +242,19 @@ class Component2DataService {
           'direction': 'below',
           'confidence': 'demo',
         },
-        'physical_activity': {
-          'label': 'Physical activity',
-          'value': 71.0,
-          'unit': 'min/day',
+        'movement_proxy': {
+          'label': 'Movement proxy',
+          'value': 11.2,
+          'unit': '% high-motion samples',
           'z': -0.3,
           'direction': 'stable',
           'confidence': 'demo',
         },
-        'routine_regularity': {
-          'label': 'Routine regularity',
-          'value': 0.76,
-          'unit': '',
-          'z': 0.2,
+        'social_media_use': {
+          'label': 'Social media use',
+          'value': 52.0,
+          'unit': 'min/day',
+          'z': 0.4,
           'direction': 'stable',
           'confidence': 'demo',
         },
@@ -293,18 +287,13 @@ class Component2DataService {
       final date = now.subtract(Duration(days: 13 - index));
       // Two intentionally incomplete days make the demo look realistic.
       final usable = index != 3 && index != 10;
-      return {
-        'date': _dateOnly(date),
-        'usable': usable,
-      };
+      return {'date': _dateOnly(date), 'usable': usable};
     });
 
     final checkIns = [
       {
         'timestamp': now.subtract(const Duration(days: 1)).toIso8601String(),
-        'answers': {
-          'How are you feeling today?': 'A little tired but okay.',
-        },
+        'answers': {'How are you feeling today?': 'A little tired but okay.'},
       },
       {
         'timestamp': now.subtract(const Duration(days: 4)).toIso8601String(),
@@ -314,9 +303,7 @@ class Component2DataService {
       },
       {
         'timestamp': now.subtract(const Duration(days: 8)).toIso8601String(),
-        'answers': {
-          'How are you feeling today?': 'Calm today.',
-        },
+        'answers': {'How are you feeling today?': 'Calm today.'},
       },
     ];
 
@@ -326,7 +313,7 @@ class Component2DataService {
       'significant_places': 4,
       'sleep_proxy_window': '11:35 PM – 7:10 AM',
       'overnight_screen_off_hours': 7.6,
-      'activity_proxy_score': 0.63,
+      'activity_proxy_score': 0.112,
       'activity_data_available': true,
       'synthetic': true,
     };

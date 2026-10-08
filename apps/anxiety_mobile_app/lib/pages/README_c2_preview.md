@@ -137,6 +137,21 @@ flutter config --enable-web
 flutter run -d chrome -t lib/pages/c2_preview_main.dart
 ```
 
+Pick a timeline state with the URL query (add `&theme=dark` for dark mode):
+
+| URL | State shown |
+|---|---|
+| `/` | Day 60, synced fixture with observations and the Day-57+ change card |
+| `/?state=change` | Day 60, seeded directly (no backend sync) |
+| `/?state=observations` | Day 40, personal-baseline observations, no change card |
+| `/?state=baseline` | Day 12, "Building your personal baseline" |
+
+Add `&page=summary` to any of these to open the "Prepare for my appointment"
+clinician-summary screen (PDF share and copy as text).
+
+Every state shows a "Preview data" ribbon so captured screenshots are visibly
+synthetic.
+
 Preview/synthetic fixtures must remain development-only and must not be used as
 research results or participant data.
 

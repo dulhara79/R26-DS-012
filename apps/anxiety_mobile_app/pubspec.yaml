@@ -53,6 +53,10 @@ dependencies:
   image_picker: ^1.1.2
   flutter_blue_plus: ^1.31.0
 
+  # Component 2: participant-controlled clinician summary (PDF + share sheet)
+  pdf: ^3.13.0
+  printing: ^5.15.0
+
   #################################
 
 dev_dependencies:
