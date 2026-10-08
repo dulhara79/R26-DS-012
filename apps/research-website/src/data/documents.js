@@ -9,14 +9,38 @@ export const documents = [
     type: "Proposal report",
     title: component.proposalTitle,
     meta: `${component.id} · ${component.owner} · March 2026`,
-    url: null,
+    url:
+      component.owner === "Sendanayake H.D."
+        ? "https://mysliit.sharepoint.com/sites/CDAPSubmissionCloud/2026RegCloud/Forms/AllItems.aspx?viewid=db9415e4%2Dec70%2D4c80%2Dac71%2Dbb61beebb336&id=%2Fsites%2FCDAPSubmissionCloud%2F2026RegCloud%2FR26%2DDS%2D012%2DStudents%2F1%2E%20Project%20Proposal%2FIndividual%20Reports%2FR26%2DDS%2D012%5FIT22107596%5FSendanayake%20H%20D%2Epdf&parent=%2Fsites%2FCDAPSubmissionCloud%2F2026RegCloud%2FR26%2DDS%2D012%2DStudents%2F1%2E%20Project%20Proposal%2FIndividual%20Reports"
+        : component.owner === "Seneviratne K.A.U.A."
+          ? "https://mysliit.sharepoint.com/sites/CDAPSubmissionCloud/2026RegCloud/Forms/AllItems.aspx?viewid=db9415e4%2Dec70%2D4c80%2Dac71%2Dbb61beebb336&id=%2Fsites%2FCDAPSubmissionCloud%2F2026RegCloud%2FR26%2DDS%2D012%2DStudents%2F1%2E%20Project%20Proposal%2FIndividual%20Reports%2FR26%2DDS%2D012%5FIT22093950%5FSeneviratne%20K%20A%20U%20A%2Epdf&parent=%2Fsites%2FCDAPSubmissionCloud%2F2026RegCloud%2FR26%2DDS%2D012%2DStudents%2F1%2E%20Project%20Proposal%2FIndividual%20Reports"
+          : component.owner === "Kaushalya I.G.D."
+            ? "https://mysliit.sharepoint.com/sites/CDAPSubmissionCloud/2026RegCloud/Forms/AllItems.aspx?viewid=db9415e4%2Dec70%2D4c80%2Dac71%2Dbb61beebb336&id=%2Fsites%2FCDAPSubmissionCloud%2F2026RegCloud%2FR26%2DDS%2D012%2DStudents%2F1%2E%20Project%20Proposal%2FIndividual%20Reports%2FR26%2DDS%2D012%5FIT22130648%5FKaushalya%20I%20G%20D%2Epdf&parent=%2Fsites%2FCDAPSubmissionCloud%2F2026RegCloud%2FR26%2DDS%2D012%2DStudents%2F1%2E%20Project%20Proposal%2FIndividual%20Reports"
+            : component.owner === "Layathma B.M.A.S."
+              ? "https://mysliit.sharepoint.com/:b:/s/CDAPSubmissionCloud/IQA4fMHw38dITIa0c2ui1f1xAf36Ajem9_lXL4Cm5_9YcV4?e=b6H0U2"
+              : null,
   })),
   {
-    group: "Source and artefacts",
-    type: "Repository",
-    title: "R26-DS-012 research repository",
-    meta: "All four components, apps and CI workflows",
-    url: "https://github.com/dulhara79/R26-DS-012",
+    group: "Progress Presentation 1",
+    type: "Presentation slides",
+    title: "R26-DS-012 progress presentation 1",
+    meta: "March 2026",
+    url: "https://mysliit.sharepoint.com/:p:/r/sites/CDAPSubmissionCloud/_layouts/15/Doc.aspx?sourcedoc=%7B2BF82E73-41A4-4E6A-BE72-827E8C072C2B%7D&file=Progress%20Presentation%2001.pptx&action=edit&mobileredirect=true&wdwpf=doclib-t",
+  },
+  {
+    group: "Progress Presentation 2",
+    type: "Presentation slides",
+    title: "R26-DS-012 progress presentation 2",
+    meta: "June 2026",
+    url: "https://mysliit.sharepoint.com/:p:/r/sites/CDAPSubmissionCloud/_layouts/15/Doc.aspx?sourcedoc=%7BD69672E9-7435-4131-93E9-DA031A9A71DF%7D&file=R26-DS-012_PP2.pptx&action=edit&mobileredirect=true&wdwpf=doclib-t",
+  },
+
+  {
+    group: "Final Presentation",
+    type: "Presentation slides",
+    title: "R26-DS-012 final presentation",
+    meta: "September 2026",
+    url: "https://mysliit.sharepoint.com/sites/CDAPSubmissionCloud/2026RegCloud/Forms/AllItems.aspx?id=%2Fsites%2FCDAPSubmissionCloud%2F2026RegCloud%2FR26%2DDS%2D012%2DStudents%2F5%2E%20Final%20Report%20%26%20Presentation%2FFinal%20Presentation%20PPT&viewid=db9415e4%2Dec70%2D4c80%2Dac71%2Dbb61beebb336",
   },
   {
     group: "Source and artefacts",
@@ -71,9 +95,9 @@ export const milestones = [
   },
   {
     date: "April 2026",
-    title: "Component 1 Phase 1 benchmarks completed",
+    title: "Component 1 physiological evaluation reported",
     detail:
-      "LSTM-AE, masked variant and forecasting module evaluated on four public datasets.",
+      "Corrected 13-participant WESAD LOSO evaluation and external AffectiveROAD evaluation, with direct +5 and +10 minute Ridge forecasting.",
   },
   {
     date: "2026",

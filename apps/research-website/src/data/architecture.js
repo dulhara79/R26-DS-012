@@ -27,8 +27,8 @@ export const lanes = [
     slug: "wearable-forecasting",
     state: "eligible",
     source: ["ESP32-C3 chest strap", "ECG, respiration, motion, skin temperature"],
-    model: ["LSTM autoencoder + forecaster", "60-second windows, 10 features"],
-    output: ["Physiological signal", "Anomaly score and short-horizon forecast"],
+    model: ["Unmasked LSTM autoencoder + Ridge forecaster", "60-second features; two non-overlapping 5-minute history blocks"],
+    output: ["Physiological signal", "Anomaly score with +5 / +10 minute forecasts"],
   },
   {
     id: "C2",
@@ -80,9 +80,9 @@ export const roles = [
     id: "C1",
     slug: "wearable-forecasting",
     title: "Wearable Biosensor Forecasting",
-    input: "Chest-strap ECG, respiration, motion and skin temperature, summarised into 60-second windows of 10 features.",
-    process: "An LSTM autoencoder learns the person's baseline; reconstruction error becomes an anomaly signal that a second LSTM uses for short-horizon forecasting.",
-    output: "A physiological anomaly score and risk trajectory.",
+    input: "Chest-strap ECG, respiration, motion and skin temperature, summarised into 60-second windows of 10 features after participant-specific calibration.",
+    process: "A three-minute resting calibration establishes the baseline. An LSTM autoencoder detects anomalies, while Ridge forecasts risk at +5 and +10 minutes.",
+    output: "A physiological anomaly score with direct +5 and +10 minute forecasts.",
     fusion: "Eligible input, weighted by informativeness, recency and coverage.",
   },
   {

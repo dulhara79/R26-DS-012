@@ -18,14 +18,14 @@ import { supervisors, team } from "../data/team";
 
 const headlineResults = [
   {
-    value: "0.97",
-    label: "C1 combined AUROC across 25 subjects / drives",
-    note: "Phase 1 benchmark, LOSO",
+    value: "0.9979",
+    label: "C1 WESAD AUROC",
+    note: "Corrected 13-participant LOSO",
   },
   {
-    value: "11.83 min",
-    label: "C1 average early warning time",
-    note: "Phase 1 forecasting module",
+    value: "0.8757",
+    label: "C1 AffectiveROAD macro AUROC",
+    note: "External real-world evaluation",
   },
   {
     value: "0.5205",

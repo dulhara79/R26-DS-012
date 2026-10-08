@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, ArrowUpRight } from "lucide-react";
 import PageHero from "../components/ui/PageHero";
@@ -7,6 +8,57 @@ import SectionHead from "../components/ui/SectionHead";
 import FusionStates from "../components/research/FusionStates";
 import NotFound from "./NotFound";
 import { componentBySlug, components } from "../data/components";
+
+function FeatureExplorer({ features }) {
+  const [selected, setSelected] = useState(null);
+
+  return (
+    <>
+      <div className="feature-grid">
+        {features.map((feature) => {
+          const isSelected = selected?.name === feature.name;
+          return (
+            <button
+              className={"feature-item" + (isSelected ? " is-selected" : "")}
+              type="button"
+              key={feature.name}
+              aria-expanded={isSelected}
+              onClick={() => setSelected(isSelected ? null : feature)}
+            >
+              {feature.name}
+            </button>
+          );
+        })}
+      </div>
+
+      {selected && (
+        <div className="feature-info" role="region" aria-label={selected.name}>
+          <div className="feature-info-head">
+            <h4>{selected.name}</h4>
+            <button
+              className="feature-info-close"
+              type="button"
+              aria-label={"Close " + selected.name + " explanation"}
+              onClick={() => setSelected(null)}
+            >
+              ×
+            </button>
+          </div>
+          <div className="feature-info-grid">
+            <div>
+              <span>Why</span>
+              <p>{selected.why}</p>
+            </div>
+            <div>
+              <span>How</span>
+              <p>{selected.how}</p>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 function Table({ head, rows, numeric = [], highlight }) {
   return (
@@ -94,6 +146,20 @@ export default function ComponentDetail() {
             }
             title={c.dataTitle}
           />
+          {c.id === "C1" && (
+            <Reveal>
+              <img
+                src="/images/components/Chest%20Strap.jpg"
+                alt="Custom chest strap wearable used for physiological sensing"
+                style={{
+                  display: "block",
+                  width: "min(400px, 100%)",
+                  margin: "28px auto 48px",
+                  borderRadius: 20,
+                }}
+              />
+            </Reveal>
+          )}
           <div className="detail-grid">
             {c.hardware && (
               <Reveal>
@@ -102,6 +168,11 @@ export default function ComponentDetail() {
                   head={["Sensor", "Component", "Measures"]}
                   rows={c.hardware}
                 />
+                <p className="hardware-note">
+                  The custom wearable combines ECG-derived cardiac measures, thoracic impedance respiration,
+                  motion and skin temperature sensing in one low-power ESP32-C3 platform for continuous
+                  physiological data collection.
+                </p>
               </Reveal>
             )}
             {c.features && (
@@ -109,13 +180,7 @@ export default function ComponentDetail() {
                 <h3 className="serif-title detail-sub">
                   10-feature physiological window
                 </h3>
-                <div className="pill-list">
-                  {c.features.map((feature) => (
-                    <span className="pill" key={feature}>
-                      {feature}
-                    </span>
-                  ))}
-                </div>
+                <FeatureExplorer features={c.features} />
                 <h3
                   className="serif-title detail-sub"
                   style={{ marginTop: 36 }}
