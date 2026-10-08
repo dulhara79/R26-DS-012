@@ -918,7 +918,7 @@ class _DashboardPageState extends State<DashboardPage>
               child: _KpiCard(
                 label: 'Temperature',
                 value: isWorn
-                    ? (_currentReading!.meanTemp - 3).toStringAsFixed(1)
+                    ? _currentReading!.meanTemp.toStringAsFixed(1)
                     : '--',
                 unit: '°C',
                 icon: Icons.thermostat_rounded,
