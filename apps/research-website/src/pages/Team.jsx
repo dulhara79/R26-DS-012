@@ -43,7 +43,16 @@ export default function Team() {
                     <span className="card-kicker">
                       {person.component} · {person.id}
                     </span>
-                    <h3 className="card-title">{person.name}</h3>
+                    <h3 className="card-title">
+                      {person.name === "Kaushalya I.G.D." ? (
+                        <>
+                          <span style={{ display: "block" }}>Kaushalya</span>
+                          <span style={{ display: "block" }}>I.G.D.</span>
+                        </>
+                      ) : (
+                        person.name
+                      )}
+                    </h3>
                     <p>{person.role}</p>
                   </div>
                 </Link>

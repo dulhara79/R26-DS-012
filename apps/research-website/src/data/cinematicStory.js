@@ -69,17 +69,9 @@ export const cinematicSights = [
   {
     id: "c4",
     href: "/components/fusion-and-rag",
-    kicker: "C4 · Fusion",
-    title: "Reliability Fusion",
-    body: "Weights by informativeness, recency and coverage into Low, Medium or High.",
+    kicker: "C4 · Fusion & Evidence",
+    title: "Reliability Fusion + CARE-AnxRAG",
+    body: "Weights by informativeness, recency and coverage into Low, Medium or High, with evidence-aware retrieval, contradiction checks, citations and abstention.",
     icon: "fusion",
-  },
-  {
-    id: "rag",
-    href: "/components/fusion-and-rag",
-    kicker: "C4 · Evidence",
-    title: "CARE-AnxRAG",
-    body: "Evidence-aware retrieval with contradiction checks, citations and abstention.",
-    icon: "evidence",
   },
 ];

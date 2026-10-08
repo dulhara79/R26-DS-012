@@ -62,7 +62,18 @@ export default function Documents() {
                       <FileText size={20} aria-hidden="true" />
                       <div>
                         <span className="card-kicker">{doc.type}</span>
-                        <strong>{doc.title}</strong>
+                        {doc.type === "Proposal report" && doc.url ? (
+                          <a
+                            className="document-title-link"
+                            href={doc.url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {doc.title}
+                          </a>
+                        ) : (
+                          <strong>{doc.title}</strong>
+                        )}
                         <span className="muted">{doc.meta}</span>
                       </div>
                       {doc.url ? (
