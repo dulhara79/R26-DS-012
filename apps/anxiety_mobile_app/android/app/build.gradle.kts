@@ -14,6 +14,10 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
+val hasReleaseKeystore =
+    keystorePropertiesFile.exists() &&
+        !keystoreProperties.getProperty("storeFile").isNullOrBlank()
+
 android {
     namespace = "com.example.anxiety_mobile_app"
     compileSdk = 36 
@@ -55,7 +59,13 @@ android {
     buildTypes {
         // KOTLIN DSL UPDATE: Using getByName for modifying existing build types
         getByName("release") {
-            signingConfig = signingConfigs.getByName("release")
+            // Fall back to the automatically available debug keystore when
+            // no release keystore is configured, so release APK builds succeed.
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             isMinifyEnabled = false 
             isShrinkResources = false
         }
