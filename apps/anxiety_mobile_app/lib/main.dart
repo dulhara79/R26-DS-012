@@ -188,20 +188,6 @@ void main() async {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
-      if (kReleaseMode && ApiService.backendRoot() == null) {
-        runApp(
-          const MaterialApp(
-            home: Scaffold(
-              body: Center(
-                child: Text(
-                  'This app has no secure clinical connection configured. Contact the study team.',
-                ),
-              ),
-            ),
-          ),
-        );
-        return;
-      }
       await ThemeController.instance.initialize();
 
       // Local notifications and background callbacks are mobile-only here.
