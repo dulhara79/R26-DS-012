@@ -1401,3 +1401,270 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* C2 · AUROC comparison chart */
+
+.auroc-chart {
+  margin: 28px 0 0;
+}
+
+.auroc-title {
+  margin-bottom: 14px;
+  font-family: var(--serif);
+  font-size: 1.2rem;
+}
+
+.auroc-plot {
+  position: relative;
+  padding-top: 22px;
+}
+
+.auroc-plot ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+
+.auroc-plot li {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr) 64px;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.92rem;
+}
+
+.auroc-track {
+  position: relative;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--rule);
+  overflow: hidden;
+}
+
+.auroc-bar {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--teal-mid);
+  opacity: 0.55;
+}
+
+.auroc-plot li.is-highlight .auroc-bar {
+  opacity: 1;
+}
+
+.auroc-plot li.is-highlight .auroc-label {
+  font-weight: 600;
+}
+
+.auroc-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Overlay aligned with the track column (label 160px + gap 12; value 64 + gap 12). */
+.auroc-markers {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 172px;
+  right: 76px;
+  pointer-events: none;
+}
+
+.auroc-chance,
+.auroc-null {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+}
+
+.auroc-chance {
+  border-left: 2px dashed var(--ink-soft);
+}
+
+.auroc-null {
+  border-left: 1px dotted var(--ink-soft);
+}
+
+.auroc-chance em {
+  position: absolute;
+  top: -2px;
+  left: 6px;
+  font-size: 0.72rem;
+  font-style: normal;
+  white-space: nowrap;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 640px) {
+  .auroc-plot li {
+    grid-template-columns: minmax(0, 1fr) 64px;
+  }
+  .auroc-label {
+    grid-column: 1 / -1;
+  }
+  .auroc-markers {
+    display: none;
+  }
+}
+
+/* C2 · graph construction diagram */
+
+.graph-diagram {
+  margin: 48px 0 0;
+}
+
+.graph-diagram svg {
+  display: block;
+  width: 100%;
+  max-width: 720px;
+  height: auto;
+}
+
+.gd-label,
+.gd-day,
+.gd-more {
+  fill: var(--ink-soft);
+  font-size: 11px;
+}
+
+.gd-edge {
+  stroke-width: 1.5;
+}
+
+.gd-edge--within,
+.gd-key--within {
+  stroke: var(--teal-mid);
+  background: var(--teal-mid);
+}
+
+.gd-edge--across,
+.gd-key--across {
+  stroke: #aaa7d6;
+  background: #aaa7d6;
+}
+
+.gd-edge {
+  opacity: 0.45;
+  transition: opacity 0.2s ease, stroke-width 0.2s ease;
+}
+
+.gd-edge.is-active {
+  opacity: 1;
+  stroke-width: 3;
+}
+
+.gd-node {
+  fill: var(--paper);
+  stroke: var(--teal-mid);
+  stroke-width: 2;
+  cursor: pointer;
+  transition: fill 0.2s ease;
+}
+
+.gd-node:hover,
+.gd-node:focus-visible,
+.gd-node.is-neighbour {
+  fill: #cfe3df;
+}
+
+.gd-node.is-selected {
+  fill: var(--teal-mid);
+}
+
+.gd-info {
+  margin-top: 14px;
+  padding: 16px 20px;
+  border: 1px solid var(--rule);
+  border-radius: 16px;
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.gd-info h4 {
+  margin: 0 0 6px;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 1.2rem;
+  font-weight: 500;
+}
+
+.gd-info p {
+  margin: 0;
+}
+
+.gd-info ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+/* Cohort role chips */
+
+.role-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.role-chip--select {
+  background: rgba(36, 82, 79, 0.12);
+  color: var(--teal-mid);
+}
+
+.role-chip--heldout {
+  background: rgba(232, 185, 169, 0.45);
+  color: var(--ink);
+}
+
+.graph-diagram figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  margin-top: 12px;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.gd-key {
+  display: inline-block;
+  width: 22px;
+  height: 3px;
+  margin-right: -10px;
+  border-radius: 2px;
+}
+
+.gd-note {
+  flex-basis: 100%;
+}
+
+/* Fusion weight callout (shown when a component defines fusionWeight) */
+
+.fusion-weight {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 8px 0 20px;
+  padding: 12px 18px;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+}
+
+.fusion-weight strong {
+  font-family: var(--serif);
+  font-size: 2rem;
+  font-weight: 500;
+}
+
+.fusion-weight span {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
