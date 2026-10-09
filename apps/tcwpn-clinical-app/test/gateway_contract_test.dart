@@ -310,7 +310,7 @@ void main() {
     });
 
     test(
-      '403 is unauthorized too — a wrong token reads the same as none',
+      '403 surfaces as forbidden, distinct from expired identity',
       () async {
         await expectLater(
           _failing(403).timeline(subjectId: 'S1', mrn: 'S-000123'),
@@ -318,7 +318,7 @@ void main() {
             isA<ApiException>().having(
               (e) => e.kind,
               'kind',
-              ApiFailure.unauthorized,
+              ApiFailure.forbidden,
             ),
           ),
         );
