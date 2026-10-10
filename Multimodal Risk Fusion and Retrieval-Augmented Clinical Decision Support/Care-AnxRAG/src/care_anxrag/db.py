@@ -177,6 +177,29 @@ CREATE TABLE IF NOT EXISTS vector_outbox (
 );
 
 CREATE INDEX IF NOT EXISTS idx_outbox_status ON vector_outbox(status, outbox_id);
+
+
+CREATE TABLE IF NOT EXISTS evidence_alerts (
+    alert_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_id TEXT NOT NULL REFERENCES sources(source_id),
+    target_document_id TEXT NOT NULL REFERENCES documents(document_id),
+    target_external_id TEXT NOT NULL,
+    notice_external_id TEXT NOT NULL,
+    relation_type TEXT NOT NULL,
+    ref_source TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    resolved_at TEXT,
+    UNIQUE(
+        source_id,
+        target_external_id,
+        notice_external_id,
+        relation_type
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_evidence_alerts_open
+ON evidence_alerts(resolved_at, relation_type);
 """
 
 
@@ -250,6 +273,30 @@ class Database:
 
     def get_embedding_identity(self) -> str | None:
         return self.get_metadata("vector_embedding_model_id")
+
+    def list_active_version_fingerprints(self) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    version_id,
+                    document_id,
+                    source_id,
+                    external_id,
+                    content_hash,
+                    status,
+                    layer,
+                    evidence_level,
+                    published_at,
+                    updated_at,
+                    retrieved_at
+                FROM document_versions
+                WHERE status=?
+                ORDER BY source_id, external_id, version_id
+                """,
+                (DocumentStatus.ACTIVE.value,),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def ensure_embedding_identity(self, model_id: str) -> None:
         stored = self.get_embedding_identity()
@@ -416,6 +463,91 @@ class Database:
             )
             if status == "success":
                 self.set_metadata("last_successful_sync_at", finished_at.isoformat(), connection)
+
+    def record_evidence_alert(
+        self,
+        *,
+        source_id: str,
+        target_document_id: str,
+        target_external_id: str,
+        notice_external_id: str,
+        relation_type: str,
+        ref_source: str = "",
+        note: str = "",
+    ) -> None:
+        with self.transaction() as connection:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO evidence_alerts(
+                    source_id,
+                    target_document_id,
+                    target_external_id,
+                    notice_external_id,
+                    relation_type,
+                    ref_source,
+                    note,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    source_id,
+                    target_document_id,
+                    target_external_id,
+                    notice_external_id,
+                    relation_type,
+                    ref_source,
+                    note,
+                    utc_now().isoformat(),
+                ),
+            )
+
+    def list_evidence_alerts(
+        self,
+        *,
+        open_only: bool = True,
+    ) -> list[dict[str, Any]]:
+        sql = """
+            SELECT
+                alert_id,
+                source_id,
+                target_document_id,
+                target_external_id,
+                notice_external_id,
+                relation_type,
+                ref_source,
+                note,
+                created_at,
+                resolved_at
+            FROM evidence_alerts
+        """
+        if open_only:
+            sql += " WHERE resolved_at IS NULL"
+        sql += " ORDER BY alert_id"
+        with self.connect() as connection:
+            rows = connection.execute(sql).fetchall()
+        return [
+            {
+                key: row[key]
+                for key in row.keys()
+            }
+            for row in rows
+        ]
+
+    def get_document_id_by_external_id(
+        self,
+        source_id: str,
+        external_id: str,
+    ) -> str | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT document_id
+                FROM documents
+                WHERE source_id=? AND external_id=?
+                """,
+                (source_id, external_id),
+            ).fetchone()
+        return None if row is None else str(row["document_id"])
 
     def get_active_version(self, document_id: str) -> DocumentVersion | None:
         with self.connect() as connection:

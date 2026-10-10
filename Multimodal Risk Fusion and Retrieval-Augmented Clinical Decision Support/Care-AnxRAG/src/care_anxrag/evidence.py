@@ -87,21 +87,59 @@ def applicability_score(
     query: QueryAnalysis,
     layer: KnowledgeLayer,
 ) -> float:
-    normalized_topics = {topic.lower().replace(" ", "_") for topic in topics}
-    subtype_match = 0.0
+    normalized_topics = {
+        topic.lower().replace(" ", "_")
+        for topic in topics
+    }
+
+    known_anxiety_subtypes = {
+        "generalized_anxiety_disorder",
+        "panic_disorder",
+        "social_anxiety_disorder",
+        "agoraphobia",
+        "specific_phobia",
+        "separation_anxiety",
+        "health_anxiety",
+    }
+
+    # ---------------------------------------------------------
+    # 1. Anxiety subtype relevance
+    # ---------------------------------------------------------
     if not query.anxiety_subtypes:
         subtype_match = 0.65
+
     elif normalized_topics.intersection(query.anxiety_subtypes):
+        # Exact requested anxiety subtype
         subtype_match = 1.0
+
+    elif normalized_topics.intersection(known_anxiety_subtypes):
+        # Evidence concerns an anxiety subtype,
+        # but not the subtype requested by the user
+        subtype_match = 0.25
+
     elif any("anxiety" in topic for topic in normalized_topics):
+        # General anxiety evidence can still be relevant
         subtype_match = 0.60
+
     else:
         subtype_match = 0.35
 
+    # ---------------------------------------------------------
+    # 2. Knowledge layer relevance
+    # ---------------------------------------------------------
     if not query.preferred_layers:
         layer_match = 0.80
+
     elif layer in query.preferred_layers:
         layer_match = 1.0
+
     else:
         layer_match = 0.55
-    return clamp((0.75 * subtype_match) + (0.25 * layer_match))
+
+    # ---------------------------------------------------------
+    # 3. Combined applicability score
+    # ---------------------------------------------------------
+    return clamp(
+        (0.75 * subtype_match)
+        + (0.25 * layer_match)
+    )

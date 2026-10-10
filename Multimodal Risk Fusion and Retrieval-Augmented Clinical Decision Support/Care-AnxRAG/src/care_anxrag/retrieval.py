@@ -4,8 +4,16 @@ import itertools
 import statistics
 from dataclasses import dataclass
 from datetime import datetime
+from time import perf_counter
 from typing import Sequence
 
+from .clinical_match import (
+    concept_set_compatibility,
+    population_compatibility,
+    supports_explicit_clinical_context,
+    supports_explicit_treatment_query,
+    treatment_compatibility,
+)
 from .config import Settings
 from .db import Database
 from .embeddings import Embedder
@@ -55,9 +63,30 @@ class CareRetriever:
         self.safety_router = safety_router or SafetyRouter()
 
     def retrieve(self, query: str) -> RetrievalResult:
+        total_started = perf_counter()
+        timings = {
+            "analysis": 0.0,
+            "embedding": 0.0,
+            "dense_search": 0.0,
+            "lexical_search": 0.0,
+            "fusion": 0.0,
+            "reranking": 0.0,
+            "care_scoring": 0.0,
+            "nli_conflict": 0.0,
+            "selection": 0.0,
+            "total": 0.0,
+        }
+
+        stage_started = perf_counter()
         safety = self.safety_router.assess(query)
-        analysis = self.query_analyzer.analyze(query, safety.level, safety.reason)
+        analysis = self.query_analyzer.analyze(
+            query,
+            safety.level,
+            safety.reason,
+        )
+        timings["analysis"] = self._elapsed_ms(stage_started)
         if safety.level != SafetyLevel.NORMAL:
+            timings["total"] = self._elapsed_ms(total_started)
             return RetrievalResult(
                 query_analysis=analysis,
                 hits=[],
@@ -65,15 +94,46 @@ class CareRetriever:
                 should_abstain=True,
                 abstention_reason=safety.reason,
                 knowledge_base_last_sync_at=self.database.last_successful_sync_at(),
+                timings_ms=timings,
             )
 
-        if self.database.count_chunks(status=None) > 0:
-            self.database.assert_embedding_identity(self.embedder.model_id)
-        query_embedding = self.embedder.embed([analysis.normalized_query])[0]
-        dense_ranked = self._dense_search(query_embedding, analysis.preferred_layers)
-        lexical_ranked = self._lexical_search(analysis.normalized_query)
-        hits = self._fuse(dense_ranked, lexical_ranked)
+        mode = self.settings.retrieval_mode
+        dense_ranked: list[_RankedId] = []
+        lexical_ranked: list[_RankedId] = []
+
+        if mode != "lexical_only":
+            if self.database.count_chunks(status=None) > 0:
+                self.database.assert_embedding_identity(
+                    self.embedder.model_id
+                )
+            stage_started = perf_counter()
+            query_embedding = self.embedder.embed(
+                [analysis.retrieval_query]
+            )[0]
+            timings["embedding"] = self._elapsed_ms(stage_started)
+
+            stage_started = perf_counter()
+            dense_ranked = self._dense_search(
+                query_embedding,
+                analysis.preferred_layers,
+            )
+            timings["dense_search"] = self._elapsed_ms(stage_started)
+
+        if mode != "dense_only":
+            stage_started = perf_counter()
+            lexical_ranked = self._lexical_search(
+                analysis.retrieval_query
+            )
+            timings["lexical_search"] = self._elapsed_ms(stage_started)
+
+        stage_started = perf_counter()
+        hits = self._fuse(
+            dense_ranked,
+            lexical_ranked,
+        )
+        timings["fusion"] = self._elapsed_ms(stage_started)
         if not hits:
+            timings["total"] = self._elapsed_ms(total_started)
             return RetrievalResult(
                 query_analysis=analysis,
                 hits=[],
@@ -81,71 +141,217 @@ class CareRetriever:
                 should_abstain=True,
                 abstention_reason="no_relevant_evidence_retrieved",
                 knowledge_base_last_sync_at=self.database.last_successful_sync_at(),
+                timings_ms=timings,
             )
 
-        rerank_subset = hits[: self.settings.rerank_candidates]
-        rerank_scores = self.reranker.score(analysis.original_query, rerank_subset)
-        for hit, score in zip(rerank_subset, rerank_scores, strict=True):
-            hit.rerank_score = clamp(score)
-
-        max_rrf = max((hit.rrf_score for hit in hits), default=1.0)
-        for hit in hits:
-            hit.rrf_normalized = clamp(hit.rrf_score / max_rrf if max_rrf else 0.0)
-            hit.freshness_score = calculate_freshness(
-                hit.chunk.layer,
-                hit.chunk.updated_at,
-                hit.chunk.published_at,
-                self.settings.clinical_half_life_days,
-                self.settings.research_half_life_days,
+        uses_reranker = mode in {
+            "hybrid_rerank",
+            "care",
+            "care_conflict",
+            "full",
+        }
+        if uses_reranker:
+            stage_started = perf_counter()
+            rerank_subset = hits[
+                : self.settings.rerank_candidates
+            ]
+            rerank_scores = self.reranker.score(
+                analysis.original_query,
+                rerank_subset,
             )
-            hit.applicability_score = applicability_score(
-                hit.chunk.topics,
-                analysis,
-                hit.chunk.layer,
-            )
-            hit.relevance_score = self._relevance_score(hit)
-            hit.care_score = self._care_score(hit)
-        hits.sort(key=lambda value: value.care_score, reverse=True)
+            for hit, score in zip(
+                rerank_subset,
+                rerank_scores,
+                strict=True,
+            ):
+                hit.rerank_score = clamp(score)
+            timings["reranking"] = self._elapsed_ms(stage_started)
 
-        # Source authority and evidence quality must never make an unrelated chunk
-        # answerable. Conflict analysis and final context operate only on candidates
-        # that pass an independent query-evidence relevance gate.
-        relevant_hits = [
-            hit for hit in hits
-            if hit.relevance_score >= self.settings.minimum_relevance_score
-        ]
-        relation_candidates = self._diversify(
-            relevant_hits, limit=min(6, len(relevant_hits)), max_per_document=1
+        stage_started = perf_counter()
+        max_rrf = max(
+            (hit.rrf_score for hit in hits),
+            default=1.0,
         )
-        pairs = [
-            (left, right)
-            for left, right in itertools.combinations(relation_candidates, 2)
-            if left.chunk.document_id != right.chunk.document_id
-        ]
-        relations = self.nli.classify(pairs)
-        conflict_score, unresolved_conflict = self._resolve_conflicts(hits, relations)
+        for hit in hits:
+            hit.rrf_normalized = clamp(
+                hit.rrf_score / max_rrf
+                if max_rrf
+                else 0.0
+            )
+            if mode in {
+                "care",
+                "care_conflict",
+                "full",
+            }:
+                hit.freshness_score = calculate_freshness(
+                    hit.chunk.layer,
+                    hit.chunk.updated_at,
+                    hit.chunk.published_at,
+                    self.settings.clinical_half_life_days,
+                    self.settings.research_half_life_days,
+                )
+                hit.applicability_score = applicability_score(
+                    hit.chunk.topics,
+                    analysis,
+                    hit.chunk.layer,
+                )
+                hit.relevance_score = self._relevance_score(hit)
+                hit.care_score = self._care_score(
+                    hit,
+                    analysis,
+                )
+            elif mode == "hybrid_rerank":
+                hit.relevance_score = hit.rerank_score
+                hit.care_score = hit.rerank_score
+            elif mode == "hybrid_rrf":
+                hit.relevance_score = hit.rrf_normalized
+                hit.care_score = hit.rrf_normalized
+            elif mode == "dense_only":
+                hit.relevance_score = hit.dense_score
+                hit.care_score = hit.dense_score
+            elif mode == "lexical_only":
+                hit.relevance_score = hit.lexical_score
+                hit.care_score = hit.lexical_score
 
+        if mode == "dense_only":
+            hits.sort(
+                key=lambda value: value.dense_score,
+                reverse=True,
+            )
+        elif mode == "lexical_only":
+            hits.sort(
+                key=lambda value: value.lexical_score,
+                reverse=True,
+            )
+        elif mode == "hybrid_rrf":
+            hits.sort(
+                key=lambda value: value.rrf_score,
+                reverse=True,
+            )
+        elif mode == "hybrid_rerank":
+            hits.sort(
+                key=lambda value: value.rerank_score,
+                reverse=True,
+            )
+        else:
+            hits.sort(
+                key=lambda value: value.care_score,
+                reverse=True,
+            )
+
+        if mode == "full":
+            relevant_hits = [
+                hit
+                for hit in hits
+                if hit.relevance_score
+                >= self.settings.minimum_relevance_score
+            ]
+        else:
+            relevant_hits = list(hits)
+        timings["care_scoring"] = self._elapsed_ms(stage_started)
+
+        relations: list[EvidenceRelation] = []
+        conflict_score = 0.0
+        unresolved_conflict = 0.0
+        if mode in {"care_conflict", "full"}:
+            stage_started = perf_counter()
+            relation_candidates = self._diversify(
+                relevant_hits,
+                limit=min(
+                    6,
+                    len(relevant_hits),
+                ),
+                max_per_document=1,
+            )
+            pairs = [
+                (left, right)
+                for left, right in itertools.combinations(
+                    relation_candidates,
+                    2,
+                )
+                if left.chunk.document_id
+                != right.chunk.document_id
+            ]
+            relations = self.nli.classify(pairs)
+            (
+                conflict_score,
+                unresolved_conflict,
+            ) = self._resolve_conflicts(
+                hits,
+                relations,
+            )
+            timings["nli_conflict"] = self._elapsed_ms(
+                stage_started
+            )
+
+        stage_started = perf_counter()
         selected = self._diversify(
-            [hit for hit in relevant_hits if not hit.excluded_due_to_conflict],
+            [
+                hit
+                for hit in relevant_hits
+                if not hit.excluded_due_to_conflict
+            ],
             limit=self.settings.final_context_chunks,
             max_per_document=2,
         )
-        selected_ids = {hit.chunk.chunk_id for hit in selected}
-        ordered_hits = selected + [hit for hit in hits if hit.chunk.chunk_id not in selected_ids]
-        ordered_hits = ordered_hits[: max(self.settings.final_context_chunks, 12)]
-
-        confidence = self._confidence(selected, conflict_score)
-        should_abstain, reason = self._abstention(
-            selected,
-            confidence,
-            unresolved_conflict,
-        )
-        evidence_dates = [
-            hit.chunk.updated_at or hit.chunk.published_at
+        selected_ids = {
+            hit.chunk.chunk_id
             for hit in selected
-            if hit.chunk.updated_at or hit.chunk.published_at
+        }
+        ordered_hits = selected + [
+            hit
+            for hit in hits
+            if hit.chunk.chunk_id
+            not in selected_ids
         ]
-        latest_evidence = max(evidence_dates) if evidence_dates else None
+        ordered_hits = ordered_hits[
+            : max(
+                self.settings.final_context_chunks,
+                12,
+            )
+        ]
+
+        if mode == "full":
+            confidence = self._confidence(
+                selected,
+                conflict_score,
+            )
+            (
+                should_abstain,
+                reason,
+            ) = self._abstention(
+                selected,
+                confidence,
+                unresolved_conflict,
+                analysis,
+            )
+        else:
+            confidence = (
+                selected[0].care_score
+                if selected
+                else 0.0
+            )
+            should_abstain = not selected
+            reason = (
+                "no_active_evidence_after_conflict_resolution"
+                if should_abstain
+                else None
+            )
+
+        evidence_dates = [
+            hit.chunk.updated_at
+            or hit.chunk.published_at
+            for hit in selected
+            if hit.chunk.updated_at
+            or hit.chunk.published_at
+        ]
+        latest_evidence = (
+            max(evidence_dates)
+            if evidence_dates
+            else None
+        )
+        timings["selection"] = self._elapsed_ms(stage_started)
+        timings["total"] = self._elapsed_ms(total_started)
         return RetrievalResult(
             query_analysis=analysis,
             hits=ordered_hits,
@@ -156,6 +362,14 @@ class CareRetriever:
             abstention_reason=reason,
             latest_evidence_at=latest_evidence,
             knowledge_base_last_sync_at=self.database.last_successful_sync_at(),
+            timings_ms=timings,
+        )
+
+    @staticmethod
+    def _elapsed_ms(started: float) -> float:
+        return round(
+            (perf_counter() - started) * 1000.0,
+            3,
         )
 
     def _dense_search(
@@ -240,6 +454,24 @@ class CareRetriever:
         return hits[: self.settings.fused_candidates]
 
     @staticmethod
+    def _clinical_compatibility_adjustment(
+    applicability_score: float,
+    ) -> float:
+        """
+        Convert strong clinical incompatibility into a ranking adjustment.
+
+        Applicability below 0.50 represents a strong mismatch, such as
+        evidence explicitly targeting a different anxiety subtype.
+
+        Generic or partially applicable anxiety evidence is not penalized
+        here; its normal applicability score already handles that case.
+        """
+        if applicability_score < 0.50:
+            return 0.60
+
+        return 1.0
+
+    @staticmethod
     def _relevance_score(hit: SearchHit) -> float:
         # Deliberately excludes authority/evidence/freshness: this is the guardrail
         # against highly authoritative but irrelevant evidence. Lexical presence is
@@ -252,9 +484,80 @@ class CareRetriever:
             + 0.05 * hit.applicability_score
         )
 
-    def _care_score(self, hit: SearchHit) -> float:
+    @staticmethod
+    def _clinical_text(hit: SearchHit) -> str:
+        return "\n".join(
+            value
+            for value in [
+                getattr(hit.chunk, "title", ""),
+                getattr(hit.chunk, "section_heading", ""),
+                getattr(hit.chunk, "text", ""),
+            ]
+            if value
+        )
+
+    @classmethod
+    def _treatment_compatibility_adjustment(cls, hit: SearchHit, analysis) -> float:
+        return treatment_compatibility(
+            getattr(analysis, "treatments", []) or [],
+            cls._clinical_text(hit),
+        )
+
+    @classmethod
+    def _population_compatibility_adjustment(cls, hit: SearchHit, analysis) -> float:
+        return population_compatibility(
+            getattr(analysis, "population", None),
+            cls._clinical_text(hit),
+        )
+
+    @staticmethod
+    def _clinical_facet_values(
+        hit: SearchHit,
+        name: str,
+    ) -> list[str]:
+        metadata = getattr(hit.chunk, "metadata", {}) or {}
+        facets = metadata.get("clinical_facets", {})
+        if not isinstance(facets, dict):
+            return []
+        values = facets.get(name, [])
+        if not isinstance(values, list):
+            return []
+        return [
+            str(value)
+            for value in values
+            if str(value).strip()
+        ]
+
+    @classmethod
+    def _outcome_compatibility_adjustment(
+        cls,
+        hit: SearchHit,
+        analysis,
+    ) -> float:
+        return concept_set_compatibility(
+            getattr(analysis, "outcomes", []) or [],
+            cls._clinical_facet_values(hit, "outcomes"),
+            mismatch_score=0.65,
+            unknown_score=0.85,
+        )
+
+    @classmethod
+    def _comorbidity_compatibility_adjustment(
+        cls,
+        hit: SearchHit,
+        analysis,
+    ) -> float:
+        return concept_set_compatibility(
+            getattr(analysis, "comorbidities", []) or [],
+            cls._clinical_facet_values(hit, "comorbidities"),
+            mismatch_score=0.65,
+            unknown_score=0.90,
+        )
+
+    def _care_score(self, hit: SearchHit, analysis=None) -> float:
         weights = self.settings.weights
-        return clamp(
+
+        base_score = clamp(
             weights.semantic * hit.dense_score
             + weights.lexical * hit.lexical_score
             + weights.rrf * hit.rrf_normalized
@@ -263,6 +566,42 @@ class CareRetriever:
             + weights.evidence * hit.chunk.evidence_score
             + weights.freshness * hit.freshness_score
             + weights.applicability * hit.applicability_score
+        )
+
+        subtype_compatibility = self._clinical_compatibility_adjustment(
+            hit.applicability_score
+        )
+
+        treatment_adjustment = 1.0
+        population_adjustment = 1.0
+        outcome_adjustment = 1.0
+        comorbidity_adjustment = 1.0
+
+        if analysis is not None:
+            treatment_adjustment = self._treatment_compatibility_adjustment(
+                hit,
+                analysis,
+            )
+            population_adjustment = self._population_compatibility_adjustment(
+                hit,
+                analysis,
+            )
+            outcome_adjustment = self._outcome_compatibility_adjustment(
+                hit,
+                analysis,
+            )
+            comorbidity_adjustment = self._comorbidity_compatibility_adjustment(
+                hit,
+                analysis,
+            )
+
+        return clamp(
+            base_score
+            * subtype_compatibility
+            * treatment_adjustment
+            * population_adjustment
+            * outcome_adjustment
+            * comorbidity_adjustment
         )
 
     def _resolve_conflicts(
@@ -354,6 +693,7 @@ class CareRetriever:
         hits: Sequence[SearchHit],
         confidence: float,
         unresolved_conflict: float,
+        analysis,
     ) -> tuple[bool, str | None]:
         if not hits:
             return True, "no_active_evidence_after_conflict_resolution"
@@ -367,4 +707,67 @@ class CareRetriever:
             return True, "insufficient_source_diversity"
         if unresolved_conflict > self.settings.unresolved_conflict_threshold:
             return True, "unresolved_high_confidence_evidence_conflict"
+
+        requested_treatments = set(getattr(analysis, "treatments", []) or [])
+        requested_subtypes = set(
+            getattr(analysis, "anxiety_subtypes", []) or []
+        )
+        requested_population = getattr(analysis, "population", None)
+        requested_outcomes = set(
+            getattr(analysis, "outcomes", []) or []
+        )
+        requested_comorbidities = set(
+            getattr(analysis, "comorbidities", []) or []
+        )
+
+        if requested_treatments:
+            unsupported_treatments = [
+                treatment
+                for treatment in requested_treatments
+                if not any(
+                    supports_explicit_clinical_context(
+                        requested_subtypes,
+                        {treatment},
+                        requested_population,
+                        requested_outcomes,
+                        requested_comorbidities,
+                        hit.chunk.topics,
+                        self._clinical_text(hit),
+                        (
+                            getattr(hit.chunk, "metadata", {}) or {}
+                        ).get("clinical_facets", {}),
+                    )
+                    for hit in hits
+                )
+            ]
+            if unsupported_treatments:
+                reason = (
+                    "insufficient_direct_evidence_for_requested_clinical_context"
+                    if requested_outcomes or requested_comorbidities
+                    else "insufficient_direct_evidence_for_requested_treatment"
+                )
+                return True, reason
+
+        elif requested_outcomes or requested_comorbidities:
+            has_joint_context = any(
+                supports_explicit_clinical_context(
+                    requested_subtypes,
+                    set(),
+                    requested_population,
+                    requested_outcomes,
+                    requested_comorbidities,
+                    hit.chunk.topics,
+                    self._clinical_text(hit),
+                    (
+                        getattr(hit.chunk, "metadata", {}) or {}
+                    ).get("clinical_facets", {}),
+                )
+                for hit in hits
+            )
+            if not has_joint_context:
+                return (
+                    True,
+                    "insufficient_direct_evidence_for_requested_clinical_context",
+                )
+
         return False, None
