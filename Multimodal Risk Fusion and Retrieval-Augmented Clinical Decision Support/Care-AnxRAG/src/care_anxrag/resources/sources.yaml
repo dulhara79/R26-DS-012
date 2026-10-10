@@ -97,9 +97,9 @@ sources:
         OR meta-analysis[Publication Type]
         OR randomized controlled trial[Publication Type]
         OR practice guideline[Publication Type])
-      initial_lookback_days: 30
+      initial_lookback_days: 3
       overlap_days: 2
-      max_records_per_sync: 1000
+      max_records_per_sync: 250
       search_batch_size: 200
       fetch_batch_size: 100
       api_key_env: NCBI_API_KEY

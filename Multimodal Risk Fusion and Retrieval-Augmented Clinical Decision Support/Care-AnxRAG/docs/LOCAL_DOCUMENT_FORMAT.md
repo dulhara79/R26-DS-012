@@ -21,7 +21,15 @@ topics:
   - panic_disorder
 metadata:
   licence: CC-BY-4.0
-  population: adults
+  pico:
+    population:
+      - Adults with generalized anxiety disorder
+    intervention:
+      - Cognitive behavioural therapy
+    comparator:
+      - Treatment as usual
+    outcome:
+      - Anxiety symptom severity at 12 weeks
 ---
 
 # Overview
@@ -78,3 +86,39 @@ care-anxrag approve VERSION_ID --project-root .
 ```
 
 Do not label a document as a clinical guideline, systematic review, or other evidence type unless the source itself supports that classification.
+
+
+## Clinical evidence facets and PICO annotations
+
+CARE-AnxRAG stores clinical facets with explicit provenance.
+
+Automatically normalized facets are limited to deterministic phrase matches for known anxiety subtypes, treatments, and broad populations. This is normalization of text that is actually present in the source; it is not model-generated clinical interpretation.
+
+PICO fields are **annotation-only**. Put them under `metadata.pico`:
+
+```yaml
+metadata:
+  pico:
+    population:
+      - Adults with generalized anxiety disorder
+    intervention:
+      - Cognitive behavioural therapy
+    comparator:
+      - Treatment as usual
+    outcome:
+      - GAD-7 symptom severity at 12 weeks
+```
+
+Each field may be a list of strings. Leave a field empty or omit it when the source/reviewer has not established that information.
+
+Do not infer a comparator, outcome, treatment effect, population, or follow-up period merely because it would be plausible. Unknown stays unknown.
+
+The stored chunk metadata contains `clinical_facets` with:
+
+- normalized anxiety subtype concepts from source text/topics;
+- normalized treatment concepts from source text;
+- normalized population concepts from source text;
+- the exact source/reviewer-supplied PICO annotation;
+- provenance labels identifying deterministic phrase matching versus explicit metadata annotation.
+
+Changing the PICO annotation changes the document version fingerprint so controlled annotation revisions remain auditable.

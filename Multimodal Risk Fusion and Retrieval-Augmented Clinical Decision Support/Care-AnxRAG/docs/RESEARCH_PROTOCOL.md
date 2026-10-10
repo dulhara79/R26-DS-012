@@ -6,15 +6,38 @@ Does contradiction-, authority-, reliability-, evidence-, and freshness-aware re
 
 ## Baselines
 
-- B0: generator without retrieval.
-- B1: dense vector top-k.
+CARE-AnxRAG does not use free-form medical answer generation. Baselines therefore compare retrieval/evidence-selection stages while keeping the same frozen corpus, chunking, question set, and extractive answer renderer.
+
+- B0: dense vector top-k only.
+- B1: lexical BM25 top-k only.
 - B2: dense + BM25 + RRF.
 - B3: B2 + CrossEncoder reranker.
 - B4: B3 + authority/evidence/freshness/applicability CARE score.
 - B5: B4 + contradiction handling.
-- CARE-AnxRAG: B5 + independent relevance gate + calibrated abstention + version-aware corpus.
+- CARE-AnxRAG: B5 + independent relevance gate + treatment/population sufficiency + calibrated abstention + version-aware corpus + extractive citation grounding.
 
-Keep generator, corpus snapshot, prompt, chunking, and evaluation questions constant across baselines.
+Keep corpus snapshot, chunking, extractive rendering, and evaluation questions constant across baselines.
+
+
+Run the full ablation matrix with:
+
+```bash
+care-anxrag evaluate-ablation data/benchmark/your_benchmark.jsonl --project-root .
+```
+
+The command executes the same benchmark against:
+
+```text
+B0_dense_only
+B1_lexical_only
+B2_hybrid_rrf
+B3_hybrid_rerank
+B4_care
+B5_care_conflict
+CARE_full
+```
+
+The retriever restores the original runtime mode after the experiment so an evaluation run does not silently change later requests.
 
 ## Benchmark strata
 
@@ -41,7 +64,7 @@ Keep generator, corpus snapshot, prompt, chunking, and evaluation questions cons
 Each item should contain:
 
 - question and intent;
-- anxiety subtype/population;
+- anxiety subtype/treatment/population;
 - relevant source/document/chunk IDs;
 - gold evidence excerpts;
 - answerable vs must-abstain;
@@ -60,9 +83,10 @@ Use at least two qualified annotators for clinical/evidence labels, report agree
 - nDCG@k
 - source/evidence authority precision
 - active-version accuracy
+- stale/superseded evidence intrusion rate
 - poisoned-evidence intrusion rate
 
-## Generation metrics
+## Answer/evidence-presentation metrics
 
 - expert answer correctness;
 - faithfulness/unsupported claim rate;
@@ -72,17 +96,18 @@ Use at least two qualified annotators for clinical/evidence labels, report agree
 - appropriate abstention;
 - unsafe confidence rate;
 - conflict identification/resolution accuracy;
-- source freshness/version correctness.
+- source freshness/version correctness;
+- exact gold-evidence coverage for extractive answers.
 
 Automated LLM graders may supplement but must not replace human evaluation for the primary safety/clinical outcomes.
 
 ## Calibration
 
-Split data into development and locked test sets. Tune CARE weights, relevance threshold, confidence threshold, contradiction threshold, dominance margin, and source-diversity requirement only on development data. Freeze all values before final testing.
+Split data into development and locked test sets. The committed CARE weights are treated as prespecified engineering priors unless a separate weight-tuning experiment is explicitly documented. Tune configurable thresholds (including relevance, confidence, contradiction, dominance margin, and source-diversity requirements) only on development data. If CARE weights are deliberately tuned, that tuning must also use development data only and must be reported separately. Freeze all values before final testing.
 
 ## Statistical analysis
 
-- paired bootstrap confidence intervals for retrieval/generation metric differences;
+- paired bootstrap confidence intervals for per-item metric differences, reported as CARE_full minus each baseline;
 - McNemar test for paired binary outcomes such as correct abstention;
 - correction for multiple primary comparisons;
 - subgroup performance and error analysis;

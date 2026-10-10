@@ -91,7 +91,7 @@ class Settings:
     embedding_provider: str = "ollama"
     embedding_model: str = "embeddinggemma"
     embedding_dimensions: int = 256
-    generator_provider: str = "ollama"
+    generator_provider: str = "extractive"
     generation_model: str = "gemma3:4b"
     ollama_base_url: str = "http://localhost:11434"
 
@@ -106,6 +106,7 @@ class Settings:
     rerank_candidates: int = 20
     final_context_chunks: int = 6
     rrf_k: int = 60
+    retrieval_mode: str = "full"
 
     minimum_care_score: float = 0.43
     minimum_relevance_score: float = 0.24
@@ -113,6 +114,7 @@ class Settings:
     contradiction_threshold: float = 0.72
     unresolved_conflict_threshold: float = 0.32
     dominance_margin: float = 0.15
+    grounding_entailment_threshold: float = 0.65
     min_distinct_sources: int = 1
 
     clinical_half_life_days: int = 3650
@@ -153,7 +155,7 @@ class Settings:
             embedding_provider=env.get("CARE_EMBEDDING_PROVIDER", "ollama").lower(),
             embedding_model=env.get("CARE_EMBEDDING_MODEL", "embeddinggemma"),
             embedding_dimensions=_as_int(env.get("CARE_EMBEDDING_DIMENSIONS"), 256),
-            generator_provider=env.get("CARE_GENERATOR_PROVIDER", "ollama").lower(),
+            generator_provider=env.get("CARE_GENERATOR_PROVIDER", "extractive").lower(),
             generation_model=env.get("CARE_GENERATION_MODEL", "gemma3:4b"),
             ollama_base_url=env.get("CARE_OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/"),
             reranker_provider=env.get("CARE_RERANKER_PROVIDER", "cross_encoder").lower(),
@@ -168,6 +170,7 @@ class Settings:
             rerank_candidates=_as_int(env.get("CARE_RERANK_CANDIDATES"), 20),
             final_context_chunks=_as_int(env.get("CARE_FINAL_CONTEXT_CHUNKS"), 6),
             rrf_k=_as_int(env.get("CARE_RRF_K"), 60),
+            retrieval_mode=env.get("CARE_RETRIEVAL_MODE", "full").lower(),
             minimum_care_score=_as_float(env.get("CARE_MINIMUM_CARE_SCORE"), 0.43),
             minimum_relevance_score=_as_float(
                 env.get("CARE_MINIMUM_RELEVANCE_SCORE"), 0.24
@@ -180,6 +183,10 @@ class Settings:
                 env.get("CARE_UNRESOLVED_CONFLICT_THRESHOLD"), 0.32
             ),
             dominance_margin=_as_float(env.get("CARE_DOMINANCE_MARGIN"), 0.15),
+            grounding_entailment_threshold=_as_float(
+                env.get("CARE_GROUNDING_ENTAILMENT_THRESHOLD"),
+                0.65,
+            ),
             min_distinct_sources=_as_int(env.get("CARE_MIN_DISTINCT_SOURCES"), 1),
             clinical_half_life_days=_as_int(
                 env.get("CARE_CLINICAL_HALF_LIFE_DAYS"), 3650
@@ -221,7 +228,12 @@ class Settings:
             raise ValueError("CARE_VECTOR_BACKEND must be 'chroma' or 'sqlite'")
         if self.embedding_provider not in {"ollama", "sentence_transformers", "hash"}:
             raise ValueError("Unsupported embedding provider")
-        if self.generator_provider not in {"ollama", "rule"}:
+        if self.generator_provider == "ollama":
+            raise ValueError(
+                "CARE_GENERATOR_PROVIDER=ollama is disabled: "
+                "free-form medical answer generation is disabled"
+            )
+        if self.generator_provider not in {"extractive", "rule"}:
             raise ValueError("Unsupported generator provider")
         if self.reranker_provider not in {"cross_encoder", "heuristic"}:
             raise ValueError("Unsupported reranker provider")
@@ -256,6 +268,20 @@ class Settings:
             raise ValueError("Evidence half-life values must be positive")
         if self.request_timeout_seconds <= 0:
             raise ValueError("CARE_REQUEST_TIMEOUT_SECONDS must be positive")
+        valid_retrieval_modes = {
+            "dense_only",
+            "lexical_only",
+            "hybrid_rrf",
+            "hybrid_rerank",
+            "care",
+            "care_conflict",
+            "full",
+        }
+        if self.retrieval_mode not in valid_retrieval_modes:
+            raise ValueError(
+                "CARE_RETRIEVAL_MODE must be one of: "
+                + ", ".join(sorted(valid_retrieval_modes))
+            )
         if self.rerank_candidates > self.fused_candidates:
             raise ValueError("CARE_RERANK_CANDIDATES cannot exceed CARE_FUSED_CANDIDATES")
         if self.final_context_chunks > self.rerank_candidates:
@@ -267,6 +293,7 @@ class Settings:
             self.contradiction_threshold,
             self.unresolved_conflict_threshold,
             self.dominance_margin,
+            self.grounding_entailment_threshold,
         ]:
             if not 0.0 <= value <= 1.0:
                 raise ValueError("Thresholds must be between 0 and 1")

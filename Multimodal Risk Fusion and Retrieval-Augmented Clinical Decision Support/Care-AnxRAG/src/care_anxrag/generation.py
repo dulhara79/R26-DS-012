@@ -7,8 +7,9 @@ from typing import Protocol, Sequence
 import httpx
 from pydantic import ValidationError
 
+from .answer_selection import InsufficientAnswerEvidence, select_answer_sentence
 from .models import GeneratedPayload, RetrievalResult, SearchHit
-from .util import content_tokens, normalize_whitespace
+from .query import QueryAnalyzer
 
 
 class Generator(Protocol):
@@ -22,8 +23,8 @@ class Generator(Protocol):
     def ping(self) -> bool: ...
 
 
-class RuleBasedGenerator:
-    """Deterministic generator for tests and end-to-end offline validation."""
+class EvidenceOnlyGenerator:
+    """Extractive answer renderer: returns source sentences verbatim with citations."""
 
     def generate(
         self,
@@ -31,37 +32,40 @@ class RuleBasedGenerator:
         hits: Sequence[SearchHit],
         retrieval: RetrievalResult,
     ) -> GeneratedPayload:
-        if not hits:
-            return GeneratedPayload(
-                answer="The available evidence is insufficient for a grounded answer.",
-                cited_source_ids=[],
-                uncertainty="No evidence was supplied.",
-            )
-
         sentences: list[str] = []
         cited: list[str] = []
+        seen: set[str] = set()
+        analysis = QueryAnalyzer().analyze(question)
 
-        for index, hit in enumerate(hits[:3], start=1):
+        for index, hit in enumerate(hits, start=1):
+            excerpt = select_answer_sentence(hit, analysis)
+            if excerpt is None:
+                continue
+            identity = " ".join(excerpt.split()).casefold()
+            if identity in seen:
+                continue
+            seen.add(identity)
             source_id = f"S{index}"
-            excerpt = _best_sentence(hit.chunk.text, question)
-            sentences.append(f"{excerpt} [{source_id}]")
+            sentences.append(f"- {excerpt} [{source_id}]")
             cited.append(source_id)
+            if len(sentences) == 3:
+                break
 
-        uncertainty = None
-        if retrieval.conflict_score > 0.0:
-            uncertainty = (
-                f"The retrieved evidence had a conflict score of "
-                f"{retrieval.conflict_score:.2f}; interpret the synthesis cautiously."
-            )
+        if not sentences:
+            raise InsufficientAnswerEvidence()
 
         return GeneratedPayload(
-            answer=" ".join(sentences),
+            answer="\n".join(sentences),
             cited_source_ids=cited,
-            uncertainty=uncertainty,
+            uncertainty=None,
         )
 
     def ping(self) -> bool:
         return True
+
+
+# Backward-compatible name for existing deterministic tests and offline scripts.
+RuleBasedGenerator = EvidenceOnlyGenerator
 
 
 class OllamaGenerator:
@@ -120,6 +124,8 @@ Non-negotiable rules:
 10. The cited_source_ids array must contain exactly the source IDs that appear as bracket citations in the answer.
 11. Do not put a source ID in cited_source_ids unless the answer contains that exact bracket citation.
 12. Do not use a bracket citation in the answer unless that same ID appears in cited_source_ids.
+13. Keep each substantive medical statement as an atomic factual sentence rather than combining unrelated claims.
+14. Every citation attached to a sentence must individually support the entire claim in that sentence.
 """
 
         user_prompt = f"""QUESTION:
@@ -290,83 +296,3 @@ def _payload_is_valid(
         return False
 
     return True
-
-
-def _first_sentence(
-    text: str,
-    max_characters: int = 280,
-) -> str:
-    normalized = normalize_whitespace(text)
-
-    match = re.search(
-        r"^(.+?[.!?])(?:\s|$)",
-        normalized,
-    )
-
-    sentence = match.group(1) if match else normalized
-
-    if len(sentence) > max_characters:
-        sentence = (
-            sentence[: max_characters - 1].rstrip()
-            + "…"
-        )
-
-    return sentence
-
-
-def _best_sentence(
-    text: str,
-    question: str,
-    max_characters: int = 280,
-) -> str:
-    """Select the most query-relevant sentence for deterministic smoke-test output."""
-
-    normalized = normalize_whitespace(text)
-
-    candidates = [
-        part.strip()
-        for part in re.split(
-            r"(?<=[.!?])(?:\s+|$)|\n+",
-            normalized,
-        )
-        if part.strip()
-        and not part.lstrip().startswith("#")
-    ]
-
-    query_tokens = set(
-        content_tokens(question)
-    )
-
-    if not candidates or not query_tokens:
-        return _first_sentence(
-            normalized,
-            max_characters,
-        )
-
-    def score(
-        sentence: str,
-    ) -> tuple[float, int]:
-        sentence_tokens = set(
-            content_tokens(sentence)
-        )
-
-        overlap = (
-            len(query_tokens & sentence_tokens)
-            / max(1, len(query_tokens))
-        )
-
-        return overlap, -len(sentence)
-
-    selected = max(
-        candidates,
-        key=score,
-    )
-
-    if len(selected) > max_characters:
-        selected = (
-            selected[: max_characters - 1].rstrip()
-            + "…"
-        )
-
-    return selected
-
