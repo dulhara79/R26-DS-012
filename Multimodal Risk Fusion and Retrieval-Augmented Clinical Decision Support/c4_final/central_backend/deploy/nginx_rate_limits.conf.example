@@ -1,0 +1,27 @@
+# Central Backend trusted HTTPS ingress example; do not treat as
+# standalone turnkey nginx.conf. Place zones in nginx http{}:
+limit_req_zone $binary_remote_addr zone=clinician_login:10m rate=5r/m;
+limit_req_zone $binary_remote_addr zone=pairing:10m rate=10r/m;
+limit_req_zone $binary_remote_addr zone=backend_write:10m rate=30r/m;
+limit_req_status 429;
+
+# Inside the TLS-terminated server{} that fronts central_backend:
+client_max_body_size 1m;
+# Configure your real upstream and TLS certificates separately.
+location = /auth/login {
+    limit_req zone=clinician_login burst=5 nodelay;
+    proxy_pass http://central_backend_upstream;
+}
+location = /v1/subjects/self {
+    limit_req zone=pairing burst=10 nodelay;
+    proxy_pass http://central_backend_upstream;
+}
+location ~ ^/v1/(clinical-notes|ingest/|device-tokens|clinicians/me/assignments|evidence/ask) {
+    limit_req zone=backend_write burst=30 nodelay;
+    proxy_pass http://central_backend_upstream;
+}
+# All remaining endpoints still require the API's normal authentication.
+location / {
+    proxy_pass http://central_backend_upstream;
+}
+# Only trust X-Forwarded-* headers from configured trusted proxy hops.
