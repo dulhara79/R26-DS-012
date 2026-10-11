@@ -8,7 +8,8 @@ layer can be re-run over stored readings at any time without re-calling anyone.
 
 The adapters follow the contracts exposed by the live component services:
 
-    c1_physiological  GET /predict/{user_id} -> current_risk_index [0,100]
+    c1_physiological  GET /predict/{user_id} -> normalized score [0,1]
+                       (current_risk_index is a 0-100 display index)
 
     c2_behavioral     excluded — stored, never fused, no Space called
 
@@ -225,7 +226,8 @@ def _call_c1_legacy(client: httpx.Client, user_id: str) -> ComponentResult:
     3. Coverage is NOT len(risk_forecast)/10 — C1 always returns 10 steps
        regardless of real history (padded with baseline). Record as unknown.
     4. confidence is NOT a C1 field. Record 0.5, not an estimate.
-    5. model_version is NOT published by this contract. Record None.
+    5. model_version is NOT published by the legacy contract. Record None.
+    6. C1 display index [0,100] must be converted to fusion score [0,1].
     """
     r = client.get(f"{C1_BASE}/predict/{user_id}",
                    headers=_headers(C1_TOKEN), timeout=TIMEOUT_S)
@@ -244,15 +246,55 @@ def _call_c1_legacy(client: httpx.Client, user_id: str) -> ComponentResult:
     else:
         our_status = "error"
 
-    risk_index = body.get("current_risk_index")
-    if our_status == "ok" and risk_index is None:
-        our_status = "error"
-
-    raw_score = float(risk_index) if our_status == "ok" else None
+    # The C1 service returns `current_c1_score` and `score` on [0,1],
+    # plus `current_risk_index = current_c1_score * 100` for display.
+    # NEVER feed the 0-100 display index into the 0-1 fusion reference.
+    raw_score = None
+    score_source = None
+    score_issue = None
+    if our_status == "ok":
+        try:
+            normalized = body.get("current_c1_score")
+            score_source = "current_c1_score"
+            if normalized is None:
+                normalized = body.get("score")
+                score_source = "score"
+            risk_index = body.get("current_risk_index")
+            if normalized is not None:
+                if isinstance(normalized, bool):
+                    raise ValueError("boolean normalized score")
+                candidate = float(normalized)
+                if not math.isfinite(candidate) or not 0.0 <= candidate <= 1.0:
+                    raise ValueError("normalized score outside [0,1]")
+                if risk_index is not None:
+                    if isinstance(risk_index, bool):
+                        raise ValueError("boolean current_risk_index")
+                    display = float(risk_index)
+                    if (not math.isfinite(display) or not 0.0 <= display <= 100.0
+                            or abs(display / 100.0 - candidate) > 1e-4):
+                        raise ValueError("C1 score fields disagree about units")
+                raw_score = candidate
+            elif risk_index is not None:
+                if isinstance(risk_index, bool):
+                    raise ValueError("boolean current_risk_index")
+                display = float(risk_index)
+                if not math.isfinite(display) or not 0.0 <= display <= 100.0:
+                    raise ValueError("current_risk_index outside [0,100]")
+                raw_score = display / 100.0
+                score_source = "current_risk_index / 100"
+            else:
+                raise ValueError("no C1 numeric score field")
+        except (TypeError, ValueError, OverflowError) as exc:
+            our_status = "error"
+            score_issue = str(exc)
 
     note_parts = [f"C1 status='{c1_status}'"]
     if our_status != "ok":
-        note_parts.append(body.get("message", "")[:120])
+        note_parts.append(str(body.get("message") or "")[:120])
+    if score_issue:
+        note_parts.append("C1 scale validation failed: " + score_issue)
+    if score_source and our_status == "ok":
+        note_parts.append(f"normalized C1 score from {score_source}")
     note_parts.append("coverage: unknown (C1 pads history; len(forecast) always 10)")
 
     captured = _parse_captured_at(
@@ -522,56 +564,34 @@ def call_c3(note_text: str, note_type: str = "progress",
             client.close()
 
 
-# ── C4 demographic (yours) ───────────────────────────────────────────────────
+# ── C4 demographic: local frozen DCAR model ──────────────────────────────────
 def call_c4(subject_id: str, demographics: dict,
             client: Optional[httpx.Client] = None) -> ComponentResult:
-    """POST /fusion_component -> score + confidence + coverage.
+    """Local inference, with original calibrated probability as fusion raw score.
 
-    Called ONCE per patient, at enrolment, when the demographic profile and
-    GAD-7 arrive from the patient app. The score never changes afterwards.
-    This is our own Space (hf_space/app.py) — it already emits the common
-    envelope's status field, so it is trusted verbatim rather than inferred.
+    The GAD-7 questionnaire is NEVER a feature; the baseline-adjusted evidence
+    index stays only in the detail record and is not a clinical probability.
     """
-    if not C4_BASE:
-        return ComponentResult(status="error", note="C4 not configured")
-    own = client is None
-    client = client or httpx.Client()
+    from components.c4.inference import predict_demographics, UnsupportedProfile
     try:
-        r = client.post(f"{C4_BASE}/fusion_component", headers=_headers(C4_TOKEN),
-                        json={"patient_id": subject_id, **(demographics or {})},
-                        timeout=TIMEOUT_S)
-        if r.status_code != 200:
-            return ComponentResult(status="error", note=f"HTTP {r.status_code}")
-        body = r.json()
-        block = body.get("c4_demographic", body)
-        if block.get("score") is None:
-            return ComponentResult(status="error", note="no score field", detail=body)
-
-        status = block.get("status")
-        if not status:
-            status = "ok" if block.get("available", True) else "poor_signal"
-
-        return ComponentResult(
-            raw_score=float(block["score"]) if status == "ok" else None,
-            status=status,
-            confidence=float(block.get("confidence", 0.5)),
-            coverage=float(block.get("coverage", 1.0)),
-            model_version=block.get("model_version", "dcar"), detail=body,
-            note=None if status == "ok" else "coverage too low to be usable",
-            captured_at=_parse_captured_at(block.get("captured_at") or block.get("computed_at"),
-                                           dt.datetime.now(dt.timezone.utc)))
-    except httpx.TimeoutException:
-        return ComponentResult(status="error", note=f"timeout {TIMEOUT_S}s")
-    except Exception as exc:                                # noqa: BLE001
-        return ComponentResult(status="error", note=f"{type(exc).__name__}: {exc}"[:120])
-    finally:
-        if own:
-            client.close()
+        prediction = predict_demographics(demographics)
+    except UnsupportedProfile as exc:
+        return ComponentResult(status="poor_signal", raw_score=None, confidence=0.0,
+                               coverage=0.0, note=str(exc),
+                               model_version="dcar-elasticnet-sigmoid-20260831")
+    except Exception as exc:  # noqa: BLE001
+        return ComponentResult(status="error", raw_score=None, confidence=0.0,
+                               coverage=0.0,
+                               note=f"C4 local inference failed: {type(exc).__name__}: {exc}"[:120])
+    return ComponentResult(
+        raw_score=prediction["demographic_probability"],
+        status="ok", confidence=0.5, coverage=1.0,
+        model_version=prediction["model_version"], detail=prediction)
 
 
 CONFIGURED = {
     "c1_physiological": lambda: bool(C1_BASE),
     "c2_behavioral": lambda: bool(C2_BASE),
     "c3_clinical_nlp": lambda: bool(C3_BASE),
-    "c4_demographic": lambda: bool(C4_BASE),
+    "c4_demographic": lambda: __import__("components.c4.inference", fromlist=["model_available"]).model_available(),
 }

@@ -1,0 +1,10 @@
+{
+  "patient": {
+    "repository": "DewduSendanayake/anxiety_mobile_app",
+    "sha": "cdef49402f0444fa9d9bcf15d679123df197d5f9"
+  },
+  "clinician": {
+    "repository": "dulhara79/tcwpn_mobile_app",
+    "sha": "a2b87ef3769c6fcf71323750050bad7c2af61d5a"
+  }
+}
