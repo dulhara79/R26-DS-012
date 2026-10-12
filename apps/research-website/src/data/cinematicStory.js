@@ -1,8 +1,8 @@
 // Copy for the landing hero scroll. Sources: R26-DS-012 root README and component READMEs.
 
 export const heroVideo = {
-  src: "/media/research-hero.mp4",
-  poster: "/media/research-hero-poster.webp",
+  src: "/media/research-hero.mp4", // Resolved against Vite BASE_URL by CinematicHero
+  poster: "https://drive.google.com/thumbnail?id=16k7sGcoyFS-mbwLQsHacDtZA5vHz1Gi7&sz=w1600",
 };
 
 export const cinematicIntro = {
