@@ -4,14 +4,14 @@ Flutter Android app for longitudinal anxiety research (SLIIT research group **R2
 
 Aura combines a BLE chest strap, privacy-preserving phone sensing, self-reports, and participant-facing behavioural context. It is offline-first and uses pseudonymous participant IDs.
 
-> **Research use only.** Not a medical device, diagnosis, or emergency service. Behavioural observations are personal-baseline context — not a clinical anxiety score.
+> **Research use only.** Not a medical device, diagnosis, or emergency service. Behavioural observations are personal-baseline context- not a clinical anxiety score.
 
 ## Features
 
-- **Home** — gentle body-reading feedback and risk band from the research backend
-- **Body** — live vitals from `ChestStrap_V3` over Bluetooth
-- **Activity** — personal baseline and change detection from passive phone sensing (descriptive only)
-- **Profile** — demographics, Participant ID QR, privacy / data rights, appearance
+- **Home**: gentle body-reading feedback and risk band from the research backend
+- **Body**: live vitals from `ChestStrap_V3` over Bluetooth
+- **Activity: personal baseline and change detection from passive phone sensing (descriptive only)
+- **Profile**: demographics, Participant ID QR, privacy / data rights, appearance
 
 Also includes informed consent, anxiety check-ins, EMA (3× daily), weekly GAD-7 and PSS-10, and an optional clinician summary PDF that the participant can share.
 
@@ -30,41 +30,3 @@ Passive events include screen on/off/unlock, coarsened location (~15 min), app-u
 - Participant codes look like `P_` + 16 hex characters
 - Mobile Supabase access uses a publishable key and anonymous auth — never a service-role key in the APK
 - Clinician PDF is shared only if the participant chooses; it is not a risk score
-
-## Build
-
-Requires untracked `android/key.properties` for release signing.
-
-```powershell
-flutter pub get
-
-flutter build apk --release `
-  --obfuscate `
-  --split-debug-info=./debug-info `
-  --dart-define=BACKEND_BASE="$env:BACKEND_BASE" `
-  --dart-define=SUPABASE_URL="YOUR_SUPABASE_URL" `
-  --dart-define=SUPABASE_PUBLISHABLE_KEY="YOUR_PUBLISHABLE_KEY" `
-  --dart-define=COMPONENT2_API_URL="https://YOUR_BEHAVIOURAL_API/api"
-```
-
-| Define | Purpose |
-|---|---|
-| `BACKEND_BASE` | Central Backend HTTPS root |
-| `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_PUBLISHABLE_KEY` | Publishable / anon key |
-| `COMPONENT2_API_URL` | Behavioural API base (`/behavioral/{participantId}`) |
-
-## Dev preview (web)
-
-Synthetic Activity UI demo — not for research data:
-
-```bash
-flutter run -d chrome -t lib/pages/c2_preview_main.dart
-```
-
-## More detail
-
-- [`supabase/README.md`](supabase/README.md) — database setup
-- [`docs/COMPONENT2_COLLECTION_V2.md`](docs/COMPONENT2_COLLECTION_V2.md) — sensing & privacy
-- [`DEPLOYMENT.md`](DEPLOYMENT.md) — CI / release
-```
