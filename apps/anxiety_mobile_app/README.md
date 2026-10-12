@@ -1,98 +1,39 @@
-# 🌿 Aura — Anxiety Research Mobile App
+# Aura
 
-Flutter Android application used by **R26-DS-012** for longitudinal anxiety
-research. The app integrates wearable physiological monitoring, passive
-smartphone sensing, study questionnaires, offline-first collection, and
-participant-facing behavioural context.
+Flutter Android app for longitudinal anxiety research (SLIIT research group **R26-DS-012**).
 
-> **Research use only.** Participant-facing behavioural observations are not an
-> anxiety diagnosis or a calibrated clinical risk probability.
+Aura combines a BLE chest strap, privacy-preserving phone sensing, self-reports, and participant-facing behavioural context. It is offline-first and uses pseudonymous participant IDs.
 
-## Current architecture
+> **Research use only.** Not a medical device, diagnosis, or emergency service. Behavioural observations are personal-baseline context — not a clinical anxiety score.
+
+## Features
+
+- **Home** — gentle body-reading feedback and risk band from the research backend
+- **Body** — live vitals from `ChestStrap_V3` over Bluetooth
+- **Activity** — personal baseline and change detection from passive phone sensing (descriptive only)
+- **Profile** — demographics, Participant ID QR, privacy / data rights, appearance
+
+Also includes informed consent, anxiety check-ins, EMA (3× daily), weekly GAD-7 and PSS-10, and an optional clinician summary PDF that the participant can share.
+
+## How data moves
 
 ```text
-ESP32-C3 chest strap
-        ↓
-Flutter physiological dashboard
-        ↓
-Component 1 physiological service
-
-Android passive sensing
-        ↓
-local offline queue
-        ↓
-Supabase sensor_events
-        ↓
-Component 2 daily processor
-        ↓
-daily_behavior_features
-        ↓
-behavioral_observations
-        ↓
-Component 2 API
-        ↓
-Behavioural Context UI
+Chest strap (BLE)  →  Body tab  →  physiological backend + Central Backend
+Phone sensors      →  local offline queue  →  Supabase  →  daily processing  →  Activity tab
+Self-reports       →  offline queue (+ optional backend ingest)
 ```
 
-## Component 2 collection
-
-| Event | Collection pattern |
-|---|---|
-| `Screen_Event` | Event-driven screen on / unlock / off transitions |
-| `Location_Grid_100m` | Approximately every 15 minutes; coordinates rounded to 3 decimals on-device |
-| `App_Usage_Category_15m` | Approximately every 15 minutes; category totals only |
-| `Movement_Window_5m` | Five-minute accelerometer summary |
-| `Call_Stats_Daily` | Previous-day aggregate counts |
-| `SMS_Activity_Daily` | Previous-day aggregate counts |
-| `Battery_Status` | Hourly |
-| `Service_Heartbeat` | Hourly |
-
-Screen events are event-driven. They may reach Supabase later in a batch, but
-their original `event_time` is preserved and is what the Component 2 processor
-uses.
+Passive events include screen on/off/unlock, coarsened location (~15 min), app-usage categories (~15 min), movement windows (5 min), daily call/SMS counts, battery status, and service heartbeats. Location is rounded on-device; app packages become categories; call/SMS content is never uploaded. Chest-strap vitals are kept on the physiological path and are not mixed into the behavioural event stream.
 
 ## Privacy
 
-- Pseudonymous participant codes are used instead of names.
-- Location is coarsened on-device before queueing.
-- App package names are converted to broad categories on-device.
-- Call/SMS content, phone numbers and contact names are not uploaded by the
-  Component 2 collector.
-- Mobile Supabase access uses a publishable key and anonymous authenticated
-  participant session. **Never place a Supabase service-role/secret key in the
-  APK.**
-- `ChestStrap_Vitals` is blocked from the Component 2/general
-  `sensor_events` stream because it belongs to the physiological component.
-
-## Component 2 inference policy
-
-The final v8 behavioural GATv2 study did not demonstrate a validated clinical
-risk signal. Therefore the mobile handoff is explicit:
-
-```json
-{
-  "modality": "c2_behavioral",
-  "score": null,
-  "status": "not_validated",
-  "fusion_eligible": false,
-  "behavioral_score": null,
-  "behavioral_weight": 0.0,
-  "recommended_weight": 0.0
-}
-```
-
-Descriptive personal-baseline observations and data-quality information may be
-shown to participants. The experimental behavioural model probability is not
-presented as a clinical anxiety probability.
+- Participant codes look like `P_` + 16 hex characters
+- Mobile Supabase access uses a publishable key and anonymous auth — never a service-role key in the APK
+- Clinician PDF is shared only if the participant chooses; it is not a risk score
 
 ## Build
 
-Use an approved HTTPS Central Backend URL and protected Android release signing
-configuration. Set `BACKEND_BASE` in the local environment and create untracked
-`android/key.properties` with `storeFile`, `storePassword`, `keyAlias`, and
-`keyPassword` pointing to the approved keystore. The main release workflow
-requires the corresponding repository secrets and fails if any are missing.
-Do not place signing credentials in `--dart-define` values or source control.
+Requires untracked `android/key.properties` for release signing.
 
 ```powershell
 flutter pub get
@@ -103,26 +44,27 @@ flutter build apk --release `
   --dart-define=BACKEND_BASE="$env:BACKEND_BASE" `
   --dart-define=SUPABASE_URL="YOUR_SUPABASE_URL" `
   --dart-define=SUPABASE_PUBLISHABLE_KEY="YOUR_PUBLISHABLE_KEY" `
-  --dart-define=COMPONENT2_API_URL="https://YOUR_COMPONENT2_BACKEND/api"
+  --dart-define=COMPONENT2_API_URL="https://YOUR_BEHAVIOURAL_API/api"
 ```
 
-## Component 2 daily processing
+| Define | Purpose |
+|---|---|
+| `BACKEND_BASE` | Central Backend HTTPS root |
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_PUBLISHABLE_KEY` | Publishable / anon key |
+| `COMPONENT2_API_URL` | Behavioural API base (`/behavioral/{participantId}`) |
 
-The scheduled backend workflow processes completed behavioural days and writes
-the derived tables used by the app. For a manual backfill/test, run the
-**Component 2 Daily Processing** GitHub Action against `main`.
+## Dev preview (web)
 
-## PP2 demo fallback
-
-The Component 2 web preview contains an explicitly labelled **synthetic,
-development-only** 60-day fixture so the Day-57+ EWMA change-detection UI can
-be demonstrated without contaminating research results. It is unavailable in a
-release APK.
+Synthetic Activity UI demo — not for research data:
 
 ```bash
-flutter config --enable-web
 flutter run -d chrome -t lib/pages/c2_preview_main.dart
 ```
 
-Synthetic/demo values must never be presented as participant data or model
-validation evidence.
+## More detail
+
+- [`supabase/README.md`](supabase/README.md) — database setup
+- [`docs/COMPONENT2_COLLECTION_V2.md`](docs/COMPONENT2_COLLECTION_V2.md) — sensing & privacy
+- [`DEPLOYMENT.md`](DEPLOYMENT.md) — CI / release
+```
