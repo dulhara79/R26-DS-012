@@ -1,0 +1,36 @@
+name: Guard Aura firmware mirror scope
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-aura-scope:
+    if: github.head_ref == 'sync/aura-biomonitor'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check changed paths and manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          EXPECTED_REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$HEAD_REPOSITORY" != "$EXPECTED_REPOSITORY" ]]; then
+            echo "::error::The dedicated sync branch must originate in this repository."
+            exit 1
+          fi
+          file_list="$(gh api --paginate "repos/$EXPECTED_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" --jq '.[].filename')"
+          [[ -n "$file_list" ]] || { echo "::error::Empty Aura mirror PR"; exit 1; }
+          if printf '%s\n' "$file_list" | grep -Ev '^Self-supervised Physiological Biosensors/Aura-Biomonitor/'; then
+            echo "::error::The Aura mirror PR changes files outside its permitted directory."
+            exit 1
+          fi
+          echo "Aura changes are restricted to the isolated component directory."
