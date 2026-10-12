@@ -1,70 +1,267 @@
-# 🧠 Personalized Self-Supervised Forecasting of Acute Anxiety Episodes Using Wearable Biosensors
+# Self-Supervised Physiological Biosensors
 
-![Project Status: Active](https://img.shields.io/badge/Status-Active-brightgreen)
-![Research Phase: Phase 1](https://img.shields.io/badge/Phase-1%20Completed-blue)
+**R26-DS-012 · Component 1 · Sendanayake H.D. (IT22107596)**  
+*Personalized anomaly detection and short-horizon escalation forecasting from chest-strap physiology — without labelled panic episodes.*
 
-Welcome to the central repository for **Component 1 of Research Project R26-DS-012**. 
-
-## 📌 The Core Vision
-
-**Can we predict a panic attack before it happens, without ever teaching a machine what panic looks like?**
-
-The objective of this research is to build a physiological anomaly detection and early warning forecasting system. Instead of relying on rare, hard-to-annotate "stress" data, this project takes a **self-supervised** approach. The model learns exclusively what *resting* physiology looks like. When acute autonomic destabilisation (a physiological precursor to anxiety) occurs, the model fails to reconstruct the signal. That calculated failure is our anomaly signal. 
-
-Our target deployment is a custom, low-cost **ESP32-C3 chest-strap wearable** collecting ECG, respiration, motion, and skin temperature. Every algorithmic decision made here is strictly constrained by this specific hardware capabilities.
+[![Status](https://img.shields.io/badge/Status-Active-brightgreen)](.)
+[![Feature Contract](https://img.shields.io/badge/Features-10%20locked-blue)](.)
+[![AE](https://img.shields.io/badge/AE-c1--unmasked--lstm--ae--wesad--v2-EE4C2C)](.)
+[![Forecast](https://img.shields.io/badge/Forecast-c1--direct--ridge--wesad--v5-orange)](.)
+[![Stack](https://img.shields.io/badge/Stack-PyTorch%20%7C%20FastAPI%20%7C%20InfluxDB%20%7C%20HF-lightgrey)](.)
 
 ---
 
-## ✅ What's Done (Phase 1)
+## The question
 
-Phase 1 focused on validating our approach using four massive benchmark datasets, ensuring robust cross-dataset generalization.
+**Can we warn someone before acute autonomic escalation — without ever teaching the model what anxiety looks like?**
 
-### 1️⃣ Data Pipeline & Feature Extraction
-- **Locked 11-Feature Set**: Successfully engineered an immutable set of 11 physiological features (HRV, breathing rate, motion, temp) extracted over 60-second rolling windows.
-- **Multi-Dataset Harmonization**: Standardized processing pipelines for **WESAD** (lab stress), **AffectiveROAD** (real-world driving stress), **PPG-DaLiA** (daily activities), and **EmoWear** (video-elicited emotions).
+Most stress detectors need labelled “anxious” windows. Those labels are rare, subjective, and hard to collect in the wild. This component flips the problem:
 
-### 2️⃣ Model Development & Evaluation
-- **Global LSTM Autoencoder (LSTM-AE)**: Trained exclusively on baseline data to flag physiological deviations. 
-  - *Results:* **0.99 AUROC** on WESAD with **0% False Alarm Rate**. Combined AUROC of **0.97** across 25 subjects/drives.
-- **Masked LSTM-AE Variant**: Introduced a masking technique during training.
-  - *Impact:* Improved F1 scores by **20.7%** on noisier wearable data (wrist PPG), documenting a clear sensitivity-specificity tradeoff.
-- **Strict Leave-One-Subject-Out (LOSO)** evaluation framework implemented for rigorous, unbiased validation.
+1. Learn only **calm / baseline** physiology (self-supervised reconstruction).
+2. Treat **reconstruction failure** as the anomaly signal.
+3. Forecast that signal **5 and 10 minutes ahead** so the mobile stack can act before the peak.
 
-### 3️⃣ Early Warning Forecasting Module
-- Designed a secondary LSTM module taking recent anomaly scores to forecast stress onset probability.
-- Achieved a combined forecasting AUROC of **0.88**.
-- Demonstrated an average **Early Warning Time (EWT) of 11.83 minutes**, successfully exceeding our 5-10 minute target window for 24% of tested subjects.
+Target hardware is a low-cost **ESP32-C3 chest strap** (ECG, respiration, motion, and skin temperature). The 10-feature contract, window lengths, and deployment path are all constrained by what that wearable can reliably produce.
+
+> Research use only. Outputs are physiological risk indices / scores — **not** a clinical diagnosis.
 
 ---
 
-## 🚀 What's to be Done
+## Pipeline at a glance
 
-### ⏳ Immediate Next Steps (Wrapping up Phase 1)
-- [ ] **Personalisation (Notebook 08)**: Fine-tune the global model weights for each individual subject. This will prove our central empirical claim: *Personalized self-supervised models outperform generic ones for individual anomaly detection.* 
+```text
+Chest strap → 60s feature windows (10 dims)
+                    │
+                    ▼
+         per-user baseline z-norm
+                    │
+                    ▼
+     LSTM Autoencoder (T = 5 min)
+                    │
+                    ▼
+      reconstruction error → C1 score
+         score = err / (err + baseline_p95)
+                    │
+                    ▼
+   Direct Ridge forecaster
+   history: last 2 × 5-min blocks
+   horizons: +5 min, +10 min
+                    │
+                    ▼
+   FastAPI → Flutter app / fusion (C4)
+```
 
-### 🔮 Phase 2: Into the Real World (Future Work)
-Phase 2 shifts from benchmark validation to real-world, clinical hardware deployment.
-- [ ] **Ethics Approval**: Secure official SLIIT ethics clearance for human data collection.
-- [ ] **Hardware Finalization**: Transition the custom ESP32-C3 chest strap from breadboard to a deployable, wearable strap format.
-- [ ] **Participant Recruitment & Trial**: Conduct a 4-6 week naturalistic monitoring study with 10-15 young adults.
-- [ ] **Real-World Fine-Tuning**: Apply our validated Phase 1 personalization pipelines to the newly collected real-world data to capture the gradual escalation of real-world anxiety.
+Deployed model versions:
+
+| Stage | Version ID | Role |
+|-------|------------|------|
+| Autoencoder | `c1-unmasked-lstm-ae-wesad-v2` | Population AE; personalized weights override when available |
+| Forecaster | `c1-direct-ridge-score-forecast-wesad-v5` | Direct +5 / +10 logit-score delta (Ridge, α = 100) |
 
 ---
 
-## 📂 Repository Structure
+## Locked 10-feature contract
 
-Our workflow is contained within a series of modular Jupyter notebooks:
+Extracted over **non-overlapping 60-second** windows:
 
-| Notebook | Purpose | Status |
-|----------|---------|--------|
-| `01_WESAD_EDA.ipynb` | WESAD dataset exploration and preprocessing | 🟢 Complete |
-| `02_AffectiveROAD_EDA.ipynb` | AffectiveROAD dataset exploration and preprocessing | 🟢 Complete |
-| `03_PPGDaLiA_EDA.ipynb` | PPG-DaLiA dataset exploration and preprocessing | 🟢 Complete |
-| `04_EmoWear_EDA.ipynb` | EmoWear dataset exploration and preprocessing | 🟢 Complete |
-| `05_LSTM_AE_Training.ipynb` | Global LSTM-AE, LOSO evaluation, EmoWear validation | 🟢 Complete |
-| `06_Masked_LSTM_AE_Training.ipynb` | Masked variant training and ablation comparison | 🟢 Complete |
-| `07_Forecasting_Module.ipynb` | Forecasting LSTM and Early Warning Time analysis | 🟢 Complete |
-| `08_Personalisation.ipynb` | Fine-tuning per subject: Global vs Personalised | 🟡 Pending |
+| # | Feature | Meaning |
+|---|---------|---------|
+| 1 | `mean_hr` | Mean heart rate (bpm) |
+| 2 | `mean_rr` | Mean R–R interval (ms) |
+| 3 | `sdnn` | HRV — SDNN (ms) |
+| 4 | `rmssd` | HRV — RMSSD (ms) |
+| 5 | `mean_br` | Mean breathing rate |
+| 6 | `std_br` | Breathing-rate variability |
+| 7 | `mean_temp` | Mean skin temperature |
+| 8 | `std_temp` | Temperature variability |
+| 9 | `mean_acc_mag` | Mean acceleration magnitude |
+| 10 | `std_acc_mag` | Acceleration variability |
+
+`pNN50` was dropped from earlier 11-feature experiments — it is unreliable on many wearable PPG paths and is **not** part of the deployed contract.
 
 ---
-*R26-DS-012 | Component 1 | Sendanayake H.D. | IT22107596 | SLIIT | April 2026*
+
+## What's in this folder
+
+```text
+Self-supervised Physiological Biosensors/
+├── Notebooks/          # Benchmark EDA + model training / validation
+├── HF-Anxiety/         # Production FastAPI inference service (HF Space)
+├── scripts/            # Weekly archive + personalization (GitHub Actions)
+├── dashboard/          # React + Vite interactive demo
+├── frontend/           # Static Aura Bio Monitor demo
+└── requirements.txt    # Research / notebook dependencies
+```
+
+### Research notebooks
+
+| Notebook | What it does | Status |
+|----------|--------------|--------|
+| `01_WESAD_EDA.ipynb` | WESAD chest-signal EDA → 10-feature windows, baseline z-norm | Complete |
+| `02_AffectiveROAD_EDA.ipynb` | AffectiveROAD → same feature contract (external validation set) | Complete |
+| `03_LSTM_AE_Training.ipynb` | Unmasked LSTM-AE, WESAD LOSO, AffectiveROAD external test | Complete · **deployed AE** |
+| `04_Masked_LSTM_AE_Training.ipynb` | 20% input-mask ablation under the same protocol | Complete · ablation |
+| `05_Forecasting_Module.ipynb` | Direct Ridge score forecast at +5 / +10 min | Complete · **deployed forecaster** |
+| `09_Data_Hoarder_Pipeline.ipynb` | Prototype: Influx → Parquet → HF sensor archive | Scaffold |
+
+### Live system
+
+| Piece | Path / location | Role |
+|-------|-----------------|------|
+| Inference API | `HF-Anxiety/main.py` | Ingest, calibrate, predict, history, feedback |
+| Model weights | `HF-Anxiety/models/` | Frozen AE + Ridge forecaster + metadata |
+| Personalization | `scripts/personalize.py` | Weekly fine-tune → `unmasked_v2_{user_id}.pth` |
+| Sensor archive | `scripts/archive_sensor_data.py` | Weekly Parquet dump to HF |
+| CI schedule | `.github/workflows/weekly-physiological-pipeline.yml` | Sundays 02:15 UTC |
+| Demo UI | `dashboard/` (React) · `frontend/` (static) | Simulated physiology + risk visuals |
+
+---
+
+## Phase 1 results (current 10-feature pipeline)
+
+Evaluation design: train / LOSO on **WESAD** baseline-only windows, then **AffectiveROAD** as external stress test. Subjects **S3** and **S6** excluded from WESAD training.
+
+### Unmasked LSTM-AE *(deployed)*
+
+| Setting | AUROC | F1 | Notes |
+|---------|------:|---:|-------|
+| WESAD LOSO (mean) | **0.9979** | **0.9233** | Strong in-lab separation |
+| AffectiveROAD pooled external | **0.8650** | 0.5783 | FAR ≈ **0.028** |
+| AffectiveROAD macro (drives) | 0.8757 | 0.5362 | Cross-domain drop expected |
+
+### Masked LSTM-AE *(ablation, not deployed)*
+
+| Setting | AUROC | F1 |
+|---------|------:|---:|
+| WESAD LOSO (mean) | 1.0000 | 0.9233 |
+| AffectiveROAD pooled | 0.8562 | 0.5419 |
+
+Masking did **not** improve external F1 under the revised 10-feature protocol (unlike an earlier 11-feature / multi-dataset experiment). The live stack therefore stays on the **unmasked** AE.
+
+### Direct Ridge forecasting *(deployed)*
+
+Takes two consecutive 5-minute C1 score blocks and predicts scores at **+5** and **+10** minutes (logit-space residual vs persistence).
+
+| Dataset | Horizon | Mean MAE improvement vs persistence |
+|---------|---------|-------------------------------------|
+| WESAD | +5 min | +0.0138 |
+| WESAD | +10 min | +0.0307 |
+| AffectiveROAD | +5 min | +0.0055 |
+| AffectiveROAD | +10 min | +0.0406 |
+
+Scores are **monotonic anomaly indices**, not calibrated probabilities. Bootstrap CIs on WESAD improvement include zero at both horizons — report that honestly in the paper.
+
+---
+
+## Deployment architecture
+
+```text
+ESP32-C3 chest strap
+        │  10 features / minute
+        ▼
+Flutter research app
+        │
+        ▼
+HF Space  Dewdu/physiological-anxiety-escalation
+   FastAPI  (HF-Anxiety/)
+        │
+        ├── InfluxDB  physiological_metrics, norm_params, anxiety_feedback
+        ├── Global AE + Ridge  (frozen, validated path)
+        └── Personalized AE   (HF dataset Dewdu/physiological-anxiety-weights)
+                ▲
+                │ weekly GitHub Action
+        scripts/personalize.py + archive_sensor_data.py
+                │
+                ▼
+        Dewdu/physiological-sensor-archive  (Parquet)
+```
+
+### API surface (`HF-Anxiety`)
+
+| Method | Route | Purpose |
+|--------|-------|---------|
+| `GET` | `/` | Health + model versions |
+| `POST` | `/ingest` | Accept a worn, fresh 10-feature window |
+| `POST` | `/set_norm_params/{user_id}` | Store baseline mean/std (+ optional calm calibration) |
+| `GET` | `/predict/{user_id}` | C1 score + +5/+10 forecast (needs 10 contiguous minutes) |
+| `GET` | `/history/{user_id}` | Daily aggregates / risk index history |
+| `POST` | `/feedback/anxiety` | User confirmation / intervention feedback |
+| `GET` | `/feedback/weekly/{user_id}` | 7-day feedback summary |
+
+Predict statuses: `success` · `not_calibrated` · `buffering` · `stale`.
+
+---
+
+## Quick start
+
+### Research notebooks
+
+```bash
+cd "Self-supervised Physiological Biosensors"
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+jupyter notebook Notebooks/
+```
+
+### Inference service (local)
+
+```bash
+cd HF-Anxiety
+pip install -r requirements.txt
+# set INFLUX_* and HF_TOKEN as needed
+uvicorn main:app --reload --port 7860
+```
+
+### Demo dashboard
+
+```bash
+cd dashboard
+npm install
+npm run dev
+```
+
+Or open `frontend/index.html` for the static Aura Bio Monitor mock.
+
+### Weekly personalization (manual)
+
+```bash
+cd "Self-supervised Physiological Biosensors"
+pip install -r scripts/requirements.txt
+# export INFLUX_URL, INFLUX_TOKEN, INFLUX_ORG, INFLUX_BUCKET, HF_TOKEN
+python scripts/archive_sensor_data.py
+python scripts/personalize.py
+```
+
+---
+
+## Hardware target
+
+| Sensing | Typical part | Measures |
+|---------|--------------|----------|
+| ECG / HRV | AD8232 | Cardiac rhythm, R–R |
+| Respiration | BF350-3AA strain gauge | Thoracic expansion / BR |
+| Motion | IMU (e.g. BMI160 / MPU6500 class) | Acc magnitude |
+| Skin temp | DS18B20 | Peripheral temperature |
+| MCU | ESP32-C3 | Acquisition + BLE / Wi-Fi uplink |
+
+Feature quality gates in the API reject unworn straps, stale timestamps, out-of-range values, and inconsistent HR ↔ R–R pairs.
+
+---
+
+## What's next
+
+- [ ] Ethics clearance (SLIIT) for naturalistic chest-strap collection
+- [ ] Finalize wearable form factor (breadboard → strap)
+- [ ] 4–6 week pilot with ~10–15 young adults
+- [ ] Quantify real-world lift from weekly `unmasked_v2` personalization
+- [ ] Keep fusion (Component 4) on the validated unmasked + Ridge path only
+
+---
+
+## Citation
+
+Component of **R26-DS-012** — *A Multimodal Digital Biomarker Framework for Personalized Vulnerability Mapping and Acute Escalation Forecasting in Young Adults with Anxiety Disorders*, SLIIT, 2026.
+
+**Student:** Sendanayake H.D. · IT22107596  
+**Supervisors:** Prof. Samantha Thelijjagoda · Dr. Mahima Weerasinghe · Dr. Chathurie Suraweera
