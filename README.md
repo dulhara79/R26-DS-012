@@ -144,8 +144,6 @@ Locked contract field names: `mean_hr`, `mean_rr`, `sdnn`, `rmssd`, `mean_br`, `
  Physiological risk trajectory / index
 ```
 
-The component repository evaluates the approach across benchmark datasets including WESAD, AffectiveROAD, PPG-DaLiA, and EmoWear, using subject-level evaluation and personalization experiments.
-
 ---
 
 ### 📱 Component 2 - Spatio-Temporal Graph Learning *(Layathma B.M.A.S.)*
