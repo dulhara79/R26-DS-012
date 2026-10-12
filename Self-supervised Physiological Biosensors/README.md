@@ -1,7 +1,7 @@
 # Self-Supervised Physiological Biosensors
 
 **R26-DS-012 · Component 1 · Sendanayake H.D. (IT22107596)**  
-*Personalized anomaly detection and short-horizon escalation forecasting from chest-strap physiology — without labelled panic episodes.*
+*Personalized anomaly detection and short-horizon escalation forecasting from chest-strap physiology- without labelled panic episodes.*
 
 [![Status](https://img.shields.io/badge/Status-Active-brightgreen)](.)
 [![Feature Contract](https://img.shields.io/badge/Features-10%20locked-blue)](.)
@@ -19,11 +19,11 @@ Most stress detectors need labelled “anxious” windows. Those labels are rare
 
 1. Learn only **calm / baseline** physiology (self-supervised reconstruction).
 2. Treat **reconstruction failure** as the anomaly signal.
-3. Forecast that signal **5 and 10 minutes ahead** so the mobile stack can act before the peak.
+3. Forecast that signal **5 to 10 minutes ahead** so the mobile stack can act before the peak.
 
 Target hardware is a low-cost **ESP32-C3 chest strap** (ECG, respiration, motion, and skin temperature). The 10-feature contract, window lengths, and deployment path are all constrained by what that wearable can reliably produce.
 
-> Research use only. Outputs are physiological risk indices / scores — **not** a clinical diagnosis.
+> Research use only. Outputs are physiological risk indices / scores- **not** a clinical diagnosis.
 
 ---
 
@@ -77,8 +77,6 @@ Extracted over **non-overlapping 60-second** windows:
 | 9 | `mean_acc_mag` | Mean acceleration magnitude |
 | 10 | `std_acc_mag` | Acceleration variability |
 
-`pNN50` was dropped from earlier 11-feature experiments — it is unreliable on many wearable PPG paths and is **not** part of the deployed contract.
-
 ---
 
 ## What's in this folder
@@ -86,7 +84,7 @@ Extracted over **non-overlapping 60-second** windows:
 ```text
 Self-supervised Physiological Biosensors/
 ├── Notebooks/          # Benchmark EDA + model training / validation
-├── HF-Anxiety/         # Production FastAPI inference service (HF Space)
+├── HF-Anxiety/         # Production FastAPI inference service (Hugging Face Space)
 ├── scripts/            # Weekly archive + personalization (GitHub Actions)
 ├── dashboard/          # React + Vite interactive demo
 ├── frontend/           # Static Aura Bio Monitor demo
@@ -117,9 +115,9 @@ Self-supervised Physiological Biosensors/
 
 ---
 
-## Phase 1 results (current 10-feature pipeline)
+## Results (current 10-feature pipeline)
 
-Evaluation design: train / LOSO on **WESAD** baseline-only windows, then **AffectiveROAD** as external stress test. Subjects **S3** and **S6** excluded from WESAD training.
+Evaluation design: train / LOSO on **WESAD** baseline-only windows, then **AffectiveROAD** as external stress test.
 
 ### Unmasked LSTM-AE *(deployed)*
 
@@ -148,8 +146,6 @@ Takes two consecutive 5-minute C1 score blocks and predicts scores at **+5** and
 | WESAD | +10 min | +0.0307 |
 | AffectiveROAD | +5 min | +0.0055 |
 | AffectiveROAD | +10 min | +0.0406 |
-
-Scores are **monotonic anomaly indices**, not calibrated probabilities. Bootstrap CIs on WESAD improvement include zero at both horizons — report that honestly in the paper.
 
 ---
 
@@ -192,49 +188,6 @@ Predict statuses: `success` · `not_calibrated` · `buffering` · `stale`.
 
 ---
 
-## Quick start
-
-### Research notebooks
-
-```bash
-cd "Self-supervised Physiological Biosensors"
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-jupyter notebook Notebooks/
-```
-
-### Inference service (local)
-
-```bash
-cd HF-Anxiety
-pip install -r requirements.txt
-# set INFLUX_* and HF_TOKEN as needed
-uvicorn main:app --reload --port 7860
-```
-
-### Demo dashboard
-
-```bash
-cd dashboard
-npm install
-npm run dev
-```
-
-Or open `frontend/index.html` for the static Aura Bio Monitor mock.
-
-### Weekly personalization (manual)
-
-```bash
-cd "Self-supervised Physiological Biosensors"
-pip install -r scripts/requirements.txt
-# export INFLUX_URL, INFLUX_TOKEN, INFLUX_ORG, INFLUX_BUCKET, HF_TOKEN
-python scripts/archive_sensor_data.py
-python scripts/personalize.py
-```
-
----
-
 ## Hardware target
 
 | Sensing | Typical part | Measures |
@@ -249,19 +202,6 @@ Feature quality gates in the API reject unworn straps, stale timestamps, out-of-
 
 ---
 
-## What's next
-
-- [ ] Ethics clearance (SLIIT) for naturalistic chest-strap collection
-- [ ] Finalize wearable form factor (breadboard → strap)
-- [ ] 4–6 week pilot with ~10–15 young adults
-- [ ] Quantify real-world lift from weekly `unmasked_v2` personalization
-- [ ] Keep fusion (Component 4) on the validated unmasked + Ridge path only
-
----
-
-## Citation
 
 Component of **R26-DS-012** — *A Multimodal Digital Biomarker Framework for Personalized Vulnerability Mapping and Acute Escalation Forecasting in Young Adults with Anxiety Disorders*, SLIIT, 2026.
 
-**Student:** Sendanayake H.D. · IT22107596  
-**Supervisors:** Prof. Samantha Thelijjagoda · Dr. Mahima Weerasinghe · Dr. Chathurie Suraweera
