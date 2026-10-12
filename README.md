@@ -95,7 +95,7 @@ The components do **not** all use the same learning paradigm. Component 1 is pri
 |--------|-----------|----------|
 | ECG / HRV | AD8232 | Cardiac rhythm and R-R intervals |
 | Respiration | BF350-3AA strain gauge | Thoracic expansion / breathing rate |
-| Inertial Motion | BMI160 IMU | 3-axis acceleration |
+| Inertial Motion | IMU (BMI160 / MPU6500 class) | Acc magnitude (±2 g path in deployment) |
 | Skin Temperature | DS18B20 | Peripheral temperature |
 | Microcontroller | ESP32-C3 | Data acquisition and wearable communication |
 
@@ -116,22 +116,29 @@ The current paper-aligned physiological window contains **10 features**:
 - mean acceleration magnitude
 - acceleration variability
 
+Locked contract field names: `mean_hr`, `mean_rr`, `sdnn`, `rmssd`, `mean_br`, `std_br`, `mean_temp`, `std_temp`, `mean_acc_mag`, `std_acc_mag`.
+
 #### 🧠 Model Flow
 
 ```text
-60-second physiological feature window
+60-second physiological feature window (10 dims)
             │
             ▼
-      LSTM Autoencoder
+   Per-user baseline z-norm
             │
             ▼
-   Reconstruction Error
+ Unmasked LSTM Autoencoder (T = 5 min)
+   c1-unmasked-lstm-ae-wesad-v2
             │
             ▼
-      Anomaly Signal
+ Reconstruction error → C1 score
+   score = err / (err + baseline_p95)
             │
             ▼
- Short-horizon forecasting
+ Direct Ridge score forecaster
+   history: 2 × 5-min blocks
+   horizons: +5 min, +10 min
+   c1-direct-ridge-score-forecast-wesad-v5
             │
             ▼
  Physiological risk trajectory / index
