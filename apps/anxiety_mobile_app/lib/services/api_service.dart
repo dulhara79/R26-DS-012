@@ -318,10 +318,12 @@ class ApiService {
   /// Returns true on success. Triggers fusion server-side.
   static Future<bool> submitContextualIntake({
     required String participantId,
-    required List<int> gad7Items,
+    List<int>? gad7Items,
     String? gender,
     int? age,
     String? edu,
+    String? smoke,
+    String? drink,
   }) async {
     try {
       final root = backendRoot();
@@ -329,11 +331,13 @@ class ApiService {
       if (root == null || subjectId == null) return false;
       final payload = <String, dynamic>{
         'app_user_id': participantId,
-        'gad7_items': gad7Items,
+        'gad7_items': ?gad7Items,
       };
       if (gender != null) payload['gender'] = gender.toLowerCase();
       if (age != null) payload['age'] = age;
       if (edu != null) payload['edu'] = edu;
+      if (smoke != null) payload['smoke'] = smoke;
+      if (drink != null) payload['drink'] = drink;
       final res = await _requestWithRecovery(
         Uri.parse('$root/v1/ingest/contextual'),
         expectedSubjectId: subjectId,

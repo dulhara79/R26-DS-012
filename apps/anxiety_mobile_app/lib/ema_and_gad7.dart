@@ -8,6 +8,7 @@ import 'background_service_helper.dart';
 import 'services/notification_helper.dart';
 import 'theme/app_theme.dart';
 import 'services/api_service.dart';
+import 'services/c4_demographics.dart';
 
 String weeklyCheckInWeekKey([DateTime? value]) {
   final date = value ?? DateTime.now();
@@ -369,13 +370,18 @@ class _Gad7ScreenState extends State<Gad7Screen> {
         final raw = prefs.getString('user_profile_data') ?? '{}';
         profile = Map<String, dynamic>.from(jsonDecode(raw) as Map);
       } catch (_) {}
-      ApiService.submitContextualIntake(
-        participantId: pid,
-        gad7Items: _answers.map((a) => a ?? 0).toList().cast<int>(),
-        gender: profile['gender']?.toString().toLowerCase(),
-        age: int.tryParse(profile['age']?.toString() ?? ''),
-        edu: profile['education_level']?.toString(),
-      );
+      final c4 = C4Demographics.fromSavedProfile(profile);
+      if (c4 != null) {
+        ApiService.submitContextualIntake(
+          participantId: pid,
+          gad7Items: _answers.cast<int>(),
+          gender: c4.gender,
+          age: c4.age,
+          edu: c4.education,
+          smoke: c4.smoking,
+          drink: c4.drinking,
+        );
+      }
     }
     await NotificationHelper.cancelWeeklyCheckIn('anxiety');
 

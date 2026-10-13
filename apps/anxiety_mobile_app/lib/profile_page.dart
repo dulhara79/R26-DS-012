@@ -18,6 +18,7 @@ import 'services/participant_identity_service.dart';
 import 'services/rating_settings.dart';
 import 'theme/theme_controller.dart';
 import 'services/api_service.dart';
+import 'services/c4_demographics.dart';
 
 class ProfilePage extends StatefulWidget {
   final bool isTab;
@@ -75,6 +76,9 @@ class _ProfilePageState extends State<ProfilePage> {
         _employmentStatus = data['employment_status'];
         _financialStatus = data['financial_status'];
         _educationLevel = data['education_level'];
+        _c4Education = data['c4_education'];
+        _c4Smoking = data['c4_smoke'];
+        _c4Drinking = data['c4_drink'];
         _livingSituation = data['living_situation'];
         _anxietyDiagnosis = data['anxiety_diagnosis'];
         _onMedication = data['on_medication'];
@@ -218,6 +222,9 @@ class _ProfilePageState extends State<ProfilePage> {
   String? _employmentStatus;
   String? _financialStatus;
   String? _educationLevel;
+  String? _c4Education;
+  String? _c4Smoking;
+  String? _c4Drinking;
   String? _livingSituation;
   String? _anxietyDiagnosis;
   String? _onMedication;
@@ -301,6 +308,9 @@ class _ProfilePageState extends State<ProfilePage> {
       'employment_status': _employmentStatus,
       'financial_status': _financialStatus,
       'education_level': _educationLevel,
+      'c4_education': _c4Education,
+      'c4_smoke': _c4Smoking,
+      'c4_drink': _c4Drinking,
       'living_situation': _livingSituation,
       'anxiety_diagnosis': _anxietyDiagnosis,
       'on_medication': _onMedication,
@@ -316,25 +326,19 @@ class _ProfilePageState extends State<ProfilePage> {
     await prefs.setBool('profile_complete', true);
     await prefs.setString('user_profile_data', jsonEncode(profile));
 
-    // Send demographics to the central backend for C4/DCAR scoring.
-    // GAD-7 items are not collected on this screen, so send zeros — the
-    // GAD-7 screen sends the real answers separately and re-scores C4.
+    // DCAR only accepts the frozen five-feature schema. Unsupported or
+    // incomplete research demographics never become an invented C4 score.
+    // GAD-7 is a separate questionnaire and is not a C4 input feature.
     final pid = prefs.getString('participant_id') ?? '';
-    if (pid.isNotEmpty) {
-      final eduMap = {
-        'No formal education': 'none',
-        'Primary school': 'primary',
-        'Secondary school': 'secondary',
-        'Vocational/Technical': 'vocational',
-        'University/College': 'tertiary',
-        'Postgraduate': 'postgraduate',
-      };
+    final c4 = C4Demographics.fromSavedProfile(profile);
+    if (pid.isNotEmpty && c4 != null) {
       ApiService.submitContextualIntake(
         participantId: pid,
-        gad7Items: [0, 0, 0, 0, 0, 0, 0],
-        gender: _gender?.toLowerCase(),
-        age: int.tryParse(_ageController.text.trim()),
-        edu: eduMap[_educationLevel] ?? 'tertiary',
+        gender: c4.gender,
+        age: c4.age,
+        edu: c4.education,
+        smoke: c4.smoking,
+        drink: c4.drinking,
       );
     }
 
@@ -697,42 +701,35 @@ class _ProfilePageState extends State<ProfilePage> {
         participantId != null &&
         ParticipantIdentityService.isParticipantId(participantId);
 
-    return _infoCard(
-      'Doctor Connection',
-      Icons.qr_code_2_rounded,
-      [
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(
-            Icons.medical_information_outlined,
-            color: AppTheme.kPrimaryDeep,
-          ),
-          title: Text(
-            canShare ? 'Show my Patient ID QR' : 'Patient ID unavailable',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-          ),
-          subtitle: Text(
-            canShare
-                ? 'Let your doctor scan this while you are together.'
-                : 'Complete your Aura setup before connecting to a doctor.',
-            style: GoogleFonts.poppins(fontSize: 12),
-          ),
-          trailing: canShare
-              ? const Icon(Icons.chevron_right_rounded)
-              : null,
-          onTap: canShare
-              ? () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ShareParticipantIdPage(
-                        participantId: participantId!,
-                      ),
-                    ),
-                  )
-              : null,
+    return _infoCard('Doctor Connection', Icons.qr_code_2_rounded, [
+      ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(
+          Icons.medical_information_outlined,
+          color: AppTheme.kPrimaryDeep,
         ),
-      ],
-    );
+        title: Text(
+          canShare ? 'Show my Patient ID QR' : 'Patient ID unavailable',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(
+          canShare
+              ? 'Let your doctor scan this while you are together.'
+              : 'Complete your Aura setup before connecting to a doctor.',
+          style: GoogleFonts.poppins(fontSize: 12),
+        ),
+        trailing: canShare ? const Icon(Icons.chevron_right_rounded) : null,
+        onTap: canShare
+            ? () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      ShareParticipantIdPage(participantId: participantId),
+                ),
+              )
+            : null,
+      ),
+    ]);
   }
 
   Widget _buildAppearanceCard() {
@@ -845,12 +842,12 @@ class _ProfilePageState extends State<ProfilePage> {
                   alignment: Alignment.centerLeft,
                   child: TextButton(
                     onPressed: () => setState(() => _isEditing = false),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppTheme.kPrimaryDeep,
+                    ),
                     child: Text(
                       'Back to Profile',
                       style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
-                    ),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppTheme.kPrimaryDeep,
                     ),
                   ),
                 ),
@@ -952,6 +949,37 @@ class _ProfilePageState extends State<ProfilePage> {
                 _educationLevels,
                 _educationLevel,
                 (v) => setState(() => _educationLevel = v),
+              ),
+              const SizedBox(height: 16),
+
+              // C4 uses its training-set categories, separate from the
+              // general profile education field above. Do not equate current
+              // undergraduate study with an already completed degree.
+              _sectionLabel('C4 research: highest completed degree'),
+              _dropdown(
+                C4Demographics.educationOptions,
+                _c4Education,
+                (v) => setState(() => _c4Education = v),
+              ),
+              const SizedBox(height: 16),
+              _sectionLabel('C4 research: smoking history'),
+              _dropdown(
+                C4Demographics.smokingOptions,
+                _c4Smoking,
+                (v) => setState(() => _c4Smoking = v),
+              ),
+              const SizedBox(height: 16),
+              _sectionLabel('C4 research: drinking history'),
+              _dropdown(
+                C4Demographics.drinkingOptions,
+                _c4Drinking,
+                (v) => setState(() => _c4Drinking = v),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'C4 is available for ages 18–27 and supported model categories only. '
+                'If these answers are unavailable, the rest of Aura continues without a C4 score.',
+                style: TextStyle(fontSize: 12),
               ),
               const SizedBox(height: 16),
 
