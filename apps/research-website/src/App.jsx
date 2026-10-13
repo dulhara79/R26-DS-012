@@ -9,6 +9,8 @@ import ComponentDetail from "./pages/ComponentDetail";
 import System from "./pages/System";
 import Findings from "./pages/Findings";
 import Documents from "./pages/Documents";
+import Milestones from "./pages/Milestones";
+import Slides from "./pages/Slides";
 import Team from "./pages/Team";
 import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
@@ -42,6 +44,8 @@ export default function App() {
             element={<Navigate to="/findings" replace />}
           />
           <Route path="/documents" element={<Documents />} />
+          <Route path="/milestones" element={<Milestones />} />
+          <Route path="/slides" element={<Slides />} />
           <Route
             path="/publications"
             element={<Navigate to="/documents" replace />}

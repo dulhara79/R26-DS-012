@@ -45,7 +45,7 @@
 }
 
 .hero-video {
-  background: #d9c9b0 url("/media/research-hero-poster.webp") center / cover no-repeat;
+  background-color: #d9c9b0; background-position: center; background-size: cover; background-repeat: no-repeat;
 }
 
 .hero-video video {

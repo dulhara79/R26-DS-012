@@ -19,13 +19,15 @@ export const site = {
     "Research and clinical decision support prototype. Not a diagnostic device; outputs must not be read as a diagnosis of an anxiety disorder.",
 };
 
+// Seven main tabs follow the suggested university Research Website structure.
+// Detailed Components, System and Findings pages remain available via Home,
+// research links, search and footer rather than being deleted.
 export const navigation = [
-  { to: "/", label: "Overview" },
-  { to: "/research", label: "Research" },
-  { to: "/components", label: "Components" },
-  { to: "/system", label: "System" },
-  { to: "/findings", label: "Findings" },
+  { to: "/", label: "Home" },
+  { to: "/research", label: "Domain" },
+  { to: "/milestones", label: "Milestones" },
   { to: "/documents", label: "Documents" },
-  { to: "/team", label: "Team" },
-  { to: "/contact", label: "Contact" },
+  { to: "/slides", label: "Slides" },
+  { to: "/team", label: "About Us" },
+  { to: "/contact", label: "Contact Us" },
 ];

@@ -6,6 +6,8 @@ import Reveal from "../components/ui/Reveal";
 import ImageSlot from "../components/ui/ImageSlot";
 import SectionHead from "../components/ui/SectionHead";
 import FusionStates from "../components/research/FusionStates";
+import GraphDiagram from "../components/research/GraphDiagram";
+import AurocChart from "../components/research/AurocChart";
 import NotFound from "./NotFound";
 import { componentBySlug, components } from "../data/components";
 
@@ -60,7 +62,7 @@ function FeatureExplorer({ features }) {
   );
 }
 
-function Table({ head, rows, numeric = [], highlight }) {
+function Table({ head, rows, numeric = [], highlight, chipCol }) {
   return (
     <div className="table-wrap">
       <table className="data-table">
@@ -88,7 +90,20 @@ function Table({ head, rows, numeric = [], highlight }) {
                   key={index}
                   className={numeric.includes(index) ? "num" : undefined}
                 >
-                  {cell}
+                  {index === chipCol ? (
+                    <span
+                      className={
+                        "role-chip " +
+                        (/held-out/i.test(cell)
+                          ? "role-chip--heldout"
+                          : "role-chip--select")
+                      }
+                    >
+                      {cell}
+                    </span>
+                  ) : (
+                    cell
+                  )}
                 </td>
               ))}
             </tr>
@@ -193,7 +208,11 @@ export default function ComponentDetail() {
             {c.cohorts && (
               <Reveal>
                 <h3 className="serif-title detail-sub">GLOBEM cohorts</h3>
-                <Table head={["Cohort", "Year", "Role"]} rows={c.cohorts} />
+                <Table
+                  head={["Cohort", "Year", "Role"]}
+                  rows={c.cohorts}
+                  chipCol={2}
+                />
                 <p className="source-note">Target: {c.target}</p>
               </Reveal>
             )}
@@ -205,6 +224,14 @@ export default function ComponentDetail() {
                     <li key={item}>{item}</li>
                   ))}
                 </ul>
+              </Reveal>
+            )}
+            {c.nodeFeatures && (
+              <Reveal delay={0.08}>
+                <h3 className="serif-title detail-sub">
+                  80 features per node
+                </h3>
+                <FeatureExplorer features={c.nodeFeatures} />
               </Reveal>
             )}
             {c.policies && (
@@ -224,6 +251,11 @@ export default function ComponentDetail() {
               </Reveal>
             )}
           </div>
+          {c.cohorts && (
+            <Reveal>
+              <GraphDiagram />
+            </Reveal>
+          )}
           {c.formula && (
             <div style={{ marginTop: 48 }}>
               <FusionStates />
@@ -303,6 +335,15 @@ export default function ComponentDetail() {
               ))}
             </Reveal>
             {c.baselines && (
+              <Reveal>
+                <AurocChart
+                  rows={c.baselines}
+                  highlight="GATv2"
+                  nullMean={c.permutationNullMean}
+                />
+              </Reveal>
+            )}
+            {c.baselines && (
               <div className="grid-2" style={{ marginTop: 56 }}>
                 <Reveal>
                   <h3 className="serif-title detail-sub">
@@ -346,6 +387,12 @@ export default function ComponentDetail() {
             >
               Where {c.id} stands.
             </h2>
+            {c.fusionWeight && (
+              <p className="fusion-weight">
+                <strong>{c.fusionWeight}</strong>
+                <span>current fusion weight</span>
+              </p>
+            )}
             <p className="lead">{c.fusionRole}</p>
             <div className="button-row">
               <a

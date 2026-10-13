@@ -170,3 +170,34 @@ export const images = {
       "Real portrait photo of Dr. Chathurie Suraweera (with permission). Do not generate.",
   },
 };
+
+// Stable IDs of images in the project's shared Google Drive folder.
+export const imageDriveIds = Object.freeze({
+  "homeContext": "1RI9yaGKrpPVLjX-_V14IqvDo3xmTbM-C",
+  "c1": "1I05TbCzjqJuJjanRgvir3Rgpl66uJX2m",
+  "c2": "1PveoOWeVqzd5POaOSfTVsJTiWgBRWO3z",
+  "c3": "1zFi-jwbtEmN0b5NdpSWe-L5_RNS3Z61Z",
+  "c4": "1xPzCgFujy3uFSWx4FPxIFS7Vju3Y7-Yj",
+  "bannerResearch": "1SHDxxQTLE27O-LDSSMafdSgJ50Mik04J",
+  "bannerComponents": "1pd2UAHMFgXOduKGCNuvr8VMmz6SH3eKo",
+  "bannerSystem": "1de-0YyW8uPKSXo8NNB_Rq87FmUoCPv0B",
+  "bannerFindings": "1vf9MoWDojfYYWV3iyF2Su0JXkijUrfI9",
+  "bannerDocuments": "1K1PQUfacR4aZsB8JDd_BzWbGhk3vRtiZ",
+  "bannerTeam": "1oI1EEqZOPDrzm45Dr2VH8F7IkWr1kyIu",
+  "bannerContact": "1j-Llr4hITQH5_98betzu5O-t-er4yGvJ",
+  "appAura": "1uVt3Km8d7I51Zqxa1uIVpFGG8w3ohCd9",
+  "appClinAnx": "1cL96RMuqjiHF1v0npRDSMVKmvKKTc8q2",
+  "team-c1": "1fxvxcFalsZ24yI_l_HTv3gZzu0qaabgk",
+  "team-c2": "1AN-q5lyFBZJz4WUSzppiUT2m2a6tVQD8",
+  "team-c3": "16rkP3X9lCOzYn0gJmyINeTPkw5EhPW5e",
+  "team-c4": "1OdCNve0EdikxTsxbtrWPj_i96e918JBy",
+  "sup-1": "1aOKbLgo-iQ0PBlOBXdpKFtpGMmrtIAIx",
+  "sup-2": "1j0GB5D9cT0LZ1bKu9PZdD5GecOkOiiWJ",
+  "sup-3": "1WfQwUKhZynDj_pqNK-Q_t7Qm3Px_vHuu"
+});
+export function imageSrc(name, baseUrl = "/") {
+  const id = imageDriveIds[name];
+  if (id) return `https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w${/^(team-|sup-)/.test(name) ? 800 : 1600}`;
+  const slot = images[name];
+  return slot ? `${baseUrl}${slot.path.replace(/^\//, "")}` : null;
+}

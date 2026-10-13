@@ -1,4 +1,5 @@
 import { ArrowUpRight, Building2, Github, GraduationCap, Mail } from "lucide-react";
+import { useState } from "react";
 import Reveal from "../ui/Reveal";
 import { site } from "../../data/site";
 import { supervisors, team } from "../../data/team";
@@ -6,6 +7,17 @@ import { supervisors, team } from "../../data/team";
 // Shared contact block: repository, institution, supervisors and team.
 export default function ContactSection({ id = "contact", headingLevel = "h2" }) {
   const Heading = headingLevel;
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  const submitEmail = (event) => {
+    event.preventDefault();
+    const destination = team.find((person) => person.email)?.email;
+    if (!destination) return;
+    const body = `From: ${name} (${email})\n\n${message}`;
+    window.location.href = `mailto:${destination}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  };
   return (
     <section className="section section--dark contact" id={id} aria-labelledby={`${id}-title`}>
       <div className="shell">
@@ -97,6 +109,17 @@ export default function ContactSection({ id = "contact", headingLevel = "h2" }) 
           </Reveal>
         </div>
 
+        <form className="contact-email-form" onSubmit={submitEmail}>
+          <h3 className="serif-title">General email template</h3>
+          <p>Prepare an email to the research team. This uses your email app and does not send personal information to a website server.</p>
+          <div className="contact-email-fields">
+            <label>Your name<input required autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} /></label>
+            <label>Your email<input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+            <label>Subject<input required value={subject} onChange={(event) => setSubject(event.target.value)} /></label>
+            <label className="contact-email-message">Message<textarea required rows={5} value={message} onChange={(event) => setMessage(event.target.value)} /></label>
+          </div>
+          <button type="submit" className="button button--paper">Open email app <ArrowUpRight size={17} /></button>
+        </form>
         <p className="contact-note">
           This website shares research, not clinical advice. If you or someone you know is in crisis, contact local emergency
           services or a mental-health helpline in your country.
