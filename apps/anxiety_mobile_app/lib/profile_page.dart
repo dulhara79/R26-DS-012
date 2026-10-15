@@ -326,20 +326,30 @@ class _ProfilePageState extends State<ProfilePage> {
     await prefs.setBool('profile_complete', true);
     await prefs.setString('user_profile_data', jsonEncode(profile));
 
-    // DCAR only accepts the frozen five-feature schema. Unsupported or
-    // incomplete research demographics never become an invented C4 score.
-    // GAD-7 is a separate questionnaire and is not a C4 input feature.
+    // Profile storage is separate from Central Backend acknowledgement.
+    // C4 is optional for participants outside its trained age/category scope;
+    // a locally saved profile must never imply a remote C4 score exists.
     final pid = prefs.getString('participant_id') ?? '';
     final c4 = C4Demographics.fromSavedProfile(profile);
+    ContextualIntakeOutcome? c4Submission;
     if (pid.isNotEmpty && c4 != null) {
-      ApiService.submitContextualIntake(
+      c4Submission = await ApiService.submitContextualIntake(
         participantId: pid,
-        gender: c4.gender,
-        age: c4.age,
-        edu: c4.education,
-        smoke: c4.smoking,
-        drink: c4.drinking,
+        demographics: c4,
       );
+    }
+
+    final String saveNotice;
+    if (c4 == null) {
+      saveNotice =
+          'Profile saved locally. C4 scoring is unavailable for these '
+          'answers; no demographic score was invented.';
+    } else if (c4Submission?.c4Scored == true) {
+      saveNotice = 'Profile saved and C4 assessment synced with the backend.';
+    } else {
+      saveNotice =
+          'Profile saved locally, but C4 was not confirmed by the backend. '
+          'Check the connection and save again to retry.';
     }
 
     if (mounted) {
@@ -352,11 +362,10 @@ class _ProfilePageState extends State<ProfilePage> {
         setState(() => _isEditing = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Profile updated successfully!',
-              style: GoogleFonts.poppins(fontSize: 13),
-            ),
-            backgroundColor: const Color(0xFF5E60CE),
+            content: Text(saveNotice, style: GoogleFonts.poppins(fontSize: 13)),
+            backgroundColor: c4Submission?.c4Scored == true
+                ? const Color(0xFF5E60CE)
+                : Colors.orange.shade800,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
@@ -364,7 +373,16 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         );
       } else {
-        // First-time setup: go to calibration screen next
+        // First-time setup proceeds even if C4 is out of scope or offline.
+        // Show an accurate sync status instead of silently reporting success.
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(saveNotice),
+            backgroundColor: c4Submission?.c4Scored == true
+                ? const Color(0xFF5E60CE)
+                : Colors.orange.shade800,
+          ),
+        );
         Navigator.pushReplacement(
           context,
           PageRouteBuilder(

@@ -5,11 +5,28 @@ import 'package:http/http.dart' as http;
 
 import 'patient_session_service.dart';
 import 'participant_identity_service.dart';
+import 'c4_demographics.dart';
 
 class AssignmentInvite {
   const AssignmentInvite(this.code, this.expiresAt);
   final String code;
   final DateTime expiresAt;
+}
+
+/// Backend acknowledgement for a contextual submission.
+///
+/// A completed GAD-7 can be recorded even when C4 is unavailable: in that
+/// case [accepted] is true but [c4Scored] is false.
+class ContextualIntakeOutcome {
+  const ContextualIntakeOutcome({
+    required this.accepted,
+    required this.c4Scored,
+    this.reason,
+  });
+
+  final bool accepted;
+  final bool c4Scored;
+  final String? reason;
 }
 
 class ApiService {
@@ -314,38 +331,101 @@ class ApiService {
     }
   }
 
-  /// Sends GAD-7 + demographics to the central backend for C4/DCAR scoring.
-  /// Returns true on success. Triggers fusion server-side.
-  static Future<bool> submitContextualIntake({
+  /// Submit only verified C4 demographics and/or genuinely completed GAD-7.
+  ///
+  /// No placeholder questionnaire, inferred category, or partial demographic
+  /// payload is ever sent. The server's acknowledgement is checked before the
+  /// app reports that the central assessment was updated.
+  static Future<ContextualIntakeOutcome> submitContextualIntake({
     required String participantId,
+    C4Demographics? demographics,
     List<int>? gad7Items,
-    String? gender,
-    int? age,
-    String? edu,
-    String? smoke,
-    String? drink,
+    http.Client? client,
+    PatientSessionService? sessionService,
+    String? backendBase,
   }) async {
+    if (demographics == null && gad7Items == null) {
+      return const ContextualIntakeOutcome(
+        accepted: false,
+        c4Scored: false,
+        reason: 'No completed questionnaire or eligible C4 profile to send.',
+      );
+    }
+    if (gad7Items != null &&
+        (gad7Items.length != 7 ||
+            gad7Items.any((answer) => answer < 0 || answer > 3))) {
+      return const ContextualIntakeOutcome(
+        accepted: false,
+        c4Scored: false,
+        reason: 'GAD-7 requires seven real answers between 0 and 3.',
+      );
+    }
     try {
-      final root = backendRoot();
+      final storedParticipant =
+          await ParticipantIdentityService.getParticipantId();
+      if (storedParticipant != participantId) {
+        return const ContextualIntakeOutcome(
+          accepted: false,
+          c4Scored: false,
+          reason: 'Participant identity does not match this installation.',
+        );
+      }
+      final root = backendRoot(backendBase);
       final subjectId = await ParticipantIdentityService.getCentralSubjectId();
-      if (root == null || subjectId == null) return false;
+      if (root == null || subjectId == null || subjectId.isEmpty) {
+        return const ContextualIntakeOutcome(
+          accepted: false,
+          c4Scored: false,
+          reason:
+              'Central Backend connection or subject enrolment unavailable.',
+        );
+      }
+
       final payload = <String, dynamic>{
+        'subject_id': subjectId,
         'app_user_id': participantId,
+        ...?demographics?.toJson(),
         'gad7_items': ?gad7Items,
       };
-      if (gender != null) payload['gender'] = gender.toLowerCase();
-      if (age != null) payload['age'] = age;
-      if (edu != null) payload['edu'] = edu;
-      if (smoke != null) payload['smoke'] = smoke;
-      if (drink != null) payload['drink'] = drink;
       final res = await _requestWithRecovery(
         Uri.parse('$root/v1/ingest/contextual'),
         expectedSubjectId: subjectId,
         postBody: jsonEncode(payload),
+        client: client,
+        sessionService: sessionService,
+        participantId: participantId,
+        backendBase: backendBase,
       );
-      return res?.statusCode == 200;
+      if (res?.statusCode != 200) {
+        return ContextualIntakeOutcome(
+          accepted: false,
+          c4Scored: false,
+          reason:
+              'Central Backend did not accept the submission (HTTP ${res?.statusCode ?? 'unavailable'}).',
+        );
+      }
+      final decoded = jsonDecode(res!.body);
+      if (decoded is! Map ||
+          decoded['subject_id'] != subjectId ||
+          decoded['status'] is! String) {
+        return const ContextualIntakeOutcome(
+          accepted: false,
+          c4Scored: false,
+          reason: 'Central Backend returned an invalid subject or response.',
+        );
+      }
+      final scored = decoded['status'] == 'ok' && decoded['score'] is num;
+      return ContextualIntakeOutcome(
+        accepted: true,
+        c4Scored: scored,
+        reason: scored ? null : decoded['note']?.toString(),
+      );
     } catch (_) {
-      return false;
+      return const ContextualIntakeOutcome(
+        accepted: false,
+        c4Scored: false,
+        reason: 'Central Backend connection failed.',
+      );
     }
   }
 

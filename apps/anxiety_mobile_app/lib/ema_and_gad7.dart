@@ -360,10 +360,11 @@ class _Gad7ScreenState extends State<Gad7Screen> {
     await prefs.setString('last_gad7_submitted', today);
     await prefs.setString('last_gad7_week', weeklyCheckInWeekKey());
 
-    // Send GAD-7 answers to the central backend for C4/DCAR scoring.
-    // Also read the saved profile for demographics so the contextual
-    // model gets the full feature vector.
+    // Forward ONLY the seven answers selected on this completed questionnaire.
+    // A missing/unsupported C4 profile must not suppress genuine GAD-7 data.
+    // C4 itself never uses the GAD-7 answers as model input features.
     final pid = prefs.getString('participant_id') ?? '';
+    ContextualIntakeOutcome? centralOutcome;
     if (pid.isNotEmpty) {
       Map<String, dynamic> profile = {};
       try {
@@ -371,17 +372,11 @@ class _Gad7ScreenState extends State<Gad7Screen> {
         profile = Map<String, dynamic>.from(jsonDecode(raw) as Map);
       } catch (_) {}
       final c4 = C4Demographics.fromSavedProfile(profile);
-      if (c4 != null) {
-        ApiService.submitContextualIntake(
-          participantId: pid,
-          gad7Items: _answers.cast<int>(),
-          gender: c4.gender,
-          age: c4.age,
-          edu: c4.education,
-          smoke: c4.smoking,
-          drink: c4.drinking,
-        );
-      }
+      centralOutcome = await ApiService.submitContextualIntake(
+        participantId: pid,
+        gad7Items: _answers.cast<int>(),
+        demographics: c4,
+      );
     }
     await NotificationHelper.cancelWeeklyCheckIn('anxiety');
 
@@ -419,6 +414,15 @@ class _Gad7ScreenState extends State<Gad7Screen> {
                   fontSize: 13,
                 ),
               ),
+              if (centralOutcome?.accepted != true) ...[
+                const SizedBox(height: 10),
+                const Text(
+                  'Your check-in was saved in the research app, but its '
+                  'Central Backend sync was not confirmed.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.deepOrange, fontSize: 12),
+                ),
+              ],
             ],
           ),
           actions: [
