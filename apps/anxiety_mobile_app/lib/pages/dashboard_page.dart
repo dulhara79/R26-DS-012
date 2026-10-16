@@ -465,8 +465,8 @@ class _DashboardPageState extends State<DashboardPage>
   void _startPredictionPolling() {
     _predictionTimer?.cancel();
     _fetchForecast();
-    // Poll the FastAPI prediction endpoint every 30 seconds
-    _predictionTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+    // Poll once per minute to align with the app's one-minute feature summaries.
+    _predictionTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
       _fetchForecast();
     });
   }
