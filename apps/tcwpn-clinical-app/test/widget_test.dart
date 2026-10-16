@@ -123,10 +123,22 @@ FusionResult _parse(String raw) =>
     FusionResult.fromJson(jsonDecode(raw) as Map<String, dynamic>, 'TEST-001');
 
 void main() {
-  testWidgets('boots to sign-in when there is no session', (tester) async {
+  testWidgets('boots to consent gate before sign-in when consent is missing',
+      (tester) async {
     await tester
         .pumpWidget(const ClinAnxApp(consented: false, signedIn: false));
     await tester.pump();
+
+    expect(find.text('Before you begin'), findsOneWidget);
+    expect(find.text('Sign in'), findsNothing);
+  });
+
+  testWidgets('boots to sign-in when consent exists but there is no session',
+      (tester) async {
+    await tester
+        .pumpWidget(const ClinAnxApp(consented: true, signedIn: false));
+    await tester.pump();
+
     expect(find.text('Sign in'), findsOneWidget);
   });
 
