@@ -12,7 +12,9 @@ from .embeddings import (
     OllamaEmbedder,
     SentenceTransformerEmbedder,
 )
-from .generation import Generator, OllamaGenerator, RuleBasedGenerator
+from .generation import EvidenceOnlyGenerator, Generator
+from .ollama_organizer import OllamaEvidenceOrganizer
+from .grounding import ClaimGroundingVerifier
 from .ingestion import IngestionService
 from .models import HealthStatus, SourceConfig
 from .nli import CrossEncoderNliClassifier, HeuristicNliClassifier, NliClassifier
@@ -43,14 +45,14 @@ class Runtime:
         vector_ok = self.vector_store.ping()
         ollama_required = (
             self.settings.embedding_provider == "ollama"
-            or self.settings.generator_provider == "ollama"
+            or self.settings.generator_provider == "ollama_evidence"
         )
         ollama_ok: bool | None = None
         if ollama_required:
             checks: list[bool] = []
             if self.settings.embedding_provider == "ollama":
                 checks.append(self.embedder.ping())
-            if self.settings.generator_provider == "ollama":
+            if self.settings.generator_provider == "ollama_evidence":
                 checks.append(self.generator.ping())
             ollama_ok = all(checks)
         stored_embedding_identity = self.database.get_embedding_identity()
@@ -109,6 +111,10 @@ def build_runtime(settings: Settings | None = None) -> Runtime:
     reranker = _build_reranker(settings)
     nli = _build_nli(settings)
     generator = _build_generator(settings)
+    grounding = ClaimGroundingVerifier(
+        nli,
+        threshold=settings.grounding_entailment_threshold,
+    )
     ingestion = IngestionService(
         settings,
         database,
@@ -124,7 +130,7 @@ def build_runtime(settings: Settings | None = None) -> Runtime:
         reranker,
         nli,
     )
-    rag = CareAnxRag(settings, retriever, generator)
+    rag = CareAnxRag(settings, retriever, generator, grounding)
     return Runtime(
         settings=settings,
         database=database,
@@ -178,10 +184,10 @@ def _build_nli(settings: Settings) -> NliClassifier:
 
 
 def _build_generator(settings: Settings) -> Generator:
-    if settings.generator_provider == "rule":
-        return RuleBasedGenerator()
-    return OllamaGenerator(
-        settings.ollama_base_url,
-        settings.generation_model,
-        max(120.0, settings.request_timeout_seconds),
+    if settings.generator_provider in {"extractive", "rule"}:
+        return EvidenceOnlyGenerator()
+    if settings.generator_provider == "ollama_evidence":
+        return OllamaEvidenceOrganizer(settings.ollama_base_url, settings.generation_model)
+    raise ValueError(
+        f"Unsupported generator provider: {settings.generator_provider}"
     )
