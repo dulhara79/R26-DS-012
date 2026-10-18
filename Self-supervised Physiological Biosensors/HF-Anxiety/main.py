@@ -740,18 +740,32 @@ def get_escalation_forecast(user_id: str):
                 (block_tensor - reconstructions) ** 2,
                 dim=(1, 2),
             ).cpu().numpy()
+            # The frozen Ridge model MUST see the original WESAD score scale.
+            # Personalizing its input scores would silently break that contract.
             score_history = np.asarray(
-                [_risk_from_reconstruction_error(value, calm_error_p90) / 100.0
-                 for value in raw_errors],
+                [float(error / (error + FORECAST_BASELINE_P95))
+                 for error in raw_errors],
                 dtype=np.float32,
             )
             predictions = direct_forecaster(
                 torch.tensor(score_history, dtype=torch.float32).unsqueeze(0)
             )
 
-        future_scores = predictions.squeeze(0).cpu().numpy().astype(np.float64)
-        future_scores = np.clip(future_scores, 0.0, 1.0)
-        current_score = float(score_history[-1])
+        wesad_future = np.clip(
+            predictions.squeeze(0).cpu().numpy().astype(np.float64),
+            1e-6, 1.0 - 1e-6,
+        )
+        # Convert the Ridge predictions back into reconstruction-error units,
+        # then compare those errors to this person's resting error threshold.
+        future_errors = FORECAST_BASELINE_P95 * wesad_future / (1.0 - wesad_future)
+        future_scores = np.asarray(
+            [_risk_from_reconstruction_error(error, calm_error_p90) / 100.0
+             for error in future_errors],
+            dtype=np.float64,
+        )
+        current_score = _risk_from_reconstruction_error(
+            float(raw_errors[-1]), calm_error_p90,
+        ) / 100.0
         captured_at = latest_reading_at.isoformat()
 
         return {
@@ -771,6 +785,8 @@ def get_escalation_forecast(user_id: str):
             "current_risk_index": current_score * 100.0,
             "current_reconstruction_error": float(raw_errors[-1]),
             "c1_score_history": score_history.astype(float).tolist(),
+            "personal_current_risk_index": current_score * 100.0,
+            "personal_forecast_score_transform": "wesad_score_to_raw_error_to_calm_relative",
             "confidence": None,
             "confidence_status": "not_validated_for_legacy_packets",
             "score_kind": "calm_relative_physiological_deviation",
