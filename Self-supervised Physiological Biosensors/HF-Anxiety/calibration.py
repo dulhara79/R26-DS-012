@@ -3,6 +3,7 @@
 import numpy as np
 
 
+FEATURE_SCHEMA_VERSION = 2
 MINIMUM_BASELINE_WINDOWS = 10
 MINIMUM_BASELINE_STDS = np.array(
     [1.0, 15.0, 2.0, 2.0, 0.5, 0.10, 0.05, 0.01, 0.01, 0.005],
@@ -24,13 +25,19 @@ def baseline_statistics(windows):
         )
     if not np.isfinite(values).all():
         raise ValueError("Baseline windows must contain only finite numbers.")
-    measured_std = values.std(axis=0)
-    if np.all(measured_std <= MINIMUM_BASELINE_STDS):
+    # A steadily changing HR during setup is not a stationary resting reference.
+    # This is a calibration-quality rule, not an anxiety/medical threshold.
+    first, second = np.array_split(values[:, 0], 2)
+    within = np.sqrt((first.var() + second.var()) / 2)
+    difference = abs(first.mean() - second.mean())
+    if difference > 5.0 and difference > 2.0 * max(within, 1.0):
         raise ValueError(
-            "The resting baseline has insufficient measured variation. "
-            "Check that fresh chest-strap measurements are arriving, let "
-            "the readings settle, and repeat the ten-minute calibration."
+            "Heart rate was still changing during setup. Let the readings "
+            "settle in the same resting position, then repeat calibration."
         )
+    measured_std = values.std(axis=0)
+    # Ten verified v2 minute blocks may legitimately be very steady. Floors
+    # protect division; do not demand artificial physiological variation.
     return values.mean(axis=0), np.maximum(measured_std, MINIMUM_BASELINE_STDS)
 
 
@@ -45,7 +52,7 @@ def baseline_issue(stds, window_count=None):
         return "The saved resting baseline is invalid. Please repeat calibration."
     if window_count is not None and window_count < MINIMUM_BASELINE_WINDOWS:
         return "The saved baseline is too short. Please repeat the ten-minute calibration."
-    if np.all(values <= MINIMUM_BASELINE_STDS * (1.0 + 1e-6)):
+    if window_count is None and np.all(values <= MINIMUM_BASELINE_STDS * (1.0 + 1e-6)):
         return (
             "The saved resting baseline could not measure your normal variation. "
             "Please repeat the ten-minute calibration after the readings settle."
