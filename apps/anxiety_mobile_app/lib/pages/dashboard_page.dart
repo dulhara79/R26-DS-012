@@ -1482,7 +1482,9 @@ class _DashboardPageState extends State<DashboardPage>
         : Icons.check_circle_outline_rounded;
     final trendTitle = forecastSummary.title;
     final trendDetail = forecastSummary.isUrgent
-        ? 'Potential escalation predicted within the near-term forecast horizon. This is a model estimate, not a diagnosis.'
+        ? 'The model estimates a possible near-term rise in physiological deviation. This is not an anxiety diagnosis.'
+        : forecastSummary.tone == ForecastMessageTone.high
+        ? 'The current physiological deviation index is elevated relative to the resting reference. A high value alone does not mean escalation is predicted.'
         : 'This model estimate updates as new body readings arrive.';
     final lineColor = _riskColor(max(currentRisk, predictedPeak));
 

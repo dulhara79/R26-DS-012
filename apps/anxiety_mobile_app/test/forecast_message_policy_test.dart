@@ -23,6 +23,26 @@ void main() {
     expect(summary.title, 'Aura noticed a possible change in your readings');
   });
 
+  test('a flat high anomaly is not predicted escalation', () {
+    final summary = describeForecast(
+      currentRisk: 92,
+      forecast: const [93, 93],
+    );
+    expect(summary.tone, ForecastMessageTone.high);
+    expect(summary.isUrgent, isFalse);
+    expect(summary.leadMinutes, isNull);
+  });
+
+  test('direct +5/+10 forecasts report actual horizon minutes', () {
+    final summary = describeForecast(
+      currentRisk: 30,
+      forecast: const [35, 76],
+    );
+    expect(summary.tone, ForecastMessageTone.warning);
+    expect(summary.isUrgent, isTrue);
+    expect(summary.leadMinutes, 10);
+  });
+
   test('a currently high reading takes priority over future wording', () {
     final summary = describeForecast(
       currentRisk: 76,

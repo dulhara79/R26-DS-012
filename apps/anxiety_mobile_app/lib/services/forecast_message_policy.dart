@@ -17,8 +17,7 @@ class ForecastMessageSummary {
     this.leadMinutes,
   });
 
-  bool get isUrgent =>
-      tone == ForecastMessageTone.warning || tone == ForecastMessageTone.high;
+  // A high present deviation is not evidence of a future escalation.\n  bool get isUrgent => tone == ForecastMessageTone.warning;
 }
 
 /// Converts the rolling model trajectory into stable, participant-facing copy.
@@ -53,7 +52,7 @@ ForecastMessageSummary describeForecast({
     for (var index = 0; index < scaledForecast.length; index++) {
       final value = scaledForecast[index];
       if (value >= target && value - current >= requiredIncrease) {
-        leadMinutes = index + 1;
+        leadMinutes = scaledForecast.length == 2\n          ? (index == 0 ? 5 : 10)\n          : index + 1;
         break;
       }
     }
