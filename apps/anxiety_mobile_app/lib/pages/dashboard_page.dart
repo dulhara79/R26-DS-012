@@ -939,6 +939,8 @@ class _DashboardPageState extends State<DashboardPage>
           ],
         ),
 
+        const SizedBox(height: 18),
+        _buildAdditionalPhysiologicalFeatures(isWorn),
         const SizedBox(height: 24),
         _buildChartsSection(),
         const SizedBox(height: 20),
@@ -2111,6 +2113,95 @@ class _DashboardPageState extends State<DashboardPage>
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  // Display the six model-input features not shown in the four live KPI cards.
+  // This uses the same received packet; it does not modify sensor collection.
+  Widget _buildAdditionalPhysiologicalFeatures(bool isWorn) {
+    final reading = _currentReading;
+    final additionalFeatures = <String, String>{
+      'Mean R–R interval': isWorn
+          ? '${reading!.meanRR.toStringAsFixed(2)} ms'
+          : '--',
+      'SDNN (HRV)': isWorn ? '${reading!.sdnn.toStringAsFixed(2)} ms' : '--',
+      'RMSSD (HRV)': isWorn ? '${reading!.rmssd.toStringAsFixed(2)} ms' : '--',
+      'Breathing variation (SD)': isWorn
+          ? '${reading!.stdBR.toStringAsFixed(2)} br/min'
+          : '--',
+      'Temperature variation (SD)': isWorn
+          ? '${reading!.stdTemp.toStringAsFixed(3)} °C'
+          : '--',
+      'Mean acceleration': isWorn
+          ? '${reading!.meanAccMag.toStringAsFixed(3)} g'
+          : '--',
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Additional physiological features',
+            style: GoogleFonts.poppins(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Together with the four readings above, these show all ten '
+            'physiological features. These are the latest sensor values; '
+            'the prediction model receives minute averages.',
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              height: 1.5,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (final feature in additionalFeatures.entries)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      feature.key,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    feature.value,
+                    textAlign: TextAlign.end,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
