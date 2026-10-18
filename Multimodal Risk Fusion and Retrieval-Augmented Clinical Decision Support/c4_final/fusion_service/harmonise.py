@@ -62,7 +62,16 @@ class Harmoniser:
         for f in sorted(self.reference_dir.glob("*.json")):
             blob = json.loads(f.read_text())
             m = blob["modality"]
-            self.refs[m] = np.sort(np.asarray(blob["scores"], dtype=float))
+            # Frequency encoding preserves the real held-out ties.
+            scores = np.asarray(blob["scores"], dtype=float)
+            counts = blob.get("counts")
+            if counts is not None:
+                weights = np.asarray(counts)
+                if (len(weights) != len(scores) or not np.issubdtype(weights.dtype, np.integer)
+                        or np.any(weights <= 0) or int(weights.sum()) != int(blob["n"])):
+                    raise ValueError(f"invalid frozen reference counts: {f.name}")
+                scores = np.repeat(scores, weights)
+            self.refs[m] = np.sort(scores)
             self.meta[m] = {k: v for k, v in blob.items() if k != "scores"}
 
     def available(self) -> Dict[str, int]:
@@ -84,7 +93,9 @@ class Harmoniser:
                      f"cross-modality comparison is NOT valid until one is built",
             )
 
-        pct = float(np.searchsorted(ref, raw, side="right") / ref.size)
+        # Prevent JSON rounding from splitting numerically equal score ties.
+        tie_tolerance = float(self.meta.get(modality, {}).get("tie_tolerance", 0.0))
+        pct = float(np.searchsorted(ref, raw + tie_tolerance, side="right") / ref.size)
         pct = float(np.clip(pct, 0.0, 1.0))
 
         # rolling drift check over the last 200 observations
