@@ -1,116 +1,63 @@
-import 'dart:async';
 import 'api_service.dart';
 import 'chest_strap_service.dart';
 
 class SensorManager {
   final String userId;
   final int samplingRate;
-
-  // This in-memory list stores the live features from the chest strap
-  final List<ChestStrapReading> _readingsBuffer = [];
-
-  Timer? _oneMinuteTimer;
   bool isCollecting = false;
-  bool _isFlushing = false;
+  int? _lastWindowEnd;
+  int? _lastPacketTimestamp;
 
   SensorManager({required this.userId, this.samplingRate = 1});
 
-  // START HDS COLLECTION
   void startCollection() {
-    if (isCollecting) return;
-
     isCollecting = true;
-    _readingsBuffer.clear();
-
-    // This periodic timer fires exactly every 60 seconds
-    _oneMinuteTimer = Timer.periodic(
-      const Duration(seconds: 60),
-      (_) => _flushMinuteWindow(),
-    );
+    _lastWindowEnd = null;
+    _lastPacketTimestamp = null;
   }
 
-  Future<void> _flushMinuteWindow() async {
-    if (_isFlushing) {
-      print('Minute upload is still running; keeping new packets buffered.');
-      return;
-    }
-    if (_readingsBuffer.isEmpty) {
-      print('Buffer warning: No feature data accumulated in the last minute.');
-      return;
-    }
-
-    _isFlushing = true;
-    final readingsToSend = List<ChestStrapReading>.from(_readingsBuffer);
-    _readingsBuffer.clear();
-
-    try {
-      print(
-        '60 seconds up! Averaging ${readingsToSend.length} feature samples for the server...',
-      );
-
-      final wornReadings = readingsToSend.where((r) => r.isWorn).toList();
-      final isWorn = wornReadings.length > (readingsToSend.length / 2);
-
-      // If the strap was worn for most of the minute, exclude off-body zero
-      // packets from the averages. Otherwise send an explicit not-worn block
-      // so the server's data-quality guard can reject it as designed.
-      final readingsForAverages = isWorn ? wornReadings : readingsToSend;
-
-      double sumHr = 0, sumRr = 0, sumSdnn = 0, sumRmssd = 0;
-      double sumBr = 0, sumStdBr = 0, sumTemp = 0, sumStdTemp = 0;
-      double sumAccMag = 0, sumStdAccMag = 0;
-
-      for (var r in readingsForAverages) {
-        sumHr += r.meanHR;
-        sumRr += r.meanRR;
-        sumSdnn += r.sdnn;
-        sumRmssd += r.rmssd;
-        sumBr += r.meanBR;
-        sumStdBr += r.stdBR;
-        sumTemp += r.meanTemp;
-        sumStdTemp += r.stdTemp;
-        sumAccMag += r.meanAccMag;
-        sumStdAccMag += r.stdAccMag;
-      }
-
-      final count = readingsForAverages.length;
-
-      final success = await ApiService.sendFeatureData(
-        userId: userId,
-        isWorn: isWorn,
-        meanHr: sumHr / count,
-        meanRr: sumRr / count,
-        sdnn: sumSdnn / count,
-        rmssd: sumRmssd / count,
-        meanBr: sumBr / count,
-        stdBr: sumStdBr / count,
-        meanTemp: sumTemp / count,
-        stdTemp: sumStdTemp / count,
-        meanAccMag: sumAccMag / count,
-        stdAccMag: sumStdAccMag / count,
-      );
-
-      if (!success) {
-        print(
-          'Failed to transmit this minute feature block. '
-          'Discarding it because expired readings must not enter real-time forecasting.',
-        );
-      }
-    } finally {
-      _isFlushing = false;
-    }
-  }
-
-  // CLEAN UP
   void stopCollection() {
     isCollecting = false;
-    _oneMinuteTimer?.cancel();
-    _readingsBuffer.clear();
+    _lastWindowEnd = null;
+    _lastPacketTimestamp = null;
   }
 
-  void addLiveChestStrapData(ChestStrapReading reading) {
-    if (!isCollecting) return;
-    _readingsBuffer.add(reading);
+  Future<void> addLiveChestStrapData(ChestStrapReading reading) async {
+    if (!isCollecting || !reading.isWorn) return;
+    if (_lastPacketTimestamp != null &&
+        reading.timestamp < _lastPacketTimestamp!) {
+      // Firmware restarted (or uptime wrapped); never reuse the prior block ID.
+      _lastWindowEnd = null;
+    }
+    _lastPacketTimestamp = reading.timestamp;
+    final window = reading.modelWindow;
+    if (window == null ||
+        !window.isReady ||
+        window.endMilliseconds == _lastWindowEnd) {
+      return;
+    }
+    final age = window.ageAt(reading.timestamp);
+    if (age > 90000) return;
+    _lastWindowEnd = window.endMilliseconds;
+    final values = window.features;
+    // The firmware already computed one real minute. Averaging its SD/RMSSD
+    // again changes their definitions and must never be done here.
+    await ApiService.sendFeatureData(
+      userId: userId,
+      isWorn: true,
+      meanHr: values[0],
+      meanRr: values[1],
+      sdnn: values[2],
+      rmssd: values[3],
+      meanBr: values[4],
+      stdBr: values[5],
+      meanTemp: values[6],
+      stdTemp: values[7],
+      meanAccMag: values[8],
+      stdAccMag: values[9],
+      featureSchemaVersion: window.version,
+      observedAt: DateTime.now().subtract(Duration(milliseconds: age)),
+    );
   }
 
   // FOR BACKWARDS COMPATIBILITY IF NEEDED (e.g. from BLE Bridge if not updated)
@@ -138,6 +85,6 @@ class SensorManager {
       stdAccMag: accY,
       isWorn: true,
     );
-    _readingsBuffer.add(r);
+    addLiveChestStrapData(r);
   }
 }

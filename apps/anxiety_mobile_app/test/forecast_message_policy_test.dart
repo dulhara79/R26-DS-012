@@ -20,7 +20,28 @@ void main() {
 
     expect(summary.tone, ForecastMessageTone.warning);
     expect(summary.leadMinutes, 8);
-    expect(summary.title, 'Aura noticed a possible change in your readings');
+    expect(summary.title, 'Your physiological deviation score may rise');
+  });
+
+  test('flat high anomaly is not described as predicted escalation', () {
+    final summary = describeForecast(
+      currentRisk: 92,
+      forecast: const [93, 93],
+      forecastHorizonsMinutes: const [5, 10],
+    );
+    expect(summary.isUrgent, isFalse);
+    expect(summary.leadMinutes, isNull);
+    expect(summary.title, 'Your readings differ from your resting baseline');
+  });
+
+  test('direct forecasts use their actual five and ten minute horizons', () {
+    final summary = describeForecast(
+      currentRisk: 20,
+      forecast: const [30, 80],
+      forecastHorizonsMinutes: const [5, 10],
+    );
+    expect(summary.leadMinutes, 10);
+    expect(summary.isUrgent, isTrue);
   });
 
   test('a currently high reading takes priority over future wording', () {
@@ -30,6 +51,6 @@ void main() {
     );
 
     expect(summary.tone, ForecastMessageTone.high);
-    expect(summary.title, 'Take a gentle moment to check in');
+    expect(summary.title, 'Your readings differ from your resting baseline');
   });
 }

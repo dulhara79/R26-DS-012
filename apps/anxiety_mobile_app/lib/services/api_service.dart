@@ -73,6 +73,8 @@ class ApiService {
     required double stdTemp,
     required double meanAccMag,
     required double stdAccMag,
+    int featureSchemaVersion = 1,
+    DateTime? observedAt,
   }) async {
     try {
       final response = await http
@@ -81,7 +83,10 @@ class ApiService {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
               'user_id': userId,
-              'timestamp': DateTime.now().toUtc().toIso8601String(),
+              'timestamp': (observedAt ?? DateTime.now())
+                  .toUtc()
+                  .toIso8601String(),
+              'feature_schema_version': featureSchemaVersion,
               'is_worn': isWorn,
               'mean_hr': meanHr,
               'mean_rr': meanRr,
@@ -120,6 +125,7 @@ class ApiService {
     required List<double> bMean,
     required List<double> bStd,
     required List<List<double>> baselineWindows,
+    void Function(String message, int statusCode)? onRejected,
   }) async {
     try {
       final response = await http
@@ -130,6 +136,7 @@ class ApiService {
               'b_mean': bMean,
               'b_std': bStd,
               'baseline_windows': baselineWindows,
+              'feature_schema_version': 2,
             }),
           )
           .timeout(const Duration(seconds: 15));
@@ -141,6 +148,16 @@ class ApiService {
         return true;
       } else {
         debugPrint('Calibration failed: ${response.body}');
+        String message = 'Could not save the resting setup. Please try again.';
+        try {
+          final body = jsonDecode(response.body);
+          if (body is Map && body['detail'] is String) {
+            message = body['detail'] as String;
+          }
+        } on FormatException {
+          // A proxy may return a non-JSON error page.
+        }
+        onRejected?.call(message, response.statusCode);
         return false;
       }
     } catch (e) {

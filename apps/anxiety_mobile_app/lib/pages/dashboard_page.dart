@@ -479,6 +479,18 @@ class _DashboardPageState extends State<DashboardPage>
     final message = result['message'] as String? ?? "";
 
     if (status == 'success' && result['scope'] == 'physiological') {
+      if (result['feature_schema_version'] != 2 ||
+          result['score_kind'] != 'physiological_anomaly') {
+        setState(() {
+          _predictionStatus = 'error';
+          _forecastData = [];
+          _currentModelRisk = null;
+          _statusMessage =
+              'The physiological backend needs the minute-feature update.';
+        });
+        return;
+      }
+
       final List? riskForecast = result['risk_forecast'] as List?;
       final List? forecastHorizons =
           result['forecast_horizons_minutes'] as List?;
@@ -580,6 +592,7 @@ class _DashboardPageState extends State<DashboardPage>
     } else if (status == 'not_calibrated') {
       setState(() {
         _predictionStatus = "not_calibrated";
+        _recentAnxietyReadings.clear();
         _forecastData = [];
         _currentModelRisk = null;
         _forecastCoverage = 0.0;
@@ -774,12 +787,6 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   // ── Risk Score Color ────────────────────────────────────────
-  Color _riskColor(double score) {
-    if (score <= 20) return const Color(0xFF4CAF50);
-    if (score <= 45) return const Color(0xFFFFA726);
-    if (score <= 70) return const Color(0xFFFF7043);
-    return const Color(0xFFEF5350);
-  }
 
   Color _statusColor(String status) {
     switch (status) {
@@ -1107,7 +1114,7 @@ class _DashboardPageState extends State<DashboardPage>
                 ),
                 icon: const Icon(Icons.play_arrow_rounded, size: 22),
                 label: Text(
-                  'Start 3-Minute Setup',
+                  'Start 10-Minute Setup',
                   style: GoogleFonts.poppins(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -1466,25 +1473,23 @@ class _DashboardPageState extends State<DashboardPage>
     final forecastSummary = describeForecast(
       currentRisk: currentRisk,
       forecast: forecast.map(_scaleForecastValue).toList(),
+      forecastHorizonsMinutes: const [5, 10],
     );
-    final predictedPeak = forecastSummary.predictedPeak;
-    final currentElevated =
-        forecastSummary.tone == ForecastMessageTone.elevated;
     final trendColor = forecastSummary.isUrgent
-        ? const Color(0xFFEF5350)
-        : currentElevated
         ? const Color(0xFFFFA726)
-        : const Color(0xFF4CAF50);
+        : forecastSummary.tone == ForecastMessageTone.calm
+        ? const Color(0xFF4CAF50)
+        : Theme.of(context).colorScheme.primary;
     final trendIcon = forecastSummary.isUrgent
-        ? Icons.self_improvement_rounded
-        : currentElevated
-        ? Icons.info_outline_rounded
-        : Icons.check_circle_outline_rounded;
+        ? Icons.trending_up_rounded
+        : forecastSummary.tone == ForecastMessageTone.calm
+        ? Icons.check_circle_outline_rounded
+        : Icons.info_outline_rounded;
     final trendTitle = forecastSummary.title;
     final trendDetail = forecastSummary.isUrgent
-        ? 'Potential escalation predicted within the near-term forecast horizon. This is a model estimate, not a diagnosis.'
-        : 'This model estimate updates as new body readings arrive.';
-    final lineColor = _riskColor(max(currentRisk, predictedPeak));
+        ? 'The model predicts a larger difference from your resting baseline. This does not establish anxiety.'
+        : 'This score measures differences in either direction from your resting baseline, not the probability of anxiety.';
+    final lineColor = Theme.of(context).colorScheme.primary;
 
     final now = DateTime.now();
     final pastSpots =
@@ -1550,7 +1555,7 @@ class _DashboardPageState extends State<DashboardPage>
                       ),
                     ),
                     Text(
-                      'A physiological model estimate for the +5 and +10 minute horizons',
+                      'Deviation index (0–100), with +5 and +10 minute forecasts',
                       style: GoogleFonts.poppins(
                         fontSize: 11,
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1711,7 +1716,7 @@ class _DashboardPageState extends State<DashboardPage>
                                   return const SizedBox.shrink();
                                 }
                                 return Text(
-                                  '${value.toInt()}%',
+                                  '${value.toInt()}',
                                   style: GoogleFonts.poppins(
                                     fontSize: 9.5,
                                     color: Theme.of(
@@ -1725,96 +1730,6 @@ class _DashboardPageState extends State<DashboardPage>
                           ),
                         ),
                         borderData: FlBorderData(show: false),
-                        rangeAnnotations: RangeAnnotations(
-                          horizontalRangeAnnotations: [
-                            HorizontalRangeAnnotation(
-                              y1: 0,
-                              y2: 20,
-                              color: const Color(
-                                0xFF4CAF50,
-                              ).withValues(alpha: 0.055),
-                            ),
-                            HorizontalRangeAnnotation(
-                              y1: 20,
-                              y2: 45,
-                              color: const Color(
-                                0xFFFFC107,
-                              ).withValues(alpha: 0.055),
-                            ),
-                            HorizontalRangeAnnotation(
-                              y1: 45,
-                              y2: 70,
-                              color: const Color(
-                                0xFFFF7043,
-                              ).withValues(alpha: 0.055),
-                            ),
-                            HorizontalRangeAnnotation(
-                              y1: 70,
-                              y2: 100,
-                              color: const Color(
-                                0xFFEF5350,
-                              ).withValues(alpha: 0.065),
-                            ),
-                          ],
-                        ),
-                        extraLinesData: ExtraLinesData(
-                          horizontalLines: [
-                            HorizontalLine(
-                              y: 20,
-                              color: const Color(
-                                0xFF4CAF50,
-                              ).withValues(alpha: 0.25),
-                              strokeWidth: 1.5,
-                              dashArray: [4, 4],
-                              label: HorizontalLineLabel(
-                                show: true,
-                                alignment: Alignment.topRight,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 8,
-                                  color: const Color(0xFF4CAF50),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                labelResolver: (line) => 'Low',
-                              ),
-                            ),
-                            HorizontalLine(
-                              y: 45,
-                              color: const Color(
-                                0xFFFFA726,
-                              ).withValues(alpha: 0.25),
-                              strokeWidth: 1.5,
-                              dashArray: [4, 4],
-                              label: HorizontalLineLabel(
-                                show: true,
-                                alignment: Alignment.topRight,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 8,
-                                  color: const Color(0xFFFFA726),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                labelResolver: (line) => 'Elevated',
-                              ),
-                            ),
-                            HorizontalLine(
-                              y: 70,
-                              color: const Color(
-                                0xFFEF5350,
-                              ).withValues(alpha: 0.25),
-                              strokeWidth: 1.5,
-                              dashArray: [4, 4],
-                              label: HorizontalLineLabel(
-                                show: true,
-                                alignment: Alignment.topRight,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 8,
-                                  color: const Color(0xFFEF5350),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                labelResolver: (line) => 'High',
-                              ),
-                            ),
-                          ],
-                        ),
                         lineBarsData: [
                           LineChartBarData(
                             spots: visibleSpots,
@@ -1850,21 +1765,12 @@ class _DashboardPageState extends State<DashboardPage>
                           touchTooltipData: LineTouchTooltipData(
                             getTooltipItems: (touchedSpots) {
                               return touchedSpots.map((spot) {
-                                String riskLabel = 'Low';
-                                if (spot.y > 70) {
-                                  riskLabel = 'High';
-                                } else if (spot.y > 45) {
-                                  riskLabel = 'Elevated';
-                                } else if (spot.y > 20) {
-                                  riskLabel = 'Moderate';
-                                }
-
                                 return LineTooltipItem(
                                   '${spot.x.abs() < 0.05
                                       ? 'Now'
                                       : spot.x < 0
                                       ? '${spot.x.abs().toStringAsFixed(0)} min ago'
-                                      : 'In ${spot.x.toInt()} min'}\n${spot.y.toStringAsFixed(0)}% ($riskLabel)',
+                                      : 'In ${spot.x.toInt()} min'}\n${spot.y.toStringAsFixed(0)} / 100',
                                   GoogleFonts.poppins(
                                     color: Colors.white,
                                     fontWeight: FontWeight.w600,
