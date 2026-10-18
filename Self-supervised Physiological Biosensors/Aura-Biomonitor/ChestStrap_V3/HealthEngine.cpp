@@ -271,7 +271,6 @@ void HealthEngine::update(
      ******************************************************/
 
     updateWearState(ecg);
-    modelFeatures.advance(timestamp, isWorn && !ecg.leadOff);
 
 
     /******************************************************
@@ -304,7 +303,6 @@ void HealthEngine::update(
                 hrv.addRRInterval(
                     (float)rr
                 );
-                modelFeatures.addRR((float)rr);
             }
         }
 
@@ -357,9 +355,6 @@ void HealthEngine::update(
             magnitude / ACC_COUNTS_PER_G;
 
         accStats.add(magnitudeG);
-        modelFeatures.addAcceleration(ax / ACC_COUNTS_PER_G,
-                                      ay / ACC_COUNTS_PER_G,
-                                      az / ACC_COUNTS_PER_G);
     }
 
 
@@ -372,7 +367,6 @@ void HealthEngine::update(
         tempStats.add(
             temp.bodyTemperature
         );
-        modelFeatures.addTemperature(temp.bodyTemperature);
     }
 
 
@@ -610,7 +604,6 @@ void HealthEngine::detectRespiration(
                         interval <= MAX_BREATH_INTERVAL_MS)
                     {
                         brStats.add((float)interval);
-                        modelFeatures.addBreathInterval((float)interval, timestamp);
                         lastBreathTime = breathTime;
 
                         // Adapt amplitude estimate
@@ -734,7 +727,7 @@ String HealthEngine::toCSV()
 {
     String csv;
 
-    csv.reserve(320);
+    csv.reserve(180);
 
 
     /******************************************************
@@ -806,22 +799,6 @@ String HealthEngine::toCSV()
         packet.isWorn ? 1 : 0
     );
 
-    // Keep the original 12 display fields, then append the versioned model
-    // minute. The same completed block may be repeated at 1 Hz; the app dedups
-    // its end timestamp instead of averaging it again.
-    const auto &model = modelFeatures.latest();
-    csv += ",";
-    csv += String(ModelMinuteFeatures::SCHEMA_VERSION);
-    csv += ",";
-    csv += String(model.startMs);
-    csv += ",";
-    csv += String(model.endMs);
-    csv += ",";
-    csv += String(model.status);
-    for (float value : model.values) {
-        csv += ",";
-        csv += String(value, 6);
-    }
     csv += "\n";
 
     return csv;

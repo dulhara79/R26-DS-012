@@ -57,29 +57,7 @@ bool BLE_UART::begin(const String& deviceName)
     return true;
 }
 
-void BLE_UART::update()
-{
-    if (!deviceConnected) {
-        pendingMessage = "";
-        pendingOffset = 0;
-        return;
-    }
-    if (txCharacteristic == nullptr || pendingOffset >= pendingMessage.length() ||
-        uint32_t(millis() - lastNotifyMs) < 2) return;
-
-    // Send one chunk per loop, interleaving ECG acquisition. The old delay(2)
-    // loop blocked acquisition for the entire CSV, especially with model fields.
-    const size_t length = min(BLE_CHUNK_SIZE, pendingMessage.length() - pendingOffset);
-    String chunk = pendingMessage.substring(pendingOffset, pendingOffset + length);
-    txCharacteristic->setValue(chunk.c_str());
-    txCharacteristic->notify();
-    pendingOffset += length;
-    lastNotifyMs = millis();
-    if (pendingOffset == pendingMessage.length()) {
-        pendingMessage = "";
-        pendingOffset = 0;
-    }
-}
+void BLE_UART::update() {}
 
 bool BLE_UART::connected()
 {
@@ -91,9 +69,22 @@ void BLE_UART::send(const String& message)
     if(!deviceConnected || txCharacteristic == nullptr)
         return;
 
-    // Never interrupt an in-flight CSV line with another line.
-    if (pendingMessage.length() != 0) return;
-    pendingMessage = message;
-    if (!pendingMessage.endsWith("\n")) pendingMessage += "\n";
-    pendingOffset = 0;
+    String msg = message;
+    if(!msg.endsWith("\n"))
+        msg += "\n";
+
+    // The mobile app already reassembles notifications until it sees '\n'.
+    // Sending fixed-size chunks prevents a long CSV notification from being
+    // truncated on connections that remain at the default 23-byte MTU.
+    for(size_t offset = 0; offset < msg.length(); offset += BLE_CHUNK_SIZE)
+    {
+        if(!deviceConnected)
+            break;
+
+        const size_t length = min(BLE_CHUNK_SIZE, msg.length() - offset);
+        String chunk = msg.substring(offset, offset + length);
+        txCharacteristic->setValue(chunk.c_str());
+        txCharacteristic->notify();
+        delay(2);
+    }
 }

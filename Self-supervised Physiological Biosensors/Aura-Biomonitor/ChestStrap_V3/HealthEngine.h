@@ -8,7 +8,6 @@
 #include "QRSDetector.h"
 #include "HRVProcessor.h"
 #include "StatsWindow.h"
-#include "ModelMinuteFeatures.h"
 
 /**********************************************************
  * Health Packet
@@ -67,7 +66,6 @@ private:
      ******************************************************/
 
     HealthPacket packet;
-    ModelMinuteFeatures modelFeatures;
 
     /******************************************************
      * General state

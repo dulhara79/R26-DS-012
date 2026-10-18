@@ -189,7 +189,6 @@ void loop() {
   sensorPacket.ecg.newData = false;
   sensorPacket.imu.newData = false;
   sensorPacket.temperature.newData = false;
-  ble.update();
 
   /************************************************
    * Serial Debug
@@ -210,11 +209,7 @@ void loop() {
 
     String csv = health.toCSV();
 
-    // The model payload is longer. Debug output must not stall ECG reads
-    // while the serial transmit buffer drains.
-#if DEBUG_ENABLED
-    if (Serial.availableForWrite() >= (int)csv.length()) DBG_PRINT(csv);
-#endif
+    DBG_PRINT(csv);
 
     if (ble.connected()) {
       ble.send(csv);

@@ -32,28 +32,15 @@ OLD_MEAN = [72, 833.33, 560, 740, 14, 4, 36.1, .018, .86, .01]
 
 
 class BaselineStatisticsTests(unittest.TestCase):
-    def test_short_missing_and_nonfinite_sessions_are_rejected(self):
+    def test_short_missing_nonfinite_and_flat_sessions_are_rejected(self):
         for values in (None, [], RESTING_WINDOWS[:3], RESTING_WINDOWS[:9],
-                       np.full((10, 10), np.nan)):
+                       np.full((10, 10), np.nan), np.tile(OLD_MEAN, (10, 1))):
             with self.subTest(values_type=type(values).__name__):
                 with self.assertRaises(ValueError):
                     baseline_statistics(values)
 
     def test_original_collapsed_baseline_requires_recalibration(self):
         self.assertIsNotNone(baseline_issue(MINIMUM_BASELINE_STDS))
-
-    def test_complete_stable_minutes_use_floors_without_demanding_variation(self):
-        stable = np.tile([60, 1000, 20, 30, 15, 0, 37, 0, 0, 0], (10, 1))
-        mean, std = baseline_statistics(stable)
-        np.testing.assert_allclose(std, MINIMUM_BASELINE_STDS)
-        self.assertIsNone(baseline_issue(std, 10))
-
-    def test_heart_rate_drift_during_setup_requires_a_settled_baseline(self):
-        drifting = RESTING_WINDOWS.copy()
-        drifting[:, 0] = np.linspace(65, 85, 10)
-        drifting[:, 1] = 60000 / drifting[:, 0]
-        with self.assertRaisesRegex(ValueError, 'still changing'):
-            baseline_statistics(drifting)
 
     def test_real_minute_variation_replaces_the_tiny_hrv_divisors(self):
         mean, std = baseline_statistics(RESTING_WINDOWS)
@@ -104,7 +91,7 @@ class EndpointRegressionTests(unittest.TestCase):
         self.api.write_api = Mock()
 
     def baseline_record(self, mean, std, **extra):
-        return {'feature_schema_version': 2, **dict(zip(self.api.NORM_MEAN_FIELDS, map(float, mean))),
+        return {**dict(zip(self.api.NORM_MEAN_FIELDS, map(float, mean))),
                 **dict(zip(self.api.NORM_STD_FIELDS, map(float, std))), **extra}
 
     @staticmethod
@@ -117,7 +104,7 @@ class EndpointRegressionTests(unittest.TestCase):
         for i, values in enumerate(windows):
             time = now - timedelta(minutes=len(windows) - i - 1)
             records.append(SimpleNamespace(
-                values={**dict(zip(self.api.FEATURE_NAMES, map(float, values))), 'feature_schema_version': 2},
+                values=dict(zip(self.api.FEATURE_NAMES, map(float, values))),
                 get_time=lambda time=time: time,
             ))
         self.api.query_api.query.side_effect = [self.table([norm]), [SimpleNamespace(records=records)]]
@@ -132,57 +119,10 @@ class EndpointRegressionTests(unittest.TestCase):
             self.assertEqual(result['status'], 'not_calibrated')
             self.assertNotIn('current_risk_index', result)
 
-    def test_old_feature_format_is_rejected_even_with_noncollapsed_scales(self):
-        mean, std = baseline_statistics(RESTING_WINDOWS)
-        norm = self.baseline_record(mean, std, feature_schema_version=1)
-        result = self.prediction(norm, RESTING_WINDOWS)
-        self.assertEqual(result['status'], 'not_calibrated')
-        self.assertNotIn('current_risk_index', result)
-
-    def test_complete_stable_v2_minutes_do_not_generate_high_scores(self):
-        windows = np.tile([60, 1000, 20, 30, 15, 0, 37, 0, 0, 0], (10, 1))
-        mean, std = baseline_statistics(windows)
-        result = self.prediction(self.baseline_record(mean, std, baseline_window_count=10), windows)
-        self.assertEqual(result['status'], 'success')
-        self.assertLess(result['current_risk_index'], 20)
-        self.assertLess(max(result['risk_forecast']), 20)
-
-    def test_legacy_calibration_is_rejected_before_write(self):
-        payload = self.api.NormParamsPayload(
-            b_mean=OLD_MEAN, b_std=MINIMUM_BASELINE_STDS.tolist(),
-            baseline_windows=RESTING_WINDOWS.tolist(),
-        )
-        with self.assertRaises(self.api.HTTPException):
-            self.api.store_norm_params('regression_participant', payload)
-        self.api.write_api.write.assert_not_called()
-
-    def test_legacy_ingest_is_rejected_before_write(self):
-        payload = self.api.ChestStrapFeaturesPayload(
-            user_id='regression_participant', timestamp=datetime.now(timezone.utc),
-            is_worn=True, **dict(zip(self.api.FEATURE_NAMES, map(float, RESTING_WINDOWS[0]))),
-        )
-        with self.assertRaises(self.api.HTTPException):
-            self.api.process_and_ingest_raw_data(payload)
-        self.api.write_api.write.assert_not_called()
-
-    def test_legacy_minute_rows_do_not_enter_a_new_version_forecast(self):
-        mean, std = baseline_statistics(RESTING_WINDOWS)
-        norm = self.baseline_record(mean, std, baseline_window_count=10)
-        rows = []
-        now = datetime.now(timezone.utc)
-        for i, values in enumerate(RESTING_WINDOWS):
-            at = now - timedelta(minutes=9-i)
-            rows.append(SimpleNamespace(values=dict(zip(self.api.FEATURE_NAMES, map(float, values))),
-                                        get_time=lambda at=at: at))
-        self.api.query_api.query.side_effect = [self.table([norm]), [SimpleNamespace(records=rows)]]
-        result = self.api.get_escalation_forecast('regression_participant')
-        self.assertEqual(result['status'], 'buffering')
-        self.assertNotIn('current_risk_index', result)
-
     def test_server_recomputes_statistics_and_uses_only_full_real_sequences(self):
         payload = self.api.NormParamsPayload(
             b_mean=OLD_MEAN, b_std=MINIMUM_BASELINE_STDS.tolist(),
-            baseline_windows=RESTING_WINDOWS.tolist(), feature_schema_version=2,
+            baseline_windows=RESTING_WINDOWS.tolist(),
         )
         with patch.object(self.api.global_ae_model, 'forward', wraps=self.api.global_ae_model.forward) as forward:
             result = self.api.store_norm_params('regression_participant', payload)
@@ -197,7 +137,7 @@ class EndpointRegressionTests(unittest.TestCase):
     def test_short_calibration_is_rejected_before_any_database_write(self):
         payload = self.api.NormParamsPayload(
             b_mean=OLD_MEAN, b_std=MINIMUM_BASELINE_STDS.tolist(),
-            baseline_windows=RESTING_WINDOWS[:3].tolist(), feature_schema_version=2,
+            baseline_windows=RESTING_WINDOWS[:3].tolist(),
         )
         with self.assertRaises(self.api.HTTPException) as error:
             self.api.store_norm_params('regression_participant', payload)
@@ -209,8 +149,6 @@ class EndpointRegressionTests(unittest.TestCase):
         norm = self.baseline_record(mean, std, baseline_window_count=10)
         resting = self.prediction(norm, RESTING_WINDOWS)
         self.assertEqual(resting['status'], 'success')
-        self.assertEqual(resting['score_kind'], 'physiological_anomaly')
-        self.assertEqual(resting['feature_schema_version'], 2)
         self.assertLess(resting['current_risk_index'], 70)
         self.assertLess(max(resting['risk_forecast']), 95)
         # An independent shifted input must still produce a larger model error;
