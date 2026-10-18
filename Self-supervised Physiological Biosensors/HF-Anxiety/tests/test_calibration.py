@@ -144,6 +144,16 @@ class EndpointRegressionTests(unittest.TestCase):
         self.assertEqual(error.exception.status_code, 400)
         self.api.write_api.write.assert_not_called()
 
+    def test_personal_error_scale_keeps_calm_p90_below_high(self):
+        score = self.api._risk_from_reconstruction_error(2.0, 2.0)
+        self.assertAlmostEqual(score, 20.0)
+        self.assertAlmostEqual(self.api._risk_from_reconstruction_error(0.0, 2.0), 0.0)
+        self.assertGreater(self.api._risk_from_reconstruction_error(8.0, 2.0), score)
+        with self.assertRaises(ValueError):
+            self.api._risk_from_reconstruction_error(float("nan"), 2.0)
+        with self.assertRaises(ValueError):
+            self.api._risk_from_reconstruction_error(1.0, 0.0)
+
     def test_recalibrated_resting_replay_and_escalation_remain_distinguishable(self):
         mean, std = baseline_statistics(RESTING_WINDOWS)
         norm = self.baseline_record(mean, std, baseline_window_count=10)
