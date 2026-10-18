@@ -13,6 +13,11 @@ from pydantic import BaseModel
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 from huggingface_hub import hf_hub_download
+from calibration import (
+    MINIMUM_BASELINE_STDS,
+    baseline_issue,
+    baseline_statistics,
+)
 
 # -------------------------------------------------------------
 # STEP 1: PYTORCH MODEL CLASSES (Unchanged, fully functional)
@@ -114,14 +119,6 @@ MAX_FORECAST_READING_AGE_SECONDS = 90.0
 NORM_MEAN_FIELDS = tuple(f"{name}_baseline_mean" for name in FEATURE_NAMES)
 NORM_STD_FIELDS = tuple(f"{name}_baseline_std" for name in FEATURE_NAMES)
 DEFAULT_RECONSTRUCTION_ERROR_THRESHOLD = 0.25
-# Three one-minute calm summaries are not enough to estimate very small
-# per-feature variation reliably. These floors prevent normal calm jitter from
-# being divided by a near-zero standard deviation and becoming an extreme
-# model input. The values remain small relative to physiological stress shifts.
-MINIMUM_BASELINE_STDS = np.array(
-    [1.0, 15.0, 2.0, 2.0, 0.5, 0.10, 0.05, 0.01, 0.01, 0.005],
-    dtype=np.float32,
-)
 USER_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 EVENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,160}$")
 
@@ -298,6 +295,13 @@ def _record_norm_value(record: dict, index: int, *, std: bool) -> float | None:
     return value
 
 
+def _stored_baseline_issue(record: dict) -> str | None:
+    return baseline_issue(
+        [_record_norm_value(record, i, std=True) for i in range(FEATURE_COUNT)],
+        record.get("baseline_window_count"),
+    )
+
+
 def _feature_quality_issue(
     features: list[float] | np.ndarray,
     *,
@@ -401,8 +405,12 @@ def store_norm_params(user_id: str, payload: NormParamsPayload):
             detail="b_mean and b_std must each contain exactly 10 values (one per feature)."
         )
 
-    b_mean = np.asarray(payload.b_mean, dtype=np.float64)
-    b_std = np.asarray(payload.b_std, dtype=np.float64)
+    # Client-provided summary arrays remain in the request contract, but three
+    # floored minute averages must never become an authoritative baseline again.
+    try:
+        b_mean, b_std = baseline_statistics(payload.baseline_windows)
+    except (ValueError, TypeError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     b_mean_issue = _feature_quality_issue(
         b_mean,
         check_hr_rr_consistency=False,
@@ -430,12 +438,12 @@ def store_norm_params(user_id: str, payload: NormParamsPayload):
         if (
             baseline_windows.ndim != 2
             or baseline_windows.shape[1] != FEATURE_COUNT
-            or baseline_windows.shape[0] < 1
+            or baseline_windows.shape[0] < 10
         ):
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    "baseline_windows must contain at least one row of "
+                    "baseline_windows must contain at least ten rows of "
                     "exactly 10 physiological features."
                 ),
             )
@@ -455,13 +463,8 @@ def store_norm_params(user_id: str, payload: NormParamsPayload):
                 )
 
         normalized_baseline = (baseline_windows - b_mean) / b_std
-        # Calibration currently yields three calm one-minute summaries. Pad
-        # the earlier context with normalized baseline zeros so the five-step
-        # AE receives the same cold-start structure used by /predict.
-        normalized_baseline = np.vstack([
-            np.zeros((global_ae_model.T - 1, FEATURE_COUNT), dtype=np.float32),
-            normalized_baseline,
-        ])
+        # Estimate calm reconstruction error from complete, real five-minute
+        # sequences. Zero padding understates error during a short calibration.
         baseline_errors = []
         with torch.no_grad():
             for start in range(len(normalized_baseline) - global_ae_model.T + 1):
@@ -484,6 +487,7 @@ def store_norm_params(user_id: str, payload: NormParamsPayload):
         point.field(NORM_MEAN_FIELDS[i], float(b_mean[i]))
         point.field(NORM_STD_FIELDS[i], float(b_std[i]))
     point.field("reconstruction_error_p90", reconstruction_threshold)
+    point.field("baseline_window_count", int(len(payload.baseline_windows)))
 
     try:
         write_api.write(bucket=INFLUX_BUCKET, org=INFLUX_ORG, record=point)
@@ -580,17 +584,17 @@ def get_escalation_forecast(user_id: str):
             for table in query_api.query(norm_query)
             for record in table.records
         ]
-        if not norm_records:
+        calibration_issue = (
+            _stored_baseline_issue(norm_records[0]) if norm_records
+            else "No resting baseline was found. Please complete calibration."
+        )
+        if calibration_issue:
             return {
                 "status": "not_calibrated",
                 "scope": "physiological",
                 "model_version": FORECAST_AE_MODEL_VERSION,
                 "forecast_model_version": FORECAST_MODEL_VERSION,
-                "message": (
-                    f"No normalization params found for user {user_id}. "
-                    f"POST b_mean and b_std to /set_norm_params/{user_id} "
-                    "before calling /predict."
-                ),
+                "message": calibration_issue,
                 "forecast": [],
                 "risk_forecast": [],
                 "forecast_horizons_minutes": [5, 10],
@@ -806,9 +810,14 @@ def get_physiological_history(user_id: str, days: int = 30):
             for table in query_api.query(norm_query)
             for record in table.records
         ]
-        if not norm_records:
+        calibration_issue = (
+            _stored_baseline_issue(norm_records[0]) if norm_records
+            else "No resting baseline was found. Please complete calibration."
+        )
+        if calibration_issue:
             return {
                 "status": "not_calibrated",
+                "message": calibration_issue,
                 "days": days,
                 "history": [],
             }
@@ -834,7 +843,7 @@ def get_physiological_history(user_id: str, days: int = 30):
         )
         if not np.isfinite(b_mean).all() or not np.isfinite(b_std).all():
             raise ValueError("Stored normalization parameters are incomplete.")
-        b_std[b_std <= 0] = 1e-8
+        b_std = np.maximum(b_std, MINIMUM_BASELINE_STDS)
 
         tables = query_api.query(query)
         valid_records = []
