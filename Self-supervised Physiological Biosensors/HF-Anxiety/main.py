@@ -330,24 +330,24 @@ def _feature_quality_issue(
 
 
 def _risk_from_reconstruction_error(error: float, threshold: float) -> float:
-    """Map model error to a user-facing risk index using calibration anchors.
+    """Calm-relative *anomaly index* for the legacy 12-field strap packets.
 
-    The result is an index from 0 to 100, not a diagnostic probability.
-    The user's 90th-percentile calm calibration error maps to the High boundary
-    (70), while lower anchors preserve the app's Low/Moderate/Elevated tiers.
+    Reconstruction errors from rolling firmware features are not on the WESAD
+    training scale. Compare them with the same user's complete, resting
+    calibration (90th-percentile error) instead. In particular, a CALM
+    90th-percentile error must not map to the High/70 boundary: it maps to 20.
+
+    This is a monotonic research index, not an anxiety probability or a
+    clinically validated legacy-strap forecasting scale. Its use with the
+    frozen WESAD Ridge forecaster requires prospective validation.
     """
-    safe_threshold = max(float(threshold), 1e-6)
-    return float(np.interp(
-        max(float(error), 0.0),
-        [
-            0.0,
-            safe_threshold * 0.40,
-            safe_threshold * 0.70,
-            safe_threshold,
-            safe_threshold * 1.60,
-        ],
-        [0.0, 20.0, 45.0, 70.0, 100.0],
-    ))
+    raw_error = float(error)
+    calm_p90 = float(threshold)
+    if not np.isfinite(raw_error) or raw_error < 0:
+        raise ValueError("Reconstruction error must be finite and nonnegative.")
+    if not np.isfinite(calm_p90) or calm_p90 <= 0:
+        raise ValueError("A valid personal resting reconstruction threshold is required.")
+    return float(100.0 * raw_error / (raw_error + 4.0 * calm_p90))
 
 
 def _active_ae_model_for_user(user_id: str) -> LSTMAutoEncoder:
@@ -554,16 +554,6 @@ def process_and_ingest_raw_data(payload: ChestStrapFeaturesPayload):
         raise HTTPException(status_code=500, detail=f"Database write failure: {str(e)}")
 
 
-def _c1_score_from_raw_error(raw_error: float) -> float:
-    """Convert unmasked-AE reconstruction error to the deployed 0-1 C1 score."""
-    error = max(float(raw_error), 0.0)
-    return float(np.clip(
-        error / (error + FORECAST_BASELINE_P95 + 1e-12),
-        0.0,
-        1.0,
-    ))
-
-
 @app.get("/predict/{user_id}")
 def get_escalation_forecast(user_id: str):
     validate_user_id(user_id)
@@ -618,6 +608,24 @@ def get_escalation_forecast(user_id: str):
         if not np.isfinite(b_mean).all() or not np.isfinite(b_std).all():
             raise ValueError("Stored normalization parameters are incomplete or non-finite.")
         b_std = np.maximum(b_std, MINIMUM_BASELINE_STDS)
+        calm_error_p90 = norm_records[0].get("reconstruction_error_p90")
+        if (
+            calm_error_p90 is None
+            or not np.isfinite(float(calm_error_p90))
+            or float(calm_error_p90) <= 0
+        ):
+            return {
+                "status": "not_calibrated",
+                "scope": "physiological",
+                "message": (
+                    "A complete resting reconstruction-error reference is missing. "
+                    "Please complete ten-minute calibration; no firmware update is required."
+                ),
+                "forecast": [],
+                "risk_forecast": [],
+                "forecast_horizons_minutes": [5, 10],
+                "coverage": 0.0,
+            }
     except Exception as error:
         raise HTTPException(
             status_code=500,
@@ -733,7 +741,8 @@ def get_escalation_forecast(user_id: str):
                 dim=(1, 2),
             ).cpu().numpy()
             score_history = np.asarray(
-                [_c1_score_from_raw_error(value) for value in raw_errors],
+                [_risk_from_reconstruction_error(value, calm_error_p90) / 100.0
+                 for value in raw_errors],
                 dtype=np.float32,
             )
             predictions = direct_forecaster(
@@ -763,7 +772,9 @@ def get_escalation_forecast(user_id: str):
             "current_reconstruction_error": float(raw_errors[-1]),
             "c1_score_history": score_history.astype(float).tolist(),
             "confidence": None,
-            "confidence_status": "not_calibrated",
+            "confidence_status": "not_validated_for_legacy_packets",
+            "score_kind": "calm_relative_physiological_deviation",
+            "scoring_method": "personal_resting_error_p90_v1",
             "coverage": 1.0,
             "captured_at": captured_at,
             "model_version": FORECAST_AE_MODEL_VERSION,
@@ -835,12 +846,19 @@ def get_physiological_history(user_id: str, days: int = 30):
             ],
             dtype=np.float32,
         )
-        reconstruction_threshold = float(
-            norm_records[0].get(
-                "reconstruction_error_p90",
-                DEFAULT_RECONSTRUCTION_ERROR_THRESHOLD,
-            )
-        )
+        reconstruction_threshold = norm_records[0].get("reconstruction_error_p90")
+        if (
+            reconstruction_threshold is None
+            or not np.isfinite(float(reconstruction_threshold))
+            or float(reconstruction_threshold) <= 0
+        ):
+            return {
+                "status": "not_calibrated",
+                "message": "A complete ten-minute resting calibration is required.",
+                "days": days,
+                "history": [],
+            }
+        reconstruction_threshold = float(reconstruction_threshold)
         if not np.isfinite(b_mean).all() or not np.isfinite(b_std).all():
             raise ValueError("Stored normalization parameters are incomplete.")
         b_std = np.maximum(b_std, MINIMUM_BASELINE_STDS)
