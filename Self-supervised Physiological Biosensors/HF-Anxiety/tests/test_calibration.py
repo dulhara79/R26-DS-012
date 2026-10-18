@@ -32,15 +32,21 @@ OLD_MEAN = [72, 833.33, 560, 740, 14, 4, 36.1, .018, .86, .01]
 
 
 class BaselineStatisticsTests(unittest.TestCase):
-    def test_short_missing_nonfinite_and_flat_sessions_are_rejected(self):
+    def test_short_missing_and_nonfinite_sessions_are_rejected(self):
         for values in (None, [], RESTING_WINDOWS[:3], RESTING_WINDOWS[:9],
-                       np.full((10, 10), np.nan), np.tile(OLD_MEAN, (10, 1))):
+                       np.full((10, 10), np.nan)):
             with self.subTest(values_type=type(values).__name__):
                 with self.assertRaises(ValueError):
                     baseline_statistics(values)
 
     def test_original_collapsed_baseline_requires_recalibration(self):
         self.assertIsNotNone(baseline_issue(MINIMUM_BASELINE_STDS))
+
+    def test_complete_stable_minutes_use_floors_without_demanding_variation(self):
+        stable = np.tile([60, 1000, 20, 30, 15, 0, 37, 0, 0, 0], (10, 1))
+        mean, std = baseline_statistics(stable)
+        np.testing.assert_allclose(std, MINIMUM_BASELINE_STDS)
+        self.assertIsNone(baseline_issue(std, 10))
 
     def test_heart_rate_drift_during_setup_requires_a_settled_baseline(self):
         drifting = RESTING_WINDOWS.copy()
@@ -132,6 +138,14 @@ class EndpointRegressionTests(unittest.TestCase):
         result = self.prediction(norm, RESTING_WINDOWS)
         self.assertEqual(result['status'], 'not_calibrated')
         self.assertNotIn('current_risk_index', result)
+
+    def test_complete_stable_v2_minutes_do_not_generate_high_scores(self):
+        windows = np.tile([60, 1000, 20, 30, 15, 0, 37, 0, 0, 0], (10, 1))
+        mean, std = baseline_statistics(windows)
+        result = self.prediction(self.baseline_record(mean, std, baseline_window_count=10), windows)
+        self.assertEqual(result['status'], 'success')
+        self.assertLess(result['current_risk_index'], 20)
+        self.assertLess(max(result['risk_forecast']), 20)
 
     def test_legacy_calibration_is_rejected_before_write(self):
         payload = self.api.NormParamsPayload(

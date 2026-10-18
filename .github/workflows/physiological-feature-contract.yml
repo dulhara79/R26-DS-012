@@ -24,6 +24,6 @@ jobs:
         run: |
           arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
           arduino-cli core install esp32:esp32@3.3.2 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
-          arduino-cli lib install 'OneWire@2.3.8' 'DallasTemperature@3.11.0'
+          arduino-cli lib install 'OneWire@2.3.8' 'DallasTemperature@4.0.5'
       - name: Compile complete ESP32-C3 firmware
         run: arduino-cli compile --fqbn esp32:esp32:esp32c3 --output-dir build/cheststrap 'Self-supervised Physiological Biosensors/Aura-Biomonitor/ChestStrap_V3'

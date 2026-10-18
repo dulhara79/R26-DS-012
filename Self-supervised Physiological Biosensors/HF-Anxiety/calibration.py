@@ -36,12 +36,8 @@ def baseline_statistics(windows):
             "settle in the same resting position, then repeat calibration."
         )
     measured_std = values.std(axis=0)
-    if np.all(measured_std <= MINIMUM_BASELINE_STDS):
-        raise ValueError(
-            "The resting baseline has insufficient measured variation. "
-            "Check that fresh chest-strap measurements are arriving, let "
-            "the readings settle, and repeat the ten-minute calibration."
-        )
+    # Ten verified v2 minute blocks may legitimately be very steady. Floors
+    # protect division; do not demand artificial physiological variation.
     return values.mean(axis=0), np.maximum(measured_std, MINIMUM_BASELINE_STDS)
 
 
@@ -56,7 +52,7 @@ def baseline_issue(stds, window_count=None):
         return "The saved resting baseline is invalid. Please repeat calibration."
     if window_count is not None and window_count < MINIMUM_BASELINE_WINDOWS:
         return "The saved baseline is too short. Please repeat the ten-minute calibration."
-    if np.all(values <= MINIMUM_BASELINE_STDS * (1.0 + 1e-6)):
+    if window_count is None and np.all(values <= MINIMUM_BASELINE_STDS * (1.0 + 1e-6)):
         return (
             "The saved resting baseline could not measure your normal variation. "
             "Please repeat the ten-minute calibration after the readings settle."
