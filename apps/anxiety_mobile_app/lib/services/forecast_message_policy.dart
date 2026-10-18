@@ -17,18 +17,19 @@ class ForecastMessageSummary {
     this.leadMinutes,
   });
 
-  bool get isUrgent => tone == ForecastMessageTone.warning;
+  bool get isUrgent =>
+      tone == ForecastMessageTone.warning || tone == ForecastMessageTone.high;
 }
 
-/// Describes physiological anomaly magnitude and changes, never anxiety probability.
+/// Converts the rolling model trajectory into stable, participant-facing copy.
 ///
-/// A high current anomaly with a flat forecast is not a predicted escalation.
-/// Existing display bands describe score magnitude only; they are not clinical
-/// anxiety thresholds. Use explicit +5/+10 horizons for the deployed model.
+/// Small movements that stay below the model's elevated threshold are kept in
+/// the lower-range message. This prevents harmless minute-to-minute model noise
+/// from being presented as an anxiety rise while preserving real threshold
+/// crossings and high-risk forecasts.
 ForecastMessageSummary describeForecast({
   required double currentRisk,
   required List<double> forecast,
-  List<int>? forecastHorizonsMinutes,
 }) {
   final current = currentRisk.clamp(0.0, 100.0).toDouble();
   final scaledForecast = forecast
@@ -52,11 +53,7 @@ ForecastMessageSummary describeForecast({
     for (var index = 0; index < scaledForecast.length; index++) {
       final value = scaledForecast[index];
       if (value >= target && value - current >= requiredIncrease) {
-        leadMinutes =
-            forecastHorizonsMinutes != null &&
-                forecastHorizonsMinutes.length == scaledForecast.length
-            ? forecastHorizonsMinutes[index]
-            : index + 1;
+        leadMinutes = index + 1;
         break;
       }
     }
@@ -65,7 +62,7 @@ ForecastMessageSummary describeForecast({
 
   if (currentHigh) {
     return ForecastMessageSummary(
-      title: 'Your readings differ from your resting baseline',
+      title: 'Take a gentle moment to check in',
       tone: ForecastMessageTone.high,
       predictedPeak: predictedPeak,
       forecastIncrease: increase,
@@ -74,7 +71,7 @@ ForecastMessageSummary describeForecast({
 
   if (escalationPredicted) {
     return ForecastMessageSummary(
-      title: 'Your physiological deviation score may rise',
+      title: 'Aura noticed a possible change in your readings',
       tone: ForecastMessageTone.warning,
       predictedPeak: predictedPeak,
       forecastIncrease: increase,
@@ -102,7 +99,7 @@ ForecastMessageSummary describeForecast({
 
   if (currentElevated) {
     return ForecastMessageSummary(
-      title: 'Your readings differ from your resting baseline',
+      title: 'A gentle pause may feel helpful',
       tone: ForecastMessageTone.elevated,
       predictedPeak: predictedPeak,
       forecastIncrease: increase,

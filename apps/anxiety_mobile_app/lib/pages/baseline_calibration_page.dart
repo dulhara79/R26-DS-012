@@ -6,13 +6,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/api_service.dart';
 import '../services/chest_strap_service.dart';
-import '../services/model_feature_window.dart';
 import 'main_navigation_page.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Baseline Calibration Page
 //
-// Collects ten complete non-overlapping firmware minute feature windows,
+// Collects ten minutes of one-feature-packet-per-second physiological data,
 // then computes baseline statistics for the exact 10-feature server contract.
 //
 // Feature order:
@@ -33,10 +32,11 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
     with TickerProviderStateMixin {
   // ── Constants ──────────────────────────────────────────────────
   static const int _baselineMinutes = 10;
-  // Allow boundary alignment plus BLE delivery grace; collect ten full blocks.
-  static const int _totalSeconds = (_baselineMinutes + 1) * 60 + 5;
-  static const int _minimumReadings = _baselineMinutes;
-  // Floors protect the divisor when complete sensor minutes are very steady.
+  static const int _totalSeconds = _baselineMinutes * 60;
+  static const int _minimumReadingsPerMinute = 48;
+  static const int _minimumReadings =
+      _baselineMinutes * _minimumReadingsPerMinute;
+  // Floors protect the divisor; they cannot replace measured resting variation.
   static const List<double> _minimumFeatureStds = [
     1.0, // heart rate (bpm)
     15.0, // beat interval (ms)
@@ -59,9 +59,13 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
 
   Timer? _collectionTimer;
   StreamSubscription<ChestStrapReading>? _collectionSubscription;
-  CalibrationMinuteSequence? _minuteSequence;
+  int? _lastCollectedTimestamp;
   final List<ChestStrapReading> _collectedReadings = [];
   final Stopwatch _collectionClock = Stopwatch();
+  final List<List<ChestStrapReading>> _minuteReadings = List.generate(
+    _baselineMinutes,
+    (_) => <ChestStrapReading>[],
+  );
 
   // Calibrated physiological features
   double _restingHR = 70.0;
@@ -143,53 +147,29 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
       return;
     }
 
-    if (lastReading.modelWindow == null ||
-        lastReading.modelWindow!.version != 2) {
-      setState(() {
-        _errorMessage =
-            'Update the chest-strap firmware to version 1.1.0 or later. '
-            'The old live-reading format cannot be used for model calibration.';
-        _phase = _Phase.error;
-      });
-      return;
-    }
-    if (!lastReading.modelWindow!.isReady) {
-      setState(() {
-        _errorMessage =
-            'Wait for a complete valid sensor minute before setup. '
-            'Keep the strap worn and let the readings settle for at least two minutes.';
-        _phase = _Phase.error;
-      });
-      return;
-    }
-    _minuteSequence = CalibrationMinuteSequence(lastReading.timestamp);
     _collectedReadings.clear();
+    _lastCollectedTimestamp = null;
     _canRetryUpload = false;
     _collectionClock
       ..reset()
       ..start();
+    for (final minute in _minuteReadings) {
+      minute.clear();
+    }
+
+    // Collect the packets that actually arrive instead of re-adding a stale
+    // lastReading once per second when BLE has stopped delivering data.
     _collectionSubscription?.cancel();
     _collectionSubscription = ChestStrapService().readingsStream.listen((
       reading,
     ) {
-      if (_phase != _Phase.collecting) return;
-      try {
-        if (!_minuteSequence!.accept(
-          reading.modelWindow,
-          reading.timestamp,
-          reading.isWorn,
-        )) {
-          return;
-        }
-      } on StateError catch (error) {
-        _failCollection(error.message.toString());
-        return;
-      }
-      setState(() => _collectedReadings.add(reading));
-      if (_collectedReadings.length == _baselineMinutes) {
-        _collectionTimer?.cancel();
-        _finishCollection();
-      }
+      if (_phase != _Phase.collecting || !reading.isWorn) return;
+      if (_lastCollectedTimestamp == reading.timestamp) return;
+      final minute = _collectionClock.elapsedMilliseconds ~/ 60000;
+      if (minute < 0 || minute >= _baselineMinutes) return;
+      _lastCollectedTimestamp = reading.timestamp;
+      _collectedReadings.add(reading);
+      _minuteReadings[minute].add(reading);
     });
 
     setState(() {
@@ -224,21 +204,8 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
 
       if (_elapsedSeconds >= _totalSeconds) {
         timer.cancel();
-        _failCollection(
-          'Ten complete sensor minutes were not received. Check the connection and retry.',
-        );
+        _finishCollection();
       }
-    });
-  }
-
-  void _failCollection(String message) {
-    _collectionTimer?.cancel();
-    _collectionSubscription?.cancel();
-    _collectionSubscription = null;
-    _collectionClock.stop();
-    setState(() {
-      _errorMessage = message;
-      _phase = _Phase.error;
     });
   }
 
@@ -260,17 +227,75 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
     if (_collectedReadings.length < _minimumReadings) {
       setState(() {
         _errorMessage =
-            'Aura received only ${_collectedReadings.length} complete minutes. '
-            'Ten complete minutes are needed. Check the connection and try again.';
+            'Aura received only ${_collectedReadings.length} usable readings. '
+            'At least $_minimumReadings are needed. Check the connection and try again.';
         _phase = _Phase.error;
       });
       return;
     }
 
-    // Firmware already computed the exact minute moments and chronological HRV.
-    final featuresPerWindow = _collectedReadings
-        .map((reading) => List<double>.from(reading.modelWindow!.features))
-        .toList();
+    // Use elapsed minute buckets rather than stitching missing packets into
+    // shorter windows. Calibration and live ingest both summarize real minutes.
+    final List<List<double>> featuresPerWindow = [];
+
+    for (final windowReadings in _minuteReadings) {
+      if (windowReadings.length < _minimumReadingsPerMinute) {
+        setState(() {
+          _errorMessage =
+              'A minute of setup had too few fresh readings. '
+              'Keep the chest strap connected and repeat setup.';
+          _phase = _Phase.error;
+        });
+        return;
+      }
+
+      // Average the 10 features for this window
+      if (windowReadings.isNotEmpty) {
+        double meanHR =
+            windowReadings.map((r) => r.meanHR).reduce((a, b) => a + b) /
+            windowReadings.length;
+        double meanRR =
+            windowReadings.map((r) => r.meanRR).reduce((a, b) => a + b) /
+            windowReadings.length;
+        double sdnn =
+            windowReadings.map((r) => r.sdnn).reduce((a, b) => a + b) /
+            windowReadings.length;
+        double rmssd =
+            windowReadings.map((r) => r.rmssd).reduce((a, b) => a + b) /
+            windowReadings.length;
+        double meanBR =
+            windowReadings.map((r) => r.meanBR).reduce((a, b) => a + b) /
+            windowReadings.length;
+        double stdBR =
+            windowReadings.map((r) => r.stdBR).reduce((a, b) => a + b) /
+            windowReadings.length;
+        double meanTemp =
+            windowReadings.map((r) => r.meanTemp).reduce((a, b) => a + b) /
+            windowReadings.length;
+        double stdTemp =
+            windowReadings.map((r) => r.stdTemp).reduce((a, b) => a + b) /
+            windowReadings.length;
+        double meanAccMag =
+            windowReadings.map((r) => r.meanAccMag).reduce((a, b) => a + b) /
+            windowReadings.length;
+        double stdAccMag =
+            windowReadings.map((r) => r.stdAccMag).reduce((a, b) => a + b) /
+            windowReadings.length;
+
+        featuresPerWindow.add([
+          meanHR,
+          meanRR,
+          sdnn,
+          rmssd,
+          meanBR,
+          stdBR,
+          meanTemp,
+          stdTemp,
+          meanAccMag,
+          stdAccMag,
+        ]);
+      }
+    }
 
     if (featuresPerWindow.isEmpty) {
       setState(() {
@@ -301,8 +326,20 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
       }
     }
 
-    // Real complete minutes may be steady; their verified boundaries establish
-    // freshness. Stability floors protect normalization without requiring noise.
+    if (List.generate(
+      10,
+      (f) => finalStds[f] <= _minimumFeatureStds[f],
+    ).every((atFloor) => atFloor)) {
+      setState(() {
+        _errorMessage =
+            'Aura could not measure your normal variation. '
+            'Check that fresh readings are arriving, let the readings settle, '
+            'and repeat setup.';
+        _phase = _Phase.error;
+      });
+      return;
+    }
+
     setState(() {
       _canRetryUpload = true;
       _uploading = true;
@@ -313,17 +350,12 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
 
     // ── Step 3: Upload to normalization endpoint ─────────────────
     bool ok = false;
-    String? uploadError;
     try {
       ok = await ApiService.setNormalizationParams(
         userId: widget.userId,
         bMean: finalMeans,
         bStd: finalStds,
         baselineWindows: featuresPerWindow,
-        onRejected: (message, statusCode) {
-          uploadError = message;
-          if (statusCode == 400) _canRetryUpload = false;
-        },
       );
     } catch (e) {
       ok = false;
@@ -342,7 +374,6 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
       _phase = ok ? _Phase.done : _Phase.error;
       if (!ok) {
         _errorMessage =
-            uploadError ??
             'Could not save your setup. Check your internet connection and try again.';
       }
     });
@@ -556,7 +587,7 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
               onPressed: _startCalibration,
               icon: const Icon(Icons.play_circle_outline_rounded, size: 22),
               label: Text(
-                'Start 10-Minute Setup',
+                'Start 3-Minute Setup',
                 style: GoogleFonts.poppins(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -646,7 +677,7 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildCollectingView() {
-    final double progress = _collectedReadings.length / _baselineMinutes;
+    final double progress = _elapsedSeconds / _totalSeconds;
     final int remaining = _totalSeconds - _elapsedSeconds;
     final int minutes = remaining ~/ 60;
     final int seconds = remaining % 60;
@@ -801,12 +832,12 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
           _statChip(
             Icons.timeline_rounded,
             '${_collectedReadings.length}',
-            'Complete minutes',
+            'Readings',
           ),
           _vertDivider(),
           _statChip(Icons.graphic_eq_rounded, '10', 'Types'),
           _vertDivider(),
-          _statChip(Icons.speed_rounded, '1/min', 'Model windows'),
+          _statChip(Icons.speed_rounded, '1/sec', 'Speed'),
         ],
       ),
     );
@@ -976,7 +1007,7 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
                 ),
                 const SizedBox(height: 16),
                 _summaryRow('Duration', '${_totalSeconds ~/ 60} minutes'),
-                _summaryRow('Complete sensor minutes', '$totalPackets'),
+                _summaryRow('Usable readings', '$totalPackets'),
                 _summaryRow('Reading types', '10'),
                 _summaryRow(
                   'Resting heart rate',

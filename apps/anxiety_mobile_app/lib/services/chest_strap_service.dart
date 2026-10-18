@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'model_feature_window.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -20,7 +19,6 @@ class ChestStrapReading {
   final double meanAccMag;
   final double stdAccMag;
   final bool isWorn;
-  final ModelFeatureWindow? modelWindow;
 
   const ChestStrapReading({
     required this.timestamp,
@@ -35,21 +33,17 @@ class ChestStrapReading {
     required this.meanAccMag,
     required this.stdAccMag,
     required this.isWorn,
-    this.modelWindow,
   });
 
   factory ChestStrapReading.fromCsv(String csvLine) {
     final parts = csvLine.split(',');
-    if (parts.length != 12 && parts.length != 26) {
+    if (parts.length != 12) {
       throw FormatException(
-        'Invalid CSV length: expected 12 or 26, got ${parts.length}',
+        'Invalid CSV length: expected 12, got ${parts.length}',
       );
     }
     final rawIsWorn = parts[11].trim();
     return ChestStrapReading(
-      modelWindow: parts.length == 26
-          ? ModelFeatureWindow.fromCsvFields(parts)
-          : null,
       timestamp: int.parse(parts[0].trim()),
       meanHR: double.parse(parts[1].trim()),
       meanRR: double.parse(parts[2].trim()),
@@ -83,7 +77,6 @@ class ChestStrapReading {
       'meanAccMag': meanAccMag,
       'stdAccMag': stdAccMag,
       'isWorn': isWorn,
-      if (modelWindow != null) 'modelWindow': modelWindow!.toJson(),
     };
   }
 
@@ -91,11 +84,6 @@ class ChestStrapReading {
     final double meanHR = (json['meanHR'] as num).toDouble();
     final double meanTemp = (json['meanTemp'] as num).toDouble();
     return ChestStrapReading(
-      modelWindow: json['modelWindow'] is Map<String, dynamic>
-          ? ModelFeatureWindow.fromJson(
-              json['modelWindow'] as Map<String, dynamic>,
-            )
-          : null,
       timestamp: json['timestamp'] as int,
       meanHR: meanHR,
       meanRR: (json['meanRR'] as num).toDouble(),
