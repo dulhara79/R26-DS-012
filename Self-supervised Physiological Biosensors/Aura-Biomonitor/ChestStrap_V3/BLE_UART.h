@@ -33,6 +33,9 @@ private:
     BLECharacteristic* rxCharacteristic;
 
     bool deviceConnected;
+    String pendingMessage;
+    size_t pendingOffset = 0;
+    uint32_t lastNotifyMs = 0;
 
     class ServerCallbacks : public BLEServerCallbacks
     {

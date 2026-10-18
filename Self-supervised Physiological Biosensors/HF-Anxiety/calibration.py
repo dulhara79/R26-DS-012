@@ -3,6 +3,7 @@
 import numpy as np
 
 
+FEATURE_SCHEMA_VERSION = 2
 MINIMUM_BASELINE_WINDOWS = 10
 MINIMUM_BASELINE_STDS = np.array(
     [1.0, 15.0, 2.0, 2.0, 0.5, 0.10, 0.05, 0.01, 0.01, 0.005],
@@ -24,6 +25,16 @@ def baseline_statistics(windows):
         )
     if not np.isfinite(values).all():
         raise ValueError("Baseline windows must contain only finite numbers.")
+    # A steadily changing HR during setup is not a stationary resting reference.
+    # This is a calibration-quality rule, not an anxiety/medical threshold.
+    first, second = np.array_split(values[:, 0], 2)
+    within = np.sqrt((first.var() + second.var()) / 2)
+    difference = abs(first.mean() - second.mean())
+    if difference > 5.0 and difference > 2.0 * max(within, 1.0):
+        raise ValueError(
+            "Heart rate was still changing during setup. Let the readings "
+            "settle in the same resting position, then repeat calibration."
+        )
     measured_std = values.std(axis=0)
     if np.all(measured_std <= MINIMUM_BASELINE_STDS):
         raise ValueError(

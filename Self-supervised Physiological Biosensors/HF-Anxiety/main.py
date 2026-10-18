@@ -14,6 +14,7 @@ from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 from huggingface_hub import hf_hub_download
 from calibration import (
+    FEATURE_SCHEMA_VERSION,
     MINIMUM_BASELINE_STDS,
     baseline_issue,
     baseline_statistics,
@@ -134,7 +135,10 @@ query_api  = db_client.query_api()
 # Hugging Face Vault settings for permanent model weight storage
 HF_TOKEN        = os.getenv("HF_TOKEN")
 HF_WEIGHTS_REPO = os.getenv("HF_WEIGHTS_REPO", "Dewdu/physiological-anxiety-weights")
-PERSONALIZED_MODEL_PREFIX = "unmasked_v2"
+# Old personalized weights were fitted to the incompatible rolling/raw-gravity
+# feature stream. Only explicitly versioned minute-feature weights can replace
+# the unchanged population model for history.
+PERSONALIZED_MODEL_PREFIX = "unmasked_v2_minute_features_v2"
 
 device = torch.device('cpu')
 
@@ -209,6 +213,7 @@ direct_forecaster.eval()
 # -------------------------------------------------------------
 
 class ChestStrapFeaturesPayload(BaseModel):
+    feature_schema_version: int = 1
     user_id: str
     timestamp: datetime
     is_worn: bool
@@ -238,6 +243,7 @@ class NormParamsPayload(BaseModel):
     b_mean: list[float]
     b_std:  list[float]
     baseline_windows: list[list[float]] | None = None
+    feature_schema_version: int = 1
 
 
 class AnxietyFeedbackPayload(BaseModel):
@@ -296,6 +302,11 @@ def _record_norm_value(record: dict, index: int, *, std: bool) -> float | None:
 
 
 def _stored_baseline_issue(record: dict) -> str | None:
+    if record.get("feature_schema_version") != FEATURE_SCHEMA_VERSION:
+        return (
+            "This baseline uses the old feature format. Update the chest-strap "
+            "firmware and app, then complete the ten-minute resting setup."
+        )
     return baseline_issue(
         [_record_norm_value(record, i, std=True) for i in range(FEATURE_COUNT)],
         record.get("baseline_window_count"),
@@ -398,6 +409,11 @@ def store_norm_params(user_id: str, payload: NormParamsPayload):
     SX_norm_params_std.npy in the notebook pipeline.
     """
     validate_user_id(user_id)
+    if payload.feature_schema_version != FEATURE_SCHEMA_VERSION:
+        raise HTTPException(status_code=400, detail=(
+            "Update the chest-strap firmware and app. Calibration requires "
+            "complete version-2 minute features, not averaged live readings."
+        ))
 
     if len(payload.b_mean) != FEATURE_COUNT or len(payload.b_std) != FEATURE_COUNT:
         raise HTTPException(
@@ -488,6 +504,7 @@ def store_norm_params(user_id: str, payload: NormParamsPayload):
         point.field(NORM_STD_FIELDS[i], float(b_std[i]))
     point.field("reconstruction_error_p90", reconstruction_threshold)
     point.field("baseline_window_count", int(len(payload.baseline_windows)))
+    point.field("feature_schema_version", FEATURE_SCHEMA_VERSION)
 
     try:
         write_api.write(bucket=INFLUX_BUCKET, org=INFLUX_ORG, record=point)
@@ -499,6 +516,11 @@ def store_norm_params(user_id: str, payload: NormParamsPayload):
 @app.post("/ingest")
 def process_and_ingest_raw_data(payload: ChestStrapFeaturesPayload):
     validate_user_id(payload.user_id)
+    if payload.feature_schema_version != FEATURE_SCHEMA_VERSION:
+        raise HTTPException(status_code=400, detail=(
+            "Complete version-2 firmware minute features are required. "
+            "Update the chest strap and app; legacy rolling averages are incompatible."
+        ))
 
     # --- NEW GUARD: Reject if not being worn ---
     if not payload.is_worn:
@@ -544,6 +566,7 @@ def process_and_ingest_raw_data(payload: ChestStrapFeaturesPayload):
             .tag("user_id", payload.user_id)
             .time(payload.timestamp)
         )
+        point.field("feature_schema_version", FEATURE_SCHEMA_VERSION)
         for field_name, value in zip(FEATURE_NAMES, features):
             point.field(field_name, float(value))
 
@@ -573,6 +596,8 @@ def get_escalation_forecast(user_id: str):
       |> range(start: -1y)
       |> filter(fn: (r) => r["_measurement"] == "norm_params")
       |> filter(fn: (r) => r["user_id"] == "{user_id}")
+      |> map(fn: (r) => ({{r with _value: float(v: r._value)}}))
+      |> group(columns: ["user_id"])
       |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
       |> sort(columns: ["_time"], desc: true)
       |> limit(n: 1)
@@ -629,6 +654,8 @@ def get_escalation_forecast(user_id: str):
       |> range(start: -20m)
       |> filter(fn: (r) => r["_measurement"] == "physiological_metrics")
       |> filter(fn: (r) => r["user_id"] == "{user_id}")
+      |> map(fn: (r) => ({{r with _value: float(v: r._value)}}))
+      |> group(columns: ["user_id"])
       |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
       |> sort(columns: ["_time"])
     '''
@@ -637,6 +664,8 @@ def get_escalation_forecast(user_id: str):
         valid_records = []
         for table in query_api.query(query):
             for record in table.records:
+                if record.values.get("feature_schema_version") != FEATURE_SCHEMA_VERSION:
+                    continue
                 row = [
                     _record_feature(record.values, i)
                     for i in range(FEATURE_COUNT)
@@ -747,7 +776,12 @@ def get_escalation_forecast(user_id: str):
 
         return {
             "status": "success",
-            "message": "Physiological C1 forecast ready.",
+            "message": "Physiological deviation forecast ready.",
+            "score_kind": "physiological_anomaly",
+            "score_unit": "fraction_0_1",
+            "display_index_unit": "index_0_100",
+            "feature_schema_version": FEATURE_SCHEMA_VERSION,
+            "score_note": "Deviation from the resting baseline; not an anxiety probability.",
             "scope": "physiological",
             "horizon_minutes": 10,
             "score": current_score,
@@ -791,6 +825,8 @@ def get_physiological_history(user_id: str, days: int = 30):
       |> range(start: -1y)
       |> filter(fn: (r) => r["_measurement"] == "norm_params")
       |> filter(fn: (r) => r["user_id"] == "{user_id}")
+      |> map(fn: (r) => ({{r with _value: float(v: r._value)}}))
+      |> group(columns: ["user_id"])
       |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
       |> sort(columns: ["_time"], desc: true)
       |> limit(n: 1)
@@ -800,6 +836,8 @@ def get_physiological_history(user_id: str, days: int = 30):
       |> range(start: -{days}d)
       |> filter(fn: (r) => r["_measurement"] == "physiological_metrics")
       |> filter(fn: (r) => r["user_id"] == "{user_id}")
+      |> map(fn: (r) => ({{r with _value: float(v: r._value)}}))
+      |> group(columns: ["user_id"])
       |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
       |> sort(columns: ["_time"])
     '''
@@ -850,6 +888,8 @@ def get_physiological_history(user_id: str, days: int = 30):
         daily_rows: dict[str, list[list[float]]] = defaultdict(list)
         for table in tables:
             for record in table.records:
+                if record.values.get("feature_schema_version") != FEATURE_SCHEMA_VERSION:
+                    continue
                 row = [
                     _record_feature(record.values, i)
                     for i in range(FEATURE_COUNT)
