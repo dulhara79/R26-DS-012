@@ -4,6 +4,9 @@ import numpy as np
 
 
 MINIMUM_BASELINE_WINDOWS = 10
+# Temperature is retained in the saved ten-field baseline but is not a
+# requirement for calibration variation or a model-scoring feature.
+NON_TEMPERATURE_INDICES = (0, 1, 2, 3, 4, 5, 8, 9)
 MINIMUM_BASELINE_STDS = np.array(
     [1.0, 15.0, 2.0, 2.0, 0.5, 0.10, 0.05, 0.01, 0.01, 0.005],
     dtype=np.float32,
@@ -25,7 +28,8 @@ def baseline_statistics(windows):
     if not np.isfinite(values).all():
         raise ValueError("Baseline windows must contain only finite numbers.")
     measured_std = values.std(axis=0)
-    if np.all(measured_std <= MINIMUM_BASELINE_STDS):
+    active = list(NON_TEMPERATURE_INDICES)
+    if np.all(measured_std[active] <= MINIMUM_BASELINE_STDS[active]):
         raise ValueError(
             "The resting baseline has insufficient measured variation. "
             "Check that fresh chest-strap measurements are arriving, let "
@@ -45,7 +49,10 @@ def baseline_issue(stds, window_count=None):
         return "The saved resting baseline is invalid. Please repeat calibration."
     if window_count is not None and window_count < MINIMUM_BASELINE_WINDOWS:
         return "The saved baseline is too short. Please repeat the ten-minute calibration."
-    if np.all(values <= MINIMUM_BASELINE_STDS * (1.0 + 1e-6)):
+    active = list(NON_TEMPERATURE_INDICES)
+    if np.all(
+        values[active] <= MINIMUM_BASELINE_STDS[active] * (1.0 + 1e-6)
+    ):
         return (
             "The saved resting baseline could not measure your normal variation. "
             "Please repeat the ten-minute calibration after the readings settle."

@@ -39,6 +39,13 @@ class BaselineStatisticsTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     baseline_statistics(values)
 
+    def test_temperature_only_variation_cannot_qualify_a_flat_baseline(self):
+        flat = np.tile(OLD_MEAN, (10, 1)).astype(np.float32)
+        flat[:, 6] = np.linspace(34.0, 39.0, 10)
+        flat[:, 7] = np.linspace(0.01, 0.5, 10)
+        with self.assertRaises(ValueError):
+            baseline_statistics(flat)
+
     def test_original_collapsed_baseline_requires_recalibration(self):
         self.assertIsNotNone(baseline_issue(MINIMUM_BASELINE_STDS))
 
@@ -132,7 +139,61 @@ class EndpointRegressionTests(unittest.TestCase):
         self.assertAlmostEqual(point._fields['sdnn_baseline_std'], std[2])
         self.assertAlmostEqual(point._fields['mean_hr_baseline_mean'], mean[0])
         self.assertEqual(point._fields['baseline_window_count'], 10)
+        self.assertEqual(
+            point._fields['scoring_input_version'],
+            self.api.SCORING_INPUT_VERSION,
+        )
         self.assertEqual(forward.call_count, 6)  # ten minutes -> six full five-minute sequences
+
+    def test_temperature_perturbations_cannot_change_model_inputs_or_error(self):
+        original = RESTING_WINDOWS[:5].copy()
+        hotter = original.copy()
+        hotter[:, 6] += 5.0
+        hotter[:, 7] += 0.7
+        mean, std = baseline_statistics(RESTING_WINDOWS)
+        input_a = self.api._temperature_free_model_input((original - mean) / std)
+        input_b = self.api._temperature_free_model_input((hotter - mean) / std)
+        np.testing.assert_array_equal(input_a, input_b)
+        observed = self.api.torch.tensor(input_a, dtype=self.api.torch.float32).unsqueeze(0)
+        reconstructed = self.api.forecast_ae_model(observed)
+        error_a = self.api._temperature_free_reconstruction_error(observed, reconstructed)
+        error_b = self.api._temperature_free_reconstruction_error(
+            self.api.torch.tensor(input_b, dtype=self.api.torch.float32).unsqueeze(0),
+            reconstructed,
+        )
+        self.assertAlmostEqual(error_a.item(), error_b.item())
+
+    def test_temperature_changes_do_not_change_current_or_future_scores(self):
+        mean, std = baseline_statistics(RESTING_WINDOWS)
+        norm = self.baseline_record(
+            mean, std,
+            baseline_window_count=10,
+            reconstruction_error_p90=0.5,
+            scoring_input_version=self.api.SCORING_INPUT_VERSION,
+        )
+        reference = self.prediction(norm, RESTING_WINDOWS)
+        hotter = RESTING_WINDOWS.copy()
+        hotter[:, 6] += 5.0
+        hotter[:, 7] += 0.7
+        changed = self.prediction(norm, hotter)
+        self.assertEqual(reference['status'], 'success')
+        self.assertAlmostEqual(
+            reference['current_risk_index'], changed['current_risk_index'],
+        )
+        np.testing.assert_allclose(reference['risk_forecast'], changed['risk_forecast'])
+        self.assertAlmostEqual(
+            reference['current_reconstruction_error'],
+            changed['current_reconstruction_error'],
+        )
+
+    def test_old_baseline_requires_new_scoring_reference_without_deleting_user(self):
+        mean, std = baseline_statistics(RESTING_WINDOWS)
+        norm = self.baseline_record(
+            mean, std, baseline_window_count=10, reconstruction_error_p90=0.5
+        )
+        self.api.query_api.query.return_value = self.table([norm])
+        response = self.api.get_escalation_forecast('regression_participant')
+        self.assertEqual(response['status'], 'not_calibrated')
 
     def test_short_calibration_is_rejected_before_any_database_write(self):
         payload = self.api.NormParamsPayload(
@@ -156,7 +217,11 @@ class EndpointRegressionTests(unittest.TestCase):
 
     def test_recalibrated_resting_replay_and_escalation_remain_distinguishable(self):
         mean, std = baseline_statistics(RESTING_WINDOWS)
-        norm = self.baseline_record(mean, std, baseline_window_count=10)
+        norm = self.baseline_record(
+            mean, std, baseline_window_count=10,
+            reconstruction_error_p90=0.5,
+            scoring_input_version=self.api.SCORING_INPUT_VERSION,
+        )
         resting = self.prediction(norm, RESTING_WINDOWS)
         self.assertEqual(resting['status'], 'success')
         self.assertLess(resting['current_risk_index'], 70)

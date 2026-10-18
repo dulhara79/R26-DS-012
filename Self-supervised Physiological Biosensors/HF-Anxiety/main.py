@@ -89,6 +89,11 @@ app = FastAPI(title="Physiological Escalation API")
 APP_DIR = Path(__file__).resolve().parent
 MODEL_DIR = APP_DIR / "models"
 FEATURE_COUNT = 10
+# Keep the ten-field BLE/API/database contract: temperature is still recorded.
+# Only these eight columns may affect model inputs or reconstruction scores.
+SCORING_INPUT_VERSION = "temperature_excluded_v1"
+TEMPERATURE_FEATURE_INDICES = (6, 7)  # mean_temp, std_temp
+PREDICTION_FEATURE_INDICES = (0, 1, 2, 3, 4, 5, 8, 9)
 FEATURE_NAMES = (
     "mean_hr",
     "mean_rr",
@@ -278,6 +283,24 @@ def validate_user_id(user_id: str) -> None:
         )
 
 
+def _temperature_free_model_input(normalized: np.ndarray) -> np.ndarray:
+    """Prevent both temperature columns from influencing any AE input."""
+    masked = np.array(normalized, dtype=np.float32, copy=True)
+    masked[..., list(TEMPERATURE_FEATURE_INDICES)] = 0.0
+    return masked
+
+
+def _temperature_free_reconstruction_error(
+    observed: torch.Tensor, reconstructed: torch.Tensor
+) -> torch.Tensor:
+    """Compute per-window mean squared error over the 8 non-temp features."""
+    active = list(PREDICTION_FEATURE_INDICES)
+    return torch.mean(
+        (observed[..., active] - reconstructed[..., active]) ** 2,
+        dim=(-2, -1),
+    )
+
+
 def _record_feature(record: dict, index: int) -> float | None:
     """Read the descriptive field name, falling back to legacy f_0..f_9."""
     value = record.get(FEATURE_NAMES[index])
@@ -296,6 +319,12 @@ def _record_norm_value(record: dict, index: int, *, std: bool) -> float | None:
 
 
 def _stored_baseline_issue(record: dict) -> str | None:
+    if record.get("scoring_input_version") != SCORING_INPUT_VERSION:
+        return (
+            "Please repeat the ten-minute resting calibration on your existing "
+            "account. The previous baseline included temperature in its model "
+            "error reference; temperature is now excluded from scoring."
+        )
     return baseline_issue(
         [_record_norm_value(record, i, std=True) for i in range(FEATURE_COUNT)],
         record.get("baseline_window_count"),
@@ -314,11 +343,15 @@ def _feature_quality_issue(
     if not np.isfinite(values).all():
         return "contains NaN or infinite values"
 
-    for name, value, (minimum, maximum) in zip(
+    for index, (name, value, (minimum, maximum)) in enumerate(zip(
         FEATURE_NAMES,
         values,
         FEATURE_LIMITS,
-    ):
+    )):
+        # Record temperature, but do not let temperature bounds suppress an
+        # otherwise valid model-input window.
+        if index in TEMPERATURE_FEATURE_INDICES:
+            continue
         if value < minimum or value > maximum:
             return f"{name}={value:g} is outside [{minimum:g}, {maximum:g}]"
 
@@ -462,7 +495,9 @@ def store_norm_params(user_id: str, payload: NormParamsPayload):
                     ),
                 )
 
-        normalized_baseline = (baseline_windows - b_mean) / b_std
+        normalized_baseline = _temperature_free_model_input(
+            (baseline_windows - b_mean) / b_std
+        )
         # Estimate calm reconstruction error from complete, real five-minute
         # sequences. Zero padding understates error during a short calibration.
         baseline_errors = []
@@ -474,7 +509,9 @@ def store_norm_params(user_id: str, payload: NormParamsPayload):
                 ).unsqueeze(0)
                 reconstructed = global_ae_model(window)
                 baseline_errors.append(
-                    torch.mean((window - reconstructed) ** 2).item()
+                    _temperature_free_reconstruction_error(
+                        window, reconstructed
+                    ).item()
                 )
         if baseline_errors:
             reconstruction_threshold = max(
@@ -487,6 +524,7 @@ def store_norm_params(user_id: str, payload: NormParamsPayload):
         point.field(NORM_MEAN_FIELDS[i], float(b_mean[i]))
         point.field(NORM_STD_FIELDS[i], float(b_std[i]))
     point.field("reconstruction_error_p90", reconstruction_threshold)
+    point.field("scoring_input_version", SCORING_INPUT_VERSION)
     point.field("baseline_window_count", int(len(payload.baseline_windows)))
 
     try:
@@ -727,7 +765,9 @@ def get_escalation_forecast(user_id: str):
             [row for _, row in contiguous_records],
             dtype=np.float32,
         )
-        normalized_sequence = (raw_sequence - b_mean) / b_std
+        normalized_sequence = _temperature_free_model_input(
+            (raw_sequence - b_mean) / b_std
+        )
         if not np.isfinite(normalized_sequence).all():
             raise ValueError("Normalized forecast input contains non-finite values.")
 
@@ -736,9 +776,8 @@ def get_escalation_forecast(user_id: str):
 
         with torch.no_grad():
             reconstructions = forecast_ae_model(block_tensor)
-            raw_errors = torch.mean(
-                (block_tensor - reconstructions) ** 2,
-                dim=(1, 2),
+            raw_errors = _temperature_free_reconstruction_error(
+                block_tensor, reconstructions
             ).cpu().numpy()
             # The frozen Ridge model MUST see the original WESAD score scale.
             # Personalizing its input scores would silently break that contract.
@@ -791,6 +830,8 @@ def get_escalation_forecast(user_id: str):
             "confidence_status": "not_validated_for_legacy_packets",
             "score_kind": "calm_relative_physiological_deviation",
             "scoring_method": "personal_resting_error_p90_v1",
+            "scoring_input_version": SCORING_INPUT_VERSION,
+            "temperature_excluded_from_scoring": True,
             "coverage": 1.0,
             "captured_at": captured_at,
             "model_version": FORECAST_AE_MODEL_VERSION,
@@ -910,7 +951,9 @@ def get_physiological_history(user_id: str, days: int = 30):
                 or observed_at < previous_time
             ):
                 recent_normalized_rows = []
-            normalized = (values - b_mean) / b_std
+            normalized = _temperature_free_model_input(
+                (values - b_mean) / b_std
+            )
             recent_normalized_rows.append(normalized)
             recent_normalized_rows = recent_normalized_rows[
                 -global_ae_model.T:
@@ -941,9 +984,8 @@ def get_physiological_history(user_id: str, days: int = 30):
                 )
                 batch = torch.tensor(batch_windows, dtype=torch.float32)
                 reconstructed = active_ae_model(batch)
-                errors = torch.mean(
-                    (batch - reconstructed) ** 2,
-                    dim=(1, 2),
+                errors = _temperature_free_reconstruction_error(
+                    batch, reconstructed
                 ).cpu().numpy()
                 for day, error in zip(
                     model_days[start : start + len(errors)],
