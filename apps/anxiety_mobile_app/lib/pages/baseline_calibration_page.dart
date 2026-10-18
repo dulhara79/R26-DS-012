@@ -326,10 +326,12 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
       }
     }
 
-    if (List.generate(
-      10,
+    // Temperature is recorded, but its variation must not make an otherwise
+    // flat baseline appear usable for physiological scoring.
+    const activeScoringFeatures = [0, 1, 2, 3, 4, 5, 8, 9];
+    if (activeScoringFeatures.every(
       (f) => finalStds[f] <= _minimumFeatureStds[f],
-    ).every((atFloor) => atFloor)) {
+    )) {
       setState(() {
         _errorMessage =
             'Aura could not measure your normal variation. '

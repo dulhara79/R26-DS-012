@@ -120,14 +120,6 @@ class ChestStrapReading {
       brScore = (meanBR - 16) / (20 - 16) * 40.0;
     }
 
-    double tempScore = 0.0;
-    double tempDeviation = (meanTemp - 36.75).abs();
-    if (tempDeviation > 0.6) {
-      tempScore = 100.0;
-    } else if (tempDeviation > 0.3) {
-      tempScore = (tempDeviation - 0.3) / (0.6 - 0.3) * 50.0 + 50.0;
-    }
-
     double hrvScore = 0.0;
     if (rmssd >= 40) {
       hrvScore = 0.0;
@@ -138,11 +130,14 @@ class ChestStrapReading {
       if (hrvScore > 100.0) hrvScore = 100.0;
     }
 
+    // Temperature remains available in the live readings, but must never
+    // influence any locally calculated physiological risk score.
+    // Renormalize the remaining original weights (0.35 + 0.25 + 0.25 = 0.85).
     double total =
-        (hrScore * 0.35) +
-        (brScore * 0.25) +
-        (tempScore * 0.15) +
-        (hrvScore * 0.25);
+        ((hrScore * 0.35) +
+            (brScore * 0.25) +
+            (hrvScore * 0.25)) /
+        0.85;
     return total.clamp(0.0, 100.0);
   }
 
