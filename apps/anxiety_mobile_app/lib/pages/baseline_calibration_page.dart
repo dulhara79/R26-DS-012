@@ -11,7 +11,7 @@ import 'main_navigation_page.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 // Baseline Calibration Page
 //
-// Collects three minutes of one-feature-packet-per-second physiological data,
+// Collects ten minutes of one-feature-packet-per-second physiological data,
 // then computes baseline statistics for the exact 10-feature server contract.
 //
 // Feature order:
@@ -31,11 +31,12 @@ class BaselineCalibrationPage extends StatefulWidget {
 class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
     with TickerProviderStateMixin {
   // ── Constants ──────────────────────────────────────────────────
-  static const int _totalSeconds = 180; // 3 minutes of resting data
-  static const int _minimumReadings = 120;
-  // Three one-minute averages can otherwise produce near-zero variation. A
-  // tiny divisor turns ordinary calm movement into an extreme model input.
-  // These floors are deliberately small relative to real stress changes.
+  static const int _baselineMinutes = 10;
+  static const int _totalSeconds = _baselineMinutes * 60;
+  static const int _minimumReadingsPerMinute = 48;
+  static const int _minimumReadings =
+      _baselineMinutes * _minimumReadingsPerMinute;
+  // Floors protect the divisor; they cannot replace measured resting variation.
   static const List<double> _minimumFeatureStds = [
     1.0, // heart rate (bpm)
     15.0, // beat interval (ms)
@@ -53,12 +54,18 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
   _Phase _phase = _Phase.instructions;
   int _elapsedSeconds = 0;
   bool _uploading = false;
+  bool _canRetryUpload = false;
   String? _errorMessage;
 
   Timer? _collectionTimer;
   StreamSubscription<ChestStrapReading>? _collectionSubscription;
   int? _lastCollectedTimestamp;
   final List<ChestStrapReading> _collectedReadings = [];
+  final Stopwatch _collectionClock = Stopwatch();
+  final List<List<ChestStrapReading>> _minuteReadings = List.generate(
+    _baselineMinutes,
+    (_) => <ChestStrapReading>[],
+  );
 
   // Calibrated physiological features
   double _restingHR = 70.0;
@@ -108,6 +115,7 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
   @override
   void dispose() {
     _collectionTimer?.cancel();
+    _collectionClock.stop();
     _collectionSubscription?.cancel();
     _pulseController.dispose();
     _waveController.dispose();
@@ -141,6 +149,13 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
 
     _collectedReadings.clear();
     _lastCollectedTimestamp = null;
+    _canRetryUpload = false;
+    _collectionClock
+      ..reset()
+      ..start();
+    for (final minute in _minuteReadings) {
+      minute.clear();
+    }
 
     // Collect the packets that actually arrive instead of re-adding a stale
     // lastReading once per second when BLE has stopped delivering data.
@@ -150,8 +165,11 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
     ) {
       if (_phase != _Phase.collecting || !reading.isWorn) return;
       if (_lastCollectedTimestamp == reading.timestamp) return;
+      final minute = _collectionClock.elapsedMilliseconds ~/ 60000;
+      if (minute < 0 || minute >= _baselineMinutes) return;
       _lastCollectedTimestamp = reading.timestamp;
       _collectedReadings.add(reading);
+      _minuteReadings[minute].add(reading);
     });
 
     setState(() {
@@ -177,7 +195,12 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
         return;
       }
 
-      setState(() => _elapsedSeconds++);
+      setState(() {
+        _elapsedSeconds = min(
+          _collectionClock.elapsed.inSeconds,
+          _totalSeconds,
+        );
+      });
 
       if (_elapsedSeconds >= _totalSeconds) {
         timer.cancel();
@@ -187,6 +210,7 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
   }
 
   void _finishCollection() {
+    _collectionClock.stop();
     _collectionSubscription?.cancel();
     _collectionSubscription = null;
     setState(() => _phase = _Phase.calculating);
@@ -199,6 +223,7 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
   // ═══════════════════════════════════════════════════════════════
 
   Future<void> _computeAndUpload() async {
+    _canRetryUpload = false;
     if (_collectedReadings.length < _minimumReadings) {
       setState(() {
         _errorMessage =
@@ -209,20 +234,20 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
       return;
     }
 
-    // We have up to 180 readings. Let's slice into 3 windows of up to 60 readings.
-    final int windowLength = 60;
+    // Use elapsed minute buckets rather than stitching missing packets into
+    // shorter windows. Calibration and live ingest both summarize real minutes.
     final List<List<double>> featuresPerWindow = [];
 
-    for (int w = 0; w < 3; w++) {
-      final int start = w * windowLength;
-      final int end = start + windowLength;
-
-      if (start >= _collectedReadings.length) break;
-
-      final windowReadings = _collectedReadings.sublist(
-        start,
-        end > _collectedReadings.length ? _collectedReadings.length : end,
-      );
+    for (final windowReadings in _minuteReadings) {
+      if (windowReadings.length < _minimumReadingsPerMinute) {
+        setState(() {
+          _errorMessage =
+              'A minute of setup had too few fresh readings. '
+              'Keep the chest strap connected and repeat setup.';
+          _phase = _Phase.error;
+        });
+        return;
+      }
 
       // Average the 10 features for this window
       if (windowReadings.isNotEmpty) {
@@ -274,14 +299,14 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
 
     if (featuresPerWindow.isEmpty) {
       setState(() {
-        _errorMessage = 'Aura did not receive enough readings. Please try again.';
+        _errorMessage =
+            'Aura did not receive enough readings. Please try again.';
         _phase = _Phase.error;
       });
       return;
     }
 
-    // We now have N windows (e.g. 3) of 10 features each.
-    // Let's compute mean and std dev across these windows for each of the 10 features.
+    // Estimate variation across ten real minute summaries, matching live ingest.
     final List<double> finalMeans = List.filled(10, 0.0);
     final List<double> finalStds = List.filled(10, 0.0);
 
@@ -301,7 +326,22 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
       }
     }
 
+    if (List.generate(
+      10,
+      (f) => finalStds[f] <= _minimumFeatureStds[f],
+    ).every((atFloor) => atFloor)) {
+      setState(() {
+        _errorMessage =
+            'Aura could not measure your normal variation. '
+            'Check that fresh readings are arriving, let the readings settle, '
+            'and repeat setup.';
+        _phase = _Phase.error;
+      });
+      return;
+    }
+
     setState(() {
+      _canRetryUpload = true;
       _uploading = true;
       _restingHR = finalMeans[0];
       _restingBR = finalMeans[4];
@@ -481,7 +521,7 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
           _StepCard(
             number: '2',
             icon: Icons.timer_outlined,
-            title: 'Wait 3 minutes',
+            title: 'Wait $_baselineMinutes minutes',
             description:
                 'Aura will learn what your readings look like while you are calm.',
           ),
@@ -518,7 +558,8 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'IMPORTANT: Start only when you feel calm and relaxed. '
+                    'IMPORTANT: Let the chest-strap readings settle before starting. '
+                    'Start only when you feel calm and relaxed. '
                     'If you feel stressed or have been active, skip this for now and return later. '
                     'Starting while stressed can make future results less accurate.',
                     style: GoogleFonts.poppins(
@@ -1094,7 +1135,7 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: _collectedReadings.length >= _minimumReadings
+              onPressed: _canRetryUpload
                   ? _computeAndUpload
                   : () {
                       setState(() {
@@ -1104,9 +1145,7 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
                     },
               icon: const Icon(Icons.refresh_rounded),
               label: Text(
-                _collectedReadings.length >= _minimumReadings
-                    ? 'Try Saving Again'
-                    : 'Back to Setup',
+                _canRetryUpload ? 'Try Saving Again' : 'Back to Setup',
                 style: GoogleFonts.poppins(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
