@@ -96,28 +96,29 @@ private:
 
     struct HighPass {
         // scipy.signal.butter(4, .5, 'high', fs=100, output='sos').
-        // Streaming SOS avoids buffering/blocking ECG acquisition on ESP32-C3.
-        // It has causal phase; the training notebook uses offline filtfilt.
-        // Keep this distinction explicit rather than claiming exact parity.
-        float delay[2][2] = {};
-        float origin = 0;
+        // Apply TWO forward passes: training filtfilt applies this filter twice.
+        // This matches its steady-state magnitude response without buffering or
+        // blocking ECG acquisition. Phase and window-edge behavior remain causal
+        // and are not claimed to be bit-identical to offline filtfilt.
+        double delay[4][2] = {};
+        double origin = 0;
         bool initialized = false;
         float apply(float value) {
             if (!initialized) { origin = value; initialized = true; }
-            float sample = value - origin; // seed DC gravity at steady state
-            const float sos[2][5] = {
-                {0.959782230087f, -1.91956446017f, 0.959782230087f,
-                 -1.94263823054f, 0.94359727847f},
-                {1.0f, -2.0f, 1.0f, -1.97526963485f, 0.976244792359f}
+            double sample = double(value) - origin; // seed DC gravity at steady state
+            const double sos[2][5] = {
+                {0.959782230087, -1.91956446017, 0.959782230087,
+                 -1.94263823054, 0.94359727847},
+                {1.0, -2.0, 1.0, -1.97526963485, 0.976244792359}
             };
-            for (int section = 0; section < 2; ++section) {
-                const float *s = sos[section];
-                float output = s[0] * sample + delay[section][0];
+            for (int section = 0; section < 4; ++section) {
+                const double *s = sos[section % 2];
+                double output = s[0] * sample + delay[section][0];
                 delay[section][0] = s[1] * sample - s[3] * output + delay[section][1];
                 delay[section][1] = s[2] * sample - s[4] * output;
                 sample = output;
             }
-            return sample;
+            return float(sample);
         }
     };
 

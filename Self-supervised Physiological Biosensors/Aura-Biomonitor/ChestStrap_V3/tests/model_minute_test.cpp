@@ -1,15 +1,16 @@
 #include "../ModelMinuteFeatures.h"
 #include <cassert>
 #include <cstdio>
+#include <cstdlib>
 
 static ModelMinuteFeatures simulate(bool motion, bool temperature = true,
-                                    bool beats = true, bool breaths = true) {
+                                    bool beats = true, bool breaths = true, float frequency = 1.0f) {
     ModelMinuteFeatures model;
     for (uint32_t time = 0; time <= 120000; time += 10) {
         model.advance(time, true);
         if (time == 120000) break;
         const float seconds = time / 1000.0f;
-        model.addAcceleration(motion ? .03f * std::sin(6.283185307f * seconds) : 0,
+        model.addAcceleration(motion ? .03f * std::sin(6.283185307f * frequency * seconds) : 0,
                               0, .9f);
         if (time % 1000 == 0) {
             if (temperature) model.addTemperature(37 + .1f * std::sin(seconds));
@@ -20,7 +21,12 @@ static ModelMinuteFeatures simulate(bool motion, bool temperature = true,
     return model;
 }
 
-int main() {
+int main(int argc, char **argv) {
+    if (argc == 2) {
+        auto block = simulate(true, true, true, true, float(std::atof(argv[1]))).latest();
+        std::printf("%.9g %.9g\n", block.values[8], block.values[9]);
+        return 0;
+    }
     auto stationary = simulate(false);
     auto block = stationary.latest();
     assert(block.status == ModelMinuteFeatures::READY);
@@ -38,6 +44,12 @@ int main() {
     assert(block.status == ModelMinuteFeatures::READY);
     assert(block.values[8] > .018f && block.values[8] < .020f);
     assert(block.values[9] > .008f && block.values[9] < .011f);
+    // At the 0.5 Hz cutoff, offline filtfilt has gain 0.5 (two passes),
+    // not sqrt(0.5). Check RMS from the full-minute moments, independent of phase.
+    auto cutoff = simulate(true, true, true, true, .5f).latest();
+    float rms = std::sqrt(cutoff.values[8] * cutoff.values[8] +
+                         cutoff.values[9] * cutoff.values[9] * 5999.0f / 6000.0f);
+    assert(std::abs(rms - .03f * .5f / std::sqrt(2.0f)) < 1e-6f);
     // Output permits an independent comparison with SciPy's reference filter.
     std::printf("%.9g %.9g\n", block.values[8], block.values[9]);
 

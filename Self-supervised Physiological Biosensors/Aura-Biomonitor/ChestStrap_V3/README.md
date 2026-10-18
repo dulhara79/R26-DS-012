@@ -27,9 +27,10 @@ Model features use chronological RR intervals (at least 30 per minute), sample
 SDNN, successive-difference RMSSD, and full-minute temperature and breathing-rate
 statistics. Breathing rate is sampled at 1 Hz from the most recent valid breath;
 it expires after 15 seconds without another detected breath. Acceleration is
-filtered on each axis before magnitude using a fourth-order 0.5 Hz Butterworth
-high-pass at 100 Hz. The streaming filter is causal; the offline notebook uses
-`filtfilt`. Therefore this corrects the gravity/definition mismatch but does not
+filtered on each axis before magnitude using two fourth-order 0.5 Hz Butterworth
+high-pass passes at 100 Hz. Two causal passes match the steady-state magnitude
+response of the notebook's forward/backward `filtfilt`; phase and window edges
+still differ. Therefore this corrects the gravity/definition mismatch but does not
 claim bit-identical preprocessing or validated anxiety prediction on hardware.
 New recordings must be checked after flashing. The model output remains a
 physiological anomaly index, not an anxiety probability. Model weights and score
