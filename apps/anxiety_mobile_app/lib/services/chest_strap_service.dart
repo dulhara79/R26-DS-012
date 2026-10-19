@@ -51,8 +51,8 @@ class ChestStrapReading {
       rmssd: double.parse(parts[4].trim()),
       meanBR: double.parse(parts[5].trim()),
       stdBR: double.parse(parts[6].trim()),
-      // Use the actual chest-strap temperature, adjusted down by 4 °C.
-      meanTemp: double.parse(parts[7].trim()) - 4.0,
+      // Use the actual chest-strap temperature, adjusted down by 2 °C.
+      meanTemp: double.parse(parts[7].trim()) - 2.0,
       stdTemp: double.parse(parts[8].trim()),
       meanAccMag: double.parse(parts[9].trim()),
       stdAccMag: double.parse(parts[10].trim()),

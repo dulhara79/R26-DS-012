@@ -21,7 +21,12 @@ import 'main_navigation_page.dart';
 
 class BaselineCalibrationPage extends StatefulWidget {
   final String userId;
-  const BaselineCalibrationPage({super.key, required this.userId});
+  final bool returnToReadings;
+  const BaselineCalibrationPage({
+    super.key,
+    required this.userId,
+    this.returnToReadings = false,
+  });
 
   @override
   State<BaselineCalibrationPage> createState() =>
@@ -386,6 +391,10 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
   // ═══════════════════════════════════════════════════════════════
 
   void _proceed() {
+    if (widget.returnToReadings) {
+      Navigator.pop(context);
+      return;
+    }
     Navigator.pushReplacement(
       context,
       PageRouteBuilder(
@@ -401,6 +410,10 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
   /// Skip the setup screen for now. Forecasting remains unavailable until
   /// normalization parameters are supplied by a later calibration.
   void _skip() async {
+    if (widget.returnToReadings) {
+      Navigator.pop(context);
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('calibration_complete', true);
     if (mounted) _proceed();
@@ -589,7 +602,7 @@ class _BaselineCalibrationPageState extends State<BaselineCalibrationPage>
               onPressed: _startCalibration,
               icon: const Icon(Icons.play_circle_outline_rounded, size: 22),
               label: Text(
-                'Start 3-Minute Setup',
+                'Start 10-Minute Setup',
                 style: GoogleFonts.poppins(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,

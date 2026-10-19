@@ -941,6 +941,25 @@ class _DashboardPageState extends State<DashboardPage>
 
         const SizedBox(height: 18),
         _buildAdditionalPhysiologicalFeatures(isWorn),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: _cachedId.isEmpty
+              ? null
+              : () async {
+                  await Navigator.push<void>(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => BaselineCalibrationPage(
+                        userId: _cachedId,
+                        returnToReadings: true,
+                      ),
+                    ),
+                  );
+                  if (mounted) await _fetchForecast();
+                },
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('Recalibrate Baseline'),
+        ),
         const SizedBox(height: 24),
         _buildChartsSection(),
         const SizedBox(height: 20),
@@ -1109,7 +1128,7 @@ class _DashboardPageState extends State<DashboardPage>
                 ),
                 icon: const Icon(Icons.play_arrow_rounded, size: 22),
                 label: Text(
-                  'Start 3-Minute Setup',
+                  'Start 10-Minute Setup',
                   style: GoogleFonts.poppins(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
