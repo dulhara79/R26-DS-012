@@ -42,7 +42,7 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>ClinAnx uses the camera to scan a patient's Aura ID QR code.</string>
+	<string>ClinAnx uses the camera to scan patient-issued clinician invitation QR codes.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
