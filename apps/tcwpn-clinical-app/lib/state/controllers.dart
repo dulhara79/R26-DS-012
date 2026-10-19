@@ -147,6 +147,8 @@ class RosterController extends ChangeNotifier {
   }
 
   // ── Alerts ────────────────────────────────────────────────────────────────
+  // Legacy local alert records remain readable until P4 migration, but no new
+  // authoritative risk escalation event is generated from fusion on-device.
 
   Future<void> raiseAlert(ClinicalAlert a) async {
     _alerts = [a, ..._alerts];
@@ -303,14 +305,6 @@ class ChartController extends ChangeNotifier {
   // ── Enrolment ─────────────────────────────────────────────────────────────
 
   /// Ensures this patient exists on the backend and returns their subject_id.
-  ///
-  /// Three paths, in order of preference:
-  ///   1. already stored locally — no network call;
-  ///   2. known to the backend under this MRN — resolve and store;
-  ///   3. unknown — enrol, store, and hold the pairing code for display.
-  ///
-  /// Enrolling an MRN the backend already knows is safe: it returns the existing
-  /// subject with a fresh pairing code rather than creating a second patient.
   Future<String> ensureEnrolled({String? clinicianId}) async {
     if (isEnrolled) return _subjectId!;
 
@@ -323,20 +317,17 @@ class ChartController extends ChangeNotifier {
       return resolved;
     }
 
-    // Patient-first: the patient registered in AURA before visiting the
-    // clinic. Attach links the clinician to the subject AURA already created.
-    if (_participantIdPattern.hasMatch(mrn.trim().toUpperCase())) {
-      final attached = await _backend.attach(
-        appUserId: mrn.trim().toUpperCase(),
-        mrn: mrn,
-        enrolledBy: clinicianId,
-      );
-      if (attached != null) {
-        _subjectId = attached;
-        await _linkBehaviouralId(attached);
-        await RecordStore.saveSubjectId(mrn, attached);
+    // Patient-first: if AURA already created the participant, resolve the
+    // canonical app_user_id alias directly. There is no separate attach route.
+    final participantId = mrn.trim().toUpperCase();
+    if (_participantIdPattern.hasMatch(participantId)) {
+      final resolvedByAppId = await _backend.resolveAppUserId(participantId);
+      if (resolvedByAppId != null) {
+        _subjectId = resolvedByAppId;
+        await _linkBehaviouralId(resolvedByAppId);
+        await RecordStore.saveSubjectId(mrn, resolvedByAppId);
         notifyListeners();
-        return attached;
+        return resolvedByAppId;
       }
     }
 
@@ -352,19 +343,6 @@ class ChartController extends ChangeNotifier {
   /// The identifier the patient app (Aura) shows as a QR is a C2 PARTICIPANT ID,
   /// in the form `P_` followed by 16 hex digits — the same shape as
   /// `C2_TEST_SUBJECT=P_65DC4002E7863773` in the backend's env.example.
-  ///
-  /// This app uses that value as its patient key, which is fine on its own: the
-  /// backend treats whatever it receives as an opaque MRN, hashes it under the
-  /// pepper, and mints its own `subject_id`. But the backend then knows this
-  /// patient ONLY by that UUID, and `_external_id(db, subject_id,
-  /// 'c2_behavioral')` falls back to it when no alias is registered — so the
-  /// backend ends up asking C2 about an id C2 has never seen, and the
-  /// behavioural reading comes back empty for a patient whose real C2 id we
-  /// were holding the whole time.
-  ///
-  /// Registering the alias is idempotent per modality. A 409 means this
-  /// participant id is already mapped to a DIFFERENT subject, which is a real
-  /// cross-patient error and is deliberately allowed to surface.
   static final RegExp _participantIdPattern = RegExp(r'^P_[A-F0-9]{16}$');
 
   Future<void> _linkBehaviouralId(String subjectId) async {
@@ -377,14 +355,11 @@ class ChartController extends ChangeNotifier {
         externalId: candidate,
       );
     } on ApiException catch (e) {
-      // Surfaced, not swallowed — see the 409 case above.
       _error = 'Could not link the Aura Participant ID to this patient on the '
           'backend: ${e.message}';
     }
   }
 
-  /// Registers the id another component knows this patient by, so the backend
-  /// does not ask that service about a subject_id it has never seen.
   Future<void> linkExternalId({
     required String modality,
     required String externalId,
@@ -399,16 +374,6 @@ class ChartController extends ChangeNotifier {
 
   // ── Fusion ────────────────────────────────────────────────────────────────
 
-  /// Reads the authoritative clinician view from the Central Backend.
-  ///
-  /// ClinAnx collects none of the passive modalities. C1 (wearable) and C4
-  /// (intake + GAD-7) arrive from the patient app; C2 is recorded and excluded
-  /// from the composite by pre-registered rule. Reading the timeline is how this
-  /// app learns all of their current values, statuses and capture times.
-  ///
-  /// A failure leaves the previous result on screen rather than blanking it, but
-  /// does NOT substitute a locally computed one — there is no local fusion path
-  /// any more.
   Future<void> refreshFusion({bool force = false}) async {
     if (!Env.hasBackend) return;
     if (!isEnrolled && !force) return;
@@ -423,20 +388,16 @@ class ChartController extends ChangeNotifier {
       _error = null;
       await RecordStore.cacheFusion(mrn, state);
       await roster.refreshFusion(mrn, state);
-      await _raiseIfEscalated(state);
+      // Authoritative escalation episodes are created and persisted by the
+      // Central Backend. A RED/DARK RED client rendering must never mint a
+      // separate local event with a new identity.
       notifyListeners();
     } on ApiException catch (e) {
-      // Surface it. A stale composite with no explanation is worse than a stale
-      // composite the clinician knows is stale.
       _error = e.message;
       notifyListeners();
     }
   }
 
-  /// Re-runs fusion server-side over the readings already stored, then re-reads.
-  ///
-  /// Calls no component service — it re-derives the composite from persisted
-  /// readings, which is the point of the backend keeping them.
   Future<void> rerunFusion() async {
     if (!Env.hasBackend) return;
     try {
@@ -449,13 +410,6 @@ class ChartController extends ChangeNotifier {
     }
   }
 
-  /// Records the clinician's tier judgement against the fusion row currently on
-  /// screen.
-  ///
-  /// Two ordering rules the UI must honour, both from the backend's docstring:
-  /// the judgement is entered BEFORE the conformal set is revealed, or the label
-  /// is contaminated by the prediction it exists to calibrate; and it attaches
-  /// to the id of the row that was displayed, not to whatever is latest now.
   Future<Map<String, dynamic>?> submitTierVerdict({
     required String tierLabel,
     String? author,
@@ -483,7 +437,6 @@ class ChartController extends ChangeNotifier {
     }
   }
 
-  /// CARE-AnxRAG clinical decision support.
   Future<Map<String, dynamic>?> askEvidence(String question) async {
     try {
       final id = await ensureEnrolled();
@@ -495,38 +448,9 @@ class ChartController extends ChangeNotifier {
     }
   }
 
-  Future<void> _raiseIfEscalated(FusionResult result) async {
-    // A blocked fusion is GREY and has no composite. It is not an escalation,
-    // and it must not be silently treated as one in either direction.
-    if (!result.hasComposite) return;
-    if (result.band != AlertBand.red && result.band != AlertBand.darkRed) {
-      return;
-    }
-
-    await roster.raiseAlert(ClinicalAlert(
-      id: _uuid.v4(),
-      title: '${result.band.protocolName} · ${patient.name}',
-      body: 'Composite risk ${result.compositeLabel} across '
-          '${result.modalitiesUsed} of ${Modality.all.length} modalities.',
-      raisedAt: DateTime.now(),
-      kind: AlertKind.riskEscalation,
-      band: result.band,
-      patientMrn: mrn,
-      patientName: patient.name,
-    ));
-  }
-
   // ── TC-WPN analysis ───────────────────────────────────────────────────────
 
   // ── Note lifecycle ────────────────────────────────────────────────────────
-  //
-  //   draft ──edit──► draft ──analyse──► analysed ──edit──► analysed (stale)
-  //     │                       │                                  │
-  //     └──delete               └──failure──► analysisFailed        └──re-analyse
-  //
-  // Every path writes to local storage BEFORE any network call, and no path
-  // removes a note because a network call failed. Persistence is LOCAL ONLY —
-  // the Central Backend has no draft CRUD contract, and none was invented.
 
   ClinicalNote? noteById(String id) {
     for (final n in _notes) {
@@ -542,7 +466,6 @@ class ChartController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Creates a new draft and returns it. No network call.
   Future<ClinicalNote> saveDraft({
     required String text,
     required String noteType,
@@ -562,12 +485,6 @@ class ChartController extends ChangeNotifier {
     return note;
   }
 
-  /// Edits an EXISTING note in place. The previous build had no way to do this,
-  /// so every edit minted a second note and the original stayed behind.
-  ///
-  /// Editing a note that already carries an assessment does not delete the
-  /// assessment — it stamps `updatedAt`, which makes `resultIsStale` true, and
-  /// the UI says the assessment describes an earlier version of the text.
   Future<ClinicalNote?> updateNote(
     String noteId, {
     String? text,
@@ -580,7 +497,6 @@ class ChartController extends ChangeNotifier {
       text: text,
       noteType: noteType,
       updatedAt: DateTime.now(),
-      // An edit clears a stale failure banner; the new text has not failed yet.
       clearAnalysisError: true,
       status: existing.hasBeenAnalysed
           ? ClinicalNoteStatus.analysed
@@ -591,11 +507,6 @@ class ChartController extends ChangeNotifier {
     return edited;
   }
 
-  /// Deletes a note. Local only, irreversible, and the caller is responsible for
-  /// having confirmed with the clinician first.
-  ///
-  /// Returns false when the note was already gone, so a double-tap does not
-  /// report a success that did not happen.
   Future<bool> deleteNote(String noteId) async {
     final before = _notes.length;
     _notes = _notes.where((n) => n.id != noteId).toList();
@@ -604,18 +515,6 @@ class ChartController extends ChangeNotifier {
     return true;
   }
 
-  /// Analyses a note that is ALREADY STORED. Used for first analysis and for
-  /// re-analysis alike — the note is never re-created, so its id, its clinical
-  /// date and its clinician attribution survive.
-  ///
-  /// On success the previous assessment is REPLACED. The local store keeps one
-  /// assessment per note because the backend's own record is the history: every
-  /// submission is a new `ModalityReading` row and appears on the timeline. A
-  /// second local copy would be a second version of the truth.
-  ///
-  /// On failure the note stays exactly where it was, with its text intact, and
-  /// moves to `analysisFailed` so the UI can offer Retry rather than pretending
-  /// nothing was attempted. The exception is rethrown for the caller to render.
   Future<ClinicalNote> analyseStoredNote(String noteId) async {
     final note = noteById(noteId);
     if (note == null) {
@@ -630,16 +529,10 @@ class ChartController extends ChangeNotifier {
       final subject = await ensureEnrolled(clinicianId: note.clinicianId);
       final support = await effectiveSupport();
 
-      // ONE call. Server-side this runs the clinical model, stores the reading,
-      // and triggers fusion. The app does not call the model service, does not
-      // decide whether the reading is usable, and does not fuse anything.
       final ingest = await _backend.submitNote(
         subjectId: subject,
         noteText: note.text,
         noteType: note.noteType,
-        // The clinical event date, not the retry date. Re-analysing a note must
-        // not make it look newer than the encounter it documents — the backend
-        // weights notes by recency.
         noteDate: note.recordedAt,
         supportSet: support,
         visitCount: visitCount,
@@ -648,9 +541,6 @@ class ChartController extends ChangeNotifier {
 
       _lastIngest = ingest;
 
-      // `result` stays null when the component returned no detail. That renders
-      // as "no assessment available", which is the truth — it must never render
-      // as a model that looked and found nothing.
       final analysed = note.copyWith(
         result: ingest.result,
         clearResult: ingest.result == null,
@@ -666,8 +556,6 @@ class ChartController extends ChangeNotifier {
       _notes = _notes.map((n) => n.id == noteId ? analysed : n).toList();
       await RecordStore.saveNotes(mrn, _notes);
 
-      // Carry the component's own explanation of a non-ok status through to the
-      // UI rather than reporting a generic failure.
       if (!ingest.scored) {
         _error = ingest.needsSupportSet
             ? 'The note was stored, but no labelled examples exist for this '
@@ -681,12 +569,9 @@ class ChartController extends ChangeNotifier {
       _status = ChartStatus.ready;
       notifyListeners();
 
-      // Fusion already ran server-side as part of the ingest; re-read to pick up
-      // the full clinician view rather than trusting the ingest's summary.
       await refreshFusion();
       return analysed;
     } on ApiException catch (e) {
-      // The note is NOT touched beyond its status. This is the whole point.
       final failed = note.copyWith(
         status: ClinicalNoteStatus.analysisFailed,
         lastAnalysisError: e.message,
@@ -701,11 +586,6 @@ class ChartController extends ChangeNotifier {
     }
   }
 
-  /// Compose-and-analyse, for the "write a new note and analyse it now" path.
-  ///
-  /// Saves first, always. If analysis fails the draft is already on disk and the
-  /// exception is rethrown for the caller to render — a clinician's typing is
-  /// never lost to an unreachable service.
   Future<ClinicalNote> analyseNote({
     required String text,
     required String noteType,
@@ -721,9 +601,6 @@ class ChartController extends ChangeNotifier {
     return analyseStoredNote(draft.id);
   }
 
-  /// Records the clinician's agreement or disagreement with a prediction. This
-  /// is the human-in-the-loop audit trail; it is stored with the note and
-  /// exported in the PDF.
   Future<void> recordVerdict(
       String noteId, String verdict, String? comment) async {
     _notes = _notes
@@ -749,9 +626,6 @@ class ChartController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Promotes an analysed note into the support set after the clinician has
-  /// labelled it. This is how few-shot adaptation actually accumulates at a
-  /// site: the clinician confirms, and the confirmed case becomes a prototype.
   Future<void> promoteNoteToSupport(ClinicalNote note, String label) =>
       addSupport(SupportNote(
         id: _uuid.v4(),

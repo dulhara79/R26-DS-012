@@ -1,0 +1,26 @@
+{
+  "subject_id": "subject-004",
+  "fusion_result_id": 126,
+  "current_assessment": {"score": null, "tier": "Severe", "band": "NEW_BAND"},
+  "forecast": {
+    "forecast_result_id": "fcst-004",
+    "scope": "sensor_fusion_v2",
+    "horizon_minutes": 10,
+    "score": null,
+    "tier": "Severe",
+    "escalation_predicted": null
+  },
+  "confidence": null,
+  "assessment_status": "future_state",
+  "modalities": [
+    {
+      "component_id": "c1_physiological",
+      "score": null,
+      "available": null,
+      "included_in_fusion": null,
+      "status": "degraded_v2"
+    }
+  ],
+  "computed_at": null,
+  "model_version": "ragf-next"
+}

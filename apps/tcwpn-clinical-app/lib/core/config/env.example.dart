@@ -1,100 +1,61 @@
-// lib/core/config/env.dart
+// Example/reference build-time configuration for ClinAnx.
 //
-// REPLACES lib/core/config/env.example.dart (rename to env.dart when you copy
-// it in — the rest of the app imports '../../core/config/env.dart').
-//
-// WHAT CHANGED FROM THE PREVIOUS VERSION, AND WHICH FEEDBACK ITEM IT CLOSES
-// =========================================================================
-//
-// • `hfToken` DELETED — feedback section 23.
-//   It was still read by ApiClient._defaultBearer as a fallback bearer, so a
-//   release APK shipped a HuggingFace deploy credential that any `apktool`
-//   run recovers in about a minute. Section 23 says not to put a privileged
-//   model token in the APK; it was in there. The TC-WPN warm-up ping is
-//   unauthenticated /health, which does not need it. If your Space is private,
-//   make the BACKEND proxy the warm-up rather than shipping the token.
-//
-// • `c3Base` DELETED — feedback section 26, "No old /v3/risk/classify".
-//   C3Gateway.classify posted to /v3/risk/classify, the retired intervention
-//   route. It was dead code: nothing in lib/features called it. Removing the
-//   URL removes the temptation to wire it back up, and settings_screen no
-//   longer advertises a service the app does not use.
-//
-// • `authBase` DELETED.
-//   It described a clinician login endpoint the backend does not implement.
-//   main.py::_auth compares the Authorization header against one static
-//   BACKEND_API_TOKEN — there is no /auth/login, no JWT, no refresh token.
-//   Feedback section 3 asks for that contract; the honest answer is that it
-//   does not exist yet. Keeping a config knob for an imaginary endpoint makes
-//   the app look more secure than it is.
-//
-// WHAT SURVIVES, AND WHY IT IS NOT A CONTRADICTION
-// ------------------------------------------------
-// `tcwpnBase` stays. Section 21 allows "a separate TC-WPN development URL only
-// for isolated development/testing", and that is precisely its remaining use:
-// a GET /health warm-up so the clinician's first note analysis does not pay a
-// full cold start. The clinician workflow must never call /predict here.
+// Do not add reusable backend/model credentials here. Central Backend calls use
+// the authenticated clinician Session bearer. Service credentials belong on the
+// Central Backend, never in the mobile APK/app bundle.
 
-class Env {
-  const Env._();
+class EnvExample {
+  const EnvExample._();
 
-  static const String appName = 'ClinAnx';
-
-  // ── The one service this app talks to ──────────────────────────────────────
-
-  /// R26-DS-012 Central Backend. Everything clinical goes through here:
-  /// enrolment, note ingestion, gate, fusion, timeline, evidence, verdict.
-  ///
-  /// Android emulator reaching a backend on the host machine: use
-  /// `http://10.0.2.2:8000`, not `localhost`.
-  static const String backendBase = String.fromEnvironment(
-    'BACKEND_BASE',
-    defaultValue: '',
+  // Research build identity (safe to display in Settings).
+  static const String appVersion = String.fromEnvironment(
+    'APP_VERSION',
+    defaultValue: '1.0.0+1',
+  );
+  static const String buildEnvironment = String.fromEnvironment(
+    'BUILD_ENVIRONMENT',
+    defaultValue: 'development',
+  );
+  static const String buildRevision = String.fromEnvironment(
+    'BUILD_REVISION',
+    defaultValue: 'unversioned',
   );
 
-  /// The backend's shared bearer token (`BACKEND_API_TOKEN` server-side).
-  ///
-  /// Injected at build time, never written into source. This is a SINGLE SHARED
-  /// APP CREDENTIAL, not a per-clinician one. Clinician attribution therefore
-  /// travels in each request body's `author` field, not in the token.
-  ///
-  /// State this limitation in the viva. It is adequate for a research prototype
-  /// and is NOT adequate for clinical deployment, which needs per-user
-  /// authentication and authorisation.
-  static const String backendToken = String.fromEnvironment('BACKEND_TOKEN');
-
-  /// TC-WPN Space. Retained ONLY for the unauthenticated /health warm-up, so
-  /// the first note analysis does not pay the full cold start. The clinician
-  /// workflow must not call /predict here — that path belongs to the backend.
+  // Application-facing services. Remote clinical endpoints must use HTTPS.
+  static const String backendBase = String.fromEnvironment('BACKEND_BASE');
+  static const String authBase = String.fromEnvironment('AUTH_BASE');
   static const String tcwpnBase = String.fromEnvironment('TCWPN_BASE');
 
-  // ── Timeouts ───────────────────────────────────────────────────────────────
+  // Local auth is demo/development only. Real participant builds use AUTH_BASE.
+  static const String authSalt = String.fromEnvironment('AUTH_SALT');
+  static const String authLocalAccounts = String.fromEnvironment('AUTH_LOCAL');
 
-  /// A cold Space behind the backend can push one note analysis past a minute;
-  /// COMPONENT_TIMEOUT_S is 60s server-side and the backend adds its own work
-  /// on top.
-  static const Duration inferenceTimeout = Duration(seconds: 180);
-  static const Duration quickTimeout = Duration(seconds: 25);
+  // Firebase push transport. Only one slot is active per installed build;
+  // primary/secondary are separately built DR configurations.
+  static const String pushFirebaseSlot = String.fromEnvironment(
+    'PUSH_FIREBASE_SLOT',
+    defaultValue: 'primary',
+  );
+  static const String firebasePrimaryApiKey =
+      String.fromEnvironment('FIREBASE_PRIMARY_API_KEY');
+  static const String firebasePrimaryAppId =
+      String.fromEnvironment('FIREBASE_PRIMARY_APP_ID');
+  static const String firebasePrimarySenderId =
+      String.fromEnvironment('FIREBASE_PRIMARY_SENDER_ID');
+  static const String firebasePrimaryProjectId =
+      String.fromEnvironment('FIREBASE_PRIMARY_PROJECT_ID');
+  static const String firebaseSecondaryApiKey =
+      String.fromEnvironment('FIREBASE_SECONDARY_API_KEY');
+  static const String firebaseSecondaryAppId =
+      String.fromEnvironment('FIREBASE_SECONDARY_APP_ID');
+  static const String firebaseSecondarySenderId =
+      String.fromEnvironment('FIREBASE_SECONDARY_SENDER_ID');
+  static const String firebaseSecondaryProjectId =
+      String.fromEnvironment('FIREBASE_SECONDARY_PROJECT_ID');
 
-  // ── Derived ────────────────────────────────────────────────────────────────
-
-  static bool get hasBackend => backendBase.isNotEmpty;
-  static bool get hasTcwpnWarmup => tcwpnBase.isNotEmpty;
-
-  /// True for a build that can actually reach the clinical path. Use this to
-  /// gate the UI rather than letting screens fail one call at a time.
-  static bool get isConfigured => hasBackend;
-
-  /// A modality reading older than this is called out in the chart.
-  ///
-  /// DISPLAY THRESHOLD ONLY. The authoritative freshness decision is the
-  /// backend's `modalities[*].fresh`, computed from gate.MAX_AGE_MINUTES, which
-  /// differs per modality — minutes for physiological, months for notes. Where
-  /// the two disagree, show the server's.
-  static const Duration stalenessThreshold = Duration(hours: 72);
-
-  /// False for any build that touches real patients. Removes the seeded
-  /// demonstration patient and the example note library.
-  static const bool demoData =
-      bool.fromEnvironment('DEMO_DATA', defaultValue: true);
+  // Never seed synthetic participants unless the build explicitly opts in.
+  static const bool demoData = bool.fromEnvironment(
+    'DEMO_DATA',
+    defaultValue: false,
+  );
 }

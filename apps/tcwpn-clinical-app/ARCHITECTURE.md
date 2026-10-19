@@ -1,246 +1,198 @@
 # ClinAnx — architecture
 
-Clinician-facing Flutter client for **R26-DS-012**, a multimodal anxiety risk
-framework. This app is a **presentation and interaction layer**. It does not
-orchestrate model services and it does not compute risk.
+ClinAnx is the clinician-facing Flutter client for R26-DS-012. It is a **presentation, interaction and clinician-workflow layer**. It does not own model orchestration, multimodal fusion, forecast policy or the authoritative AttentionEvent lifecycle.
 
----
+> **Research prototype — not a diagnostic device.** This architecture describes a research implementation boundary, not clinical deployment approval.
 
-## 1. The shape of the system
+## 1. System boundary
 
-```
-                 ┌─────────────────────┐
-                 │   CLINICIAN APP     │
-                 │   Flutter (this)    │
-                 └──────────┬──────────┘
-                            │ HTTPS — one base URL, one token
-                            ▼
-                 ┌─────────────────────┐
-                 │   CENTRAL BACKEND   │
-                 │  FastAPI · Postgres │
-                 └──────────┬──────────┘
-             ┌──────────────┼──────────────┬──────────────┐
-             ▼              ▼              ▼              ▼
-            C1             C2             C3             C4
-      Physiological   Behavioural    Clinical NLP    Demographic
-        wearable      phone sensing    TC-WPN        DCAR prior
-             │              │              │              │
-             └──────────────┴──────┬───────┴──────────────┘
-                                   ▼
-                            RAGF FUSION
-                        gate → harmonise → weight
-                                   ▼
-                            Composite risk
-                                   ▼
-                            CARE-AnxRAG
-                                   ▼
-                   Evidence-grounded clinical guidance
+```text
+ClinAnx Flutter client
+        │
+        │ clinician session bearer over HTTPS
+        ▼
+Central Backend
+        ├── identity / assignment scope
+        ├── C1-C4 orchestration
+        ├── current multimodal assessment
+        ├── forecast persistence
+        ├── AttentionEvent lifecycle
+        └── CARE-AnxRAG evidence
+
+Push path
+Central Backend → FCM → ClinAnx
+                     └→ event identity only
+
+Recovery path
+ClinAnx → server AttentionEvent polling every 30 s while resumed
 ```
 
-The app knows **one** service address. It has never heard of the fusion service,
-and it holds no C1/C2/C3/C4 URLs.
+The mobile app can warm the TC-WPN service with a non-clinical `/health` request when configured, but authoritative clinical-note inference is orchestrated through the Central Backend.
 
-The single exception is `GET /health` on the TC-WPN Space, used to wake a
-sleeping container so the clinician's first note analysis does not pay the full
-cold start. That call carries no credential and no patient data.
+## 2. Mobile responsibilities
 
-## 2. Layering
+ClinAnx owns:
 
-```
-Screen  (lib/features/…)        no HTTP, no URLs, no JSON
-   │
-Controller (lib/state/…)        one per screen scope; owns loading/error state
-   │
-Gateway (lib/data/api/…)        one method per backend route; returns models
-   │
-ApiClient (lib/data/api/…)      base URL, auth, timeout, retry, error mapping
-   │
+- clinician sign-in/session handling;
+- secure local session storage;
+- clinician-scoped local cache/drafts;
+- Dashboard, Patients, Patient Overview and deep clinical views;
+- safe presentation of current assessment versus forecast;
+- server AttentionEvent Activity/detail UI;
+- acknowledgement/resolution requests without inventing actor/time locally;
+- generic notification presentation and push-open routing;
+- device-token registration lifecycle;
+- Primary/Secondary Firebase build-slot selection;
+- research build identity and configuration visibility;
+- offline/stale/unavailable presentation.
+
+ClinAnx does **not** own:
+
+- authoritative multimodal composite calculation;
+- component model inference policy;
+- assignment authorization rules;
+- forecast generation or episode confirmation policy;
+- creation/deduplication of authoritative AttentionEvents;
+- server audit persistence;
+- patient-facing notification policy;
+- backend/service/model version assignment.
+
+## 3. Layering
+
+```text
+Screen (lib/features/...)
+        │
+Controller / state (lib/state/...)
+        │
+Repository / gateway (lib/data/...)
+        │
+ApiClient + authenticated Session
+        │
 Central Backend
 ```
 
-Rules that hold across the tree:
+Rules:
 
-- No screen constructs an `http.Client`, a `Uri`, or a `Dio`.
-- No screen reads a raw `Map<String, dynamic>`. Gateways return typed models.
-- `ApiClient` checks status **before** decoding the body, always.
-- Retries apply to idempotent reads only, and never to a TLS pin failure.
+- screens do not calculate authoritative risk;
+- typed contracts preserve server vocabulary and null/unavailable states;
+- network failures remain explicit errors/offline states, never synthetic clinical results;
+- idempotent reads may be retried, but write/lifecycle authority remains server-canonical;
+- participant/clinical traffic uses HTTPS outside loopback development.
 
-## 3. Gateways
+## 4. Authentication and authorization boundary
 
-Two, and only two.
+Central clinical requests use the signed-in clinician session bearer. Reusable privileged service credentials are not part of the mobile authority model.
 
-### `CentralBackendGateway`
+Session material is stored in platform secure storage. The mobile client can display `401` as expired/invalid session and `403` as forbidden assignment/access, but enforcement of clinician-to-patient assignment is a server responsibility.
 
-| Method | Route |
-|---|---|
-| `health()` | `GET /health` |
-| `enrol()` | `POST /v1/subjects` |
-| `resolveMrn()` | `GET /v1/subjects/resolve?mrn=…` |
-| `registerExternalId()` | `POST /v1/subjects/{subject_id}/external-ids` |
-| `submitNote()` | `POST /v1/clinical-notes` |
-| `runFusion()` | `POST /v1/fusion/run` |
-| `timeline()` | `GET /v1/doctor/patients/{subject_id}/timeline?limit=n` |
-| `evidence()` | `POST /v1/doctor/patients/{subject_id}/evidence` |
-| `submitVerdict()` | `POST /v1/verdict` |
+The app never treats a clinician identifier supplied by the client as authoritative actor identity for AttentionEvent state changes. Canonical actor/time must come back from the server response.
 
-### `TcwpnWarmupGateway`
+## 5. Current assessment versus forecast
 
-| Method | Route |
-|---|---|
-| `health()` | `GET {TCWPN_BASE}/health` |
+The app keeps these concepts separate:
 
-That is the complete list of network calls this application makes.
+- **Current multimodal assessment** — what the latest eligible multimodal evidence indicates now.
+- **Near-term forecast** — future-horizon information. Until a validated multimodal forecast exists, ClinAnx labels the forecast scope as physiological when that is what the server contract represents.
 
-**Deleted, and not to be revived:** `FusionGateway` (`/contribute`,
-`/state/{mrn}` — routes no service ever served), `TcwpnGateway.analyse()`
-(direct `POST /predict`, which bypasses the gate, harmonisation, recency
-weighting and conformal calibration), and `C3Gateway` (`/v3/risk/classify`, the
-retired intervention route). The old intervention engine — GBDT/XGBoost tiering,
-SHAP, DiCE, FAISS case retrieval, `/intervene` — is retired outright. Clinical
-guidance now comes from CARE-AnxRAG, downstream of fusion.
+A missing/stale/unavailable signal never becomes `0`, Low or Green. Unknown vocabulary fails closed to an explicit unknown/unavailable presentation.
 
-## 4. Modality naming
+C2 remains visible as an experimental behavioural signal and is not silently treated as active fused evidence while the registered exclusion rule remains in force.
 
-The wire keys are the backend's and do not line up with the component numbering
-in the dissertation. Both are correct in their own frame; they must never be
-mixed.
+C3/TC-WPN is displayed as a Clinical NLP signal, not the overall patient risk authority.
 
-| Wire key | Service | Paper |
-|---|---|---|
-| `c1_physiological` | wearable biosensors | Component 1 |
-| `c2_behavioral` | phone sensing — **excluded from the composite** | Component 2 |
-| `c3_clinical_nlp` | TC-WPN, clinical notes | Component 4 |
-| `c4_demographic` | DCAR demographic prior | Component 4 · contextual arm |
+## 6. AttentionEvent lifecycle
 
-**Rule: wire identifiers follow the backend, human-readable labels follow the
-paper.** `Modality` in `lib/domain/models.dart` is the only place either is
-written down. An earlier build used `c4_clinical_nlp` and `c3_intervention` —
-3 and 4 swapped, plus a modality the backend does not have — and against a real
-response that produced four contributions with weight `0` and score `null`: the
-composite rendered and the breakdown was empty. `test/widget_test.dart` fails
-loudly if that regresses.
+The mobile contract treats AttentionEvents as persistent server records.
 
-## 5. Fusion is server-side, and only server-side
-
-`composite_score`, `tier`, `band`, `weights` and `contributions` are read off
-the wire and never derived on the device.
-
-- The client holds **no weight table**. It cannot compute a composite even by
-  accident.
-- Contribution values are the server's, not `weight × score`. The backend
-  harmonises the raw score before weighting, so recomputing locally disagrees
-  with the composite printed beside it (0.71 × 0.65 = 0.4615; the server says
-  0.5428).
-- The band is **not** re-derived from the composite. The fusion service bands in
-  three tiers at 0.33/0.66; the local display helper splits four ways at
-  0.25/0.50/0.75. At 0.8878 those disagree. The server wins.
-- When the backend is unreachable the chart shows an explicit unavailable state.
-  There is no provisional composite, no fallback fusion, no local renormalisation.
-
-A gate rejection is a normal outcome, not an error: fewer than two usable
-modalities yields `composite: null`, `band: "GREY"` and a `reason`. The parser
-keeps the null as a null, renders it as an em dash, and shows the reason.
-Never `0.000`, never "Stable", never "Low risk".
-
-## 6. Absence is not zero
-
-`status` is passed through verbatim — `ok` · `absent` · `warming_up` ·
-`insufficient_data` · `poor_signal` · `no_support_set` · `not_validated` ·
-`error` — and only `ok` **with** a non-null score counts as usable evidence,
-which is the same test the backend's gate applies.
-
-`c2_behavioral` is a special case worth stating plainly. It is excluded from the
-composite by pre-registered rule, not by absence: AUROC 0.5205 against a
-permutation null of 0.4991, p = 0.255. When the backend reports an experimental
-behavioural value it arrives with `fusion_eligible: false` and is rendered as
-**"Behavioural signal · experimental, not included in composite"**. It is never
-given a contribution row, a weight, or a percentage.
-
-`c4_demographic: null` likewise means unavailable, never 0 % risk.
-
-## 7. Freshness
-
-The backend is authoritative. `captured_at`, `age_minutes`, `fresh`, `updated_at`
-and `computed_at` come from the server and are displayed as received. The device
-clock is never substituted for a missing model timestamp.
-
-Two parsing details that are safety properties rather than conveniences:
-
-- A timestamp without an offset is read as **UTC**. SQLite drops `tzinfo` on
-  round-trip; Dart's `DateTime.parse` would read the result as local time, which
-  on a device at UTC+5:30 puts the composite five and a half hours away from the
-  readings in the same payload.
-- A reading captured *after* the fusion row being displayed is flagged
-  `pendingNextFusion`, not rendered as weight 0.00. Physiological ingests are
-  debounced (`AUTO_FUSION_DEBOUNCE_MIN`), so a wearable reading can legitimately
-  be `ok` and `fresh` while carrying zero weight — because it has not been
-  considered yet, not because it was considered and discounted.
-
-Cached chart data is labelled **Cached · last updated `<timestamp>`**. No
-composite is ever computed offline.
-
-## 8. Patient identity
-
-```
-MRN  ──►  POST /v1/subjects  ──►  subject_id (opaque UUID) + pairing code
+```text
+OPEN
+  │ acknowledge request
+  ▼
+ACKNOWLEDGED
+  │ resolve request
+  ▼
+RESOLVED
 ```
 
-The backend HMAC-hashes the MRN on arrival and never persists the raw value. The
-app stores the returned `subject_id` and uses it for every subsequent call. The
-raw MRN goes over the wire exactly twice — enrolment and `resolve` — because
-only the server holds the pepper.
+ClinAnx never converts receipt of a notification into acknowledgement or resolution. Notification delivery and clinical lifecycle are separate concerns.
 
-`ChartController` is constructed per patient and holds its identifier as a
-`final` field; every store call takes it as a required argument. Switching
-patients disposes the previous controller. There is no static "active patient".
+The client-facing event operations include the frozen AttentionEvent routes under `/v1/attention-events`, including list/detail and acknowledge/resolve operations. The backend owner is responsible for implementing the matching server contract and assignment enforcement.
 
-## 9. Configuration
+## 7. Push, device tokens and polling fallback
 
-Build-time only, via `--dart-define`. `lib/core/config/env.dart` is the single
-place any of it is read.
+Phase 7 added FCM-based push acceleration and device-token registration through the Central Backend contract.
 
-| Define | Required | Purpose |
-|---|---|---|
-| `BACKEND_BASE` | yes | Central Backend base URL |
-| `BACKEND_TOKEN` | yes | shared backend token (`BACKEND_API_TOKEN` server-side) |
-| `TCWPN_BASE` | no | TC-WPN Space, `/health` warm-up only |
-| `AUTH_BASE` | no | clinician auth service; empty ⇒ local demo mode |
-| `AUTH_SALT` | no | local-mode password salt |
-| `AUTH_LOCAL` | no | local-mode account table |
-| `DEMO_DATA` | no | `false` for any build touching real patients |
-| `DISABLE_TLS_PINNING` | no | emulator work behind a debugging proxy only |
+Push routing payload accepted by ClinAnx is intentionally minimal:
 
-`C1_BASE`, `C2_BASE`, `C3_BASE`, `C4_BASE`, `FUSION_BASE`, `CARE_RAG_BASE` and
-`HF_TOKEN` are **not** configuration for this app. If you find one in a build
-script, that script predates the Central Backend.
+```json
+{
+  "type": "attention_event",
+  "event_id": "evt_..."
+}
+```
 
-## 10. Security posture, stated honestly
+The parser uses a strict routing-field allowlist; extra fields are rejected. Clinical detail is fetched after authenticated open.
 
-- Session material is held in `flutter_secure_storage`, never
-  `SharedPreferences` and never a plain JSON file.
-- No token is compiled into source. `BACKEND_TOKEN` is injected at build time.
-- **`BACKEND_TOKEN` is a single shared app credential, not a per-clinician one.**
-  Anything inside an APK is extractable. Clinician attribution therefore travels
-  in each request body's `author` field. This is adequate for a research
-  prototype and is *not* adequate for clinical deployment, which needs per-user
-  authentication and authorisation. `ApiClient` evaluates its bearer through a
-  callback per request, so replacing this with a clinician JWT is a change at
-  one call site.
-- TLS pinning is available (`SecureHttp`) and fails closed: an unconfigured pin
-  set raises `PinningNotConfigured` rather than silently falling back to the
-  platform trust store. See the outstanding item below.
-- Patient note text is never written to a log.
+Two Firebase project configurations are supported as **build-time slots**:
 
-## 11. Known gaps
+- Primary — normal research build
+- Secondary — disaster-recovery build
 
-1. **`kPinnedHosts` lists only the TC-WPN Space.** That host now carries nothing
-   but an unauthenticated `/health` ping, while every note, every composite and
-   every evidence call goes to the Central Backend — which is *not* pinned and
-   therefore uses the platform trust store. The priority is inverted. Add the
-   backend host and regenerate with `python tool/pin_certs.py`.
-2. **`kPinsReviewBy` is `1970-01-01`**, so `SecureHttp.needsReview` is
-   permanently true and Settings shows a stale-pin warning that can never be
-   cleared. Set a real review date when the pins are generated.
-3. **No per-clinician authentication against the Central Backend** — see §10.
-4. `POST /v1/fusion/run` has no dedicated regression test; the fusion path is
-   covered through the timeline parser instead.
+FCM registration tokens are project-specific, so this is not a runtime credential swap. If push initialization, permission or provider delivery fails, persistent server events remain discoverable through the independent 30-second foreground polling path.
+
+## 8. Local persistence
+
+Clinical local stores are clinician-scoped so one signed-in clinician does not inherit another clinician's cached roster/dashboard/notification state.
+
+Cached information must retain provenance and be labelled stale/offline where appropriate. A cached assessment is never silently promoted to current state.
+
+Local clinical-note drafts are a client workflow aid. Authoritative server analysis/history remains a backend concern.
+
+## 9. Error semantics
+
+Important mappings are deliberately distinct:
+
+| Condition | Mobile behavior |
+|---|---|
+| `401` | session expired/invalid; require re-authentication |
+| `403` | forbidden/assignment failure; do not imply expired identity |
+| `404` | requested canonical resource unavailable |
+| `409` | server-state conflict; refresh/reconcile canonical state |
+| `422` | request validation failure |
+| timeout/offline | explicit unavailable/offline state; preserve safe local work |
+| RAG abstention | explicit abstained state |
+| RAG unavailable | explicit service-unavailable state; no invented guidance |
+
+## 10. Research build identity and reproducibility
+
+Research/study builds expose non-secret configuration identity such as:
+
+- app version;
+- build environment;
+- source/build revision;
+- backend host;
+- authentication mode;
+- active Firebase slot/project identifier;
+- demo-data state.
+
+The committed `pubspec.lock` pins the Dart package graph. Phase 9 CI is pinned to Flutter 3.47.4, matching the SDK used to generate the recorded Phase 8/9 verification evidence.
+
+Service/model versions not owned by this repository must be read from the integrated environment and recorded in the release manifest rather than guessed in mobile source.
+
+## 11. Contract-gated backend integration
+
+This repository intentionally distinguishes **implemented mobile contracts** from **verified running backend routes**. Some target adapters remain guarded/unavailable until the backend owner exposes the matching authenticated endpoints. ClinAnx must fail explicitly rather than silently substitute a local implementation.
+
+That boundary is deliberate: this repository can prove mobile behavior and contract handling, but it cannot independently prove server assignment enforcement, cross-client result identity, server event persistence/concurrency or complete end-to-end delivery.
+
+## 12. Release documentation
+
+Phase 9 release material is maintained under `docs/release/`:
+
+- `PHASE9_RESEARCH_RELEASE.md`
+- `SOP.md`
+- `DEPLOYMENT_RUNBOOK.md`
+- `TEST_EVIDENCE.md`
+- `KNOWN_LIMITATIONS.md`
+
+`APK_BUILD.md` contains the reproducible mobile build commands. Manual usability evidence remains under `docs/qa/` and must not be marked complete without a real human run.
