@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { Github, Menu, X } from "lucide-react";
 import LogoMark from "../ui/LogoMark";
+import SiteSearch from "./SiteSearch";
 import { navigation, site } from "../../data/site";
 
 export default function Navbar() {
@@ -36,6 +37,7 @@ export default function Navbar() {
           ))}
         </ul>
         <div className="nav-actions">
+          <SiteSearch />
           <a
             className="nav-icon"
             href={site.repository}

@@ -110,7 +110,7 @@ function HeroVideo({ sectionRef }) {
   };
 
   return (
-    <div className="hero-video" aria-hidden="true">
+    <div className="hero-video" aria-hidden="true" style={{ backgroundImage: `url("${heroVideo.poster}")` }}>
       {[0, 1].map((index) => (
         <video
           key={index}
@@ -118,7 +118,7 @@ function HeroVideo({ sectionRef }) {
             videos.current[index] = node;
           }}
           className={index === active ? "is-active" : undefined}
-          src={heroVideo.src}
+          src={`${import.meta.env.BASE_URL}${heroVideo.src.replace(/^\//, "")}`}
           poster={heroVideo.poster}
           muted
           playsInline

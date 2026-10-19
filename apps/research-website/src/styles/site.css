@@ -894,7 +894,7 @@ h3.card-title,
   }
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1180px) {
   .nav-toggle {
     display: inline-flex;
   }
