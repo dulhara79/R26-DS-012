@@ -7,7 +7,7 @@ import {
   documents,
   milestones,
   publicationNote,
-  scopeChanges,
+  pendingDocuments,
 } from "../data/documents";
 
 // Citation block from the R26-DS-012 README.
@@ -39,8 +39,8 @@ export default function Documents() {
     <>
       <PageHero
         eyebrow="Documents"
-        title="Proposals, sources and milestones."
-        lead="The written record of the project, including how its scope changed between the proposals and the final components."
+        title="Research documents and milestones."
+        lead="Research assessment records, from the topic assessment form through the final presentation."
         image="bannerDocuments"
       />
 
@@ -58,7 +58,7 @@ export default function Documents() {
                 {documents
                   .filter((doc) => doc.group === group)
                   .map((doc) => (
-                    <li key={doc.title}>
+                    <li key={doc.title} id={`document-${documents.indexOf(doc)}`}>
                       <FileText size={20} aria-hidden="true" />
                       <div>
                         <span className="card-kicker">{doc.type}</span>
@@ -95,67 +95,18 @@ export default function Documents() {
               </Reveal>
             </div>
           ))}
+          <div className="doc-group" aria-labelledby="pending-documents-title">
+            <h3 id="pending-documents-title" className="serif-title detail-sub">Pending project documents</h3>
+            <p className="muted">The university guidance lists the records below. They are not present in the reviewed Drive folder, so no links are invented.</p>
+            <ul className="doc-list">
+              {pendingDocuments.map((doc) => <li key={doc.title}>
+                <FileText size={20} aria-hidden="true" />
+                <div><strong>{doc.title}</strong><span className="muted">{doc.description}</span></div>
+                <span className="pill pill--outline">Not yet published</span>
+              </li>)}
+            </ul>
+          </div>
           <p className="source-note">{publicationNote}</p>
-        </div>
-      </section>
-
-      <section
-        className="section section--paper2"
-        aria-labelledby="scope-title"
-      >
-        <div className="shell">
-          <SectionHead
-            id="scope-title"
-            eyebrow="From proposal to final scope"
-            title="What changed, and why it is stated openly."
-            lead="The repository is the source of truth. Where a component's final design differs from its March 2026 proposal, both are named."
-          />
-          <Reveal className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th scope="col">Component</th>
-                  <th scope="col">In the proposal</th>
-                  <th scope="col">In the final repository</th>
-                </tr>
-              </thead>
-              <tbody>
-                {scopeChanges.map((row) => (
-                  <tr key={row.id}>
-                    <td>
-                      <strong>{row.id}</strong>
-                    </td>
-                    <td className="muted">{row.before}</td>
-                    <td>{row.after}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Reveal>
-        </div>
-      </section>
-
-      <section className="section" aria-labelledby="milestones-title">
-        <div className="shell split" style={{ alignItems: "start" }}>
-          <Reveal>
-            <p className="eyebrow">Milestones</p>
-            <h2 className="display" id="milestones-title">
-              Progress so far.
-            </h2>
-          </Reveal>
-          <Reveal as="ol" className="flow milestones" delay={0.1}>
-            {milestones.map((item) => (
-              <li key={item.title}>
-                <span className="card-kicker">{item.date}</span>
-                <strong className="serif-title" style={{ fontSize: "1.3rem" }}>
-                  {item.title}
-                </strong>
-                <p className="muted" style={{ margin: "8px 0 0" }}>
-                  {item.detail}
-                </p>
-              </li>
-            ))}
-          </Reveal>
         </div>
       </section>
 
