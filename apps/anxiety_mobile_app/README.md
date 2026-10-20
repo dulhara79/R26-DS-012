@@ -1,4 +1,4 @@
-# Aura
+# Aura 📱
 
 Flutter Android app for longitudinal anxiety research (SLIIT research group **R26-DS-012**).
 
