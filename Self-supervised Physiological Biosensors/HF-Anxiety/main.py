@@ -249,7 +249,7 @@ class AnxietyFeedbackPayload(BaseModel):
     user_id: str
     event_id: str
     detected_at: datetime
-    initial_risk_score: float
+    initial_risk_score: float | None = None
     initial_hr: float | None = None
     initial_br: float | None = None
     initial_motion: float | None = None
@@ -1022,7 +1022,7 @@ def store_anxiety_feedback(payload: AnxietyFeedbackPayload):
     validate_user_id(payload.user_id)
     if not EVENT_ID_PATTERN.fullmatch(payload.event_id):
         raise HTTPException(status_code=400, detail="Invalid event_id.")
-    if not 0.0 <= payload.initial_risk_score <= 100.0:
+    if payload.initial_risk_score is not None and not 0.0 <= payload.initial_risk_score <= 100.0:
         raise HTTPException(
             status_code=400,
             detail="initial_risk_score must be between 0 and 100.",
@@ -1033,8 +1033,11 @@ def store_anxiety_feedback(payload: AnxietyFeedbackPayload):
         .tag("user_id", payload.user_id)
         .tag("event_id", payload.event_id)
         .time(payload.detected_at)
-        .field("initial_risk_score", float(payload.initial_risk_score))
     )
+    # A confirmed server alert must be recorded even when its risk score is
+    # unavailable. The risk_source field below keeps this a valid Influx point.
+    if payload.initial_risk_score is not None:
+        point.field("initial_risk_score", float(payload.initial_risk_score))
 
     optional_fields = {
         "initial_hr": payload.initial_hr,
