@@ -32,6 +32,38 @@ sources:
         - https://www.nimh.nih.gov/health/topics/anxiety-disorders
       request_interval_seconds: 1.0
 
+  # Verified NIMH public-domain educational pages. Each remains in staging
+  # until reviewed; the model must not infer clinical approval from source type.
+  - id: nimh_social_anxiety
+    name: NIMH Social Anxiety Disorder - What You Need to Know
+    connector: http_page
+    enabled: true
+    publish_to_rag: true
+    auto_promote: false
+    layer: clinical_core
+    authority_score: 0.96
+    evidence_level: government_health_information
+    check_interval_minutes: 10080
+    settings:
+      urls:
+        - https://www.nimh.nih.gov/health/publications/social-anxiety-disorder-more-than-just-shyness
+      request_interval_seconds: 1.0
+
+  - id: nimh_panic_disorder
+    name: NIMH Panic Disorder - What You Need to Know
+    connector: http_page
+    enabled: true
+    publish_to_rag: true
+    auto_promote: false
+    layer: clinical_core
+    authority_score: 0.96
+    evidence_level: government_health_information
+    check_interval_minutes: 10080
+    settings:
+      urls:
+        - https://www.nimh.nih.gov/health/publications/panic-disorder-when-fear-overwhelms
+      request_interval_seconds: 1.0
+
   - id: who_anxiety
     name: World Health Organization
     connector: http_page

@@ -221,7 +221,8 @@ def _parse_pubmed_article(source_id: str, item: ET.Element) -> RawDocument | Non
             Section(path=f"abstract/{index}", heading=label, text=value, ordinal=index)
         )
     abstract = normalize_whitespace("\n\n".join(abstract_parts))
-    if not abstract:
+    pubmed_relations = _parse_pubmed_relations(citation)
+    if not abstract and not pubmed_relations:
         return None
 
     publication_types = [
@@ -271,7 +272,11 @@ def _parse_pubmed_article(source_id: str, item: ET.Element) -> RawDocument | Non
         source_id=source_id,
         external_id=pmid,
         title=title,
-        text=normalize_whitespace(f"{title}\n\n{abstract}"),
+        text=normalize_whitespace(
+            f"{title}\n\n{abstract}"
+            if abstract
+            else title
+        ),
         url=f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
         published_at=published_at,
         updated_at=updated_at,
@@ -287,9 +292,57 @@ def _parse_pubmed_article(source_id: str, item: ET.Element) -> RawDocument | Non
             "doi": doi,
             "journal": journal,
             "publication_status": publication_status,
+            "pubmed_relations": pubmed_relations,
+            "retraction_of_pmids": _relation_pmids(
+                pubmed_relations,
+                "RetractionOf",
+            ),
+            "expression_of_concern_for_pmids": _relation_pmids(
+                pubmed_relations,
+                "ExpressionOfConcernFor",
+            ),
+            "erratum_for_pmids": _relation_pmids(
+                pubmed_relations,
+                "ErratumFor",
+            ),
             "record_source": "PubMed abstract",
         },
     )
+
+
+def _parse_pubmed_relations(
+    citation: ET.Element,
+) -> list[dict[str, str]]:
+    relations: list[dict[str, str]] = []
+    for node in citation.findall(
+        "CommentsCorrectionsList/CommentsCorrections"
+    ):
+        ref_type = str(
+            node.attrib.get("RefType", "")
+        ).strip()
+        if not ref_type:
+            continue
+        relations.append(
+            {
+                "ref_type": ref_type,
+                "pmid": xml_text(node.find("PMID")),
+                "ref_source": xml_text(node.find("RefSource")),
+                "note": xml_text(node.find("Note")),
+            }
+        )
+    return relations
+
+
+def _relation_pmids(
+    relations: list[dict[str, str]],
+    ref_type: str,
+) -> list[str]:
+    return [
+        relation["pmid"]
+        for relation in relations
+        if relation.get("ref_type") == ref_type
+        and relation.get("pmid")
+    ]
 
 
 def _parse_pmc_article(
