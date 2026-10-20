@@ -973,21 +973,21 @@ class _ProfilePageState extends State<ProfilePage> {
               // C4 uses its training-set categories, separate from the
               // general profile education field above. Do not equate current
               // undergraduate study with an already completed degree.
-              _sectionLabel('C4 research: highest completed degree'),
+              _sectionLabel('Highest completed degree'),
               _dropdown(
                 C4Demographics.educationOptions,
                 _c4Education,
                 (v) => setState(() => _c4Education = v),
               ),
               const SizedBox(height: 16),
-              _sectionLabel('C4 research: smoking history'),
+              _sectionLabel('Smoking history'),
               _dropdown(
                 C4Demographics.smokingOptions,
                 _c4Smoking,
                 (v) => setState(() => _c4Smoking = v),
               ),
               const SizedBox(height: 16),
-              _sectionLabel('C4 research: drinking history'),
+              _sectionLabel('Drinking history'),
               _dropdown(
                 C4Demographics.drinkingOptions,
                 _c4Drinking,
@@ -995,8 +995,7 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'C4 is available for ages 18–27 and supported model categories only. '
-                'If these answers are unavailable, the rest of Aura continues without a C4 score.',
+                '',
                 style: TextStyle(fontSize: 12),
               ),
               const SizedBox(height: 16),
