@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { searchCategories, searchIndex, searchSite, normalizeSearch } from "../src/data/search.js";
-import { documentStages, documents } from "../src/data/documents.js";
+import { documentStages, documents, publishedAdditionalDocuments } from "../src/data/documents.js";
 import { components } from "../src/data/components.js";
 
 test("search index contains all public document records and components", () => {
   const indexedDocuments = searchIndex.filter(item => item.category === "Document");
-  assert.equal(indexedDocuments.length, documents.length);
+  assert.equal(indexedDocuments.length, documents.length + publishedAdditionalDocuments.length);
   for (const component of components) {
     assert.ok(searchIndex.some(item => item.category === "Component" && item.href === "/components/" + component.slug));
   }
@@ -14,6 +14,9 @@ test("search index contains all public document records and components", () => {
 });
 
 test("document result deep links point to the matching rendered list row", () => {
+  for (let i = 0; i < publishedAdditionalDocuments.length; i++) {
+    assert.ok(searchIndex.some(item => item.category === "Document" && item.href === "/documents#additional-document-" + i));
+  }
   for (let i = 0; i < documents.length; i++) {
     assert.ok(searchIndex.some(item => item.category === "Document" && item.href === "/documents#document-" + i));
   }

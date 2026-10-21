@@ -12,7 +12,7 @@ export default function Slides() {
   return (
     <>
       <PageHero eyebrow="Presentation slides" title="Research presentations."
-        lead="Slides used during the research project, with a space for the final presentation when available." image="bannerDocuments" />
+        lead="Proposal, progress and final presentation files from the project document archive." image="bannerDocuments" />
       <section className="section" aria-labelledby="slides-title">
         <div className="shell">
           <h2 className="display" id="slides-title">Presentation archive.</h2>

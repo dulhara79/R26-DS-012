@@ -51,7 +51,7 @@ test("project's published documents use public Drive file URLs", () => {
   for (const item of publicationFiles) {
     assert.match(item.url, /^https:\/\/drive\.google\.com\/file\/d\//);
   }
-  assert.equal(documents.find(d => d.group === "Final Presentation").url, null);
+  assert.match(documents.find(d => d.group === "Final Presentation").url, /^https:\/\/drive\.google\.com\/file\/d\//);
 });
 
 test("university navigation and milestones have honest placeholders", async () => {
@@ -64,4 +64,42 @@ test("university navigation and milestones have honest placeholders", async () =
   assert.equal(milestones.find((item) => item.id === "pp2").deadline, "31 August–2 September 2026");
   assert.ok(milestones.every((item) => Object.prototype.hasOwnProperty.call(item, "deadline")));
   assert.ok(milestones.every((item) => typeof item.detail === "string" && item.detail.length > 10));
+});
+
+test("researcher contacts and profiles match requested public details", () => {
+  const expected = {
+    IT22130648: ["dulhara.kaushalya79@gmail.com", "https://github.com/dulhara79"],
+    IT22171542: ["senuvilayathma20@gmail.com", "https://github.com/SENUVI20"],
+    IT22107596: ["hdsendanayake01@gmail.com", "https://github.com/DewduSendanayake"],
+    IT22093950: ["uvisends24946@gmail.com", "https://github.com/UVINDUSEN"],
+  };
+  for (const person of team) assert.deepEqual([person.email, person.github], expected[person.id]);
+  assert.deepEqual(supervisors.map(s => new URL(s.scholar).searchParams.get("user")), [
+    "_I6MLzcAAAAJ", "_8a_hOEAAAAJ", "Pn5cuN0AAAAJ",
+  ]);
+});
+
+test("group methodology uses continuous IEEE citations and external published references", async () => {
+  const { groupMethodology, methodologyReferences } = await import("../src/data/methodologyDetail.js");
+  assert.ok(groupMethodology.introduction.length > 100);
+  assert.ok(groupMethodology.stages.length >= 5);
+  assert.deepEqual(methodologyReferences.map(r => r.number), Array.from({length: methodologyReferences.length}, (_, i) => i + 1));
+  const inline = groupMethodology.stages.flatMap(s => s.paragraphs).join(" ");
+  const cited = [...inline.matchAll(/\[(\d+)\]/g)].map(match => Number(match[1]));
+  assert.ok(cited.length >= 10);
+  assert.ok(cited.every(n => methodologyReferences.some(r => r.number === n)));
+  assert.ok(methodologyReferences.every(r => r.url.startsWith("https://")));
+  assert.ok(methodologyReferences.every(r => !/thesis|draft/i.test(r.citation)));
+  assert.match(inline, /behavioural model score from active fusion/);
+});
+
+test("replaced team photographs and final PPTX resolve to refreshed Drive assets", async () => {
+  const { driveImageFiles, driveFinalPresentation } = await import("../src/data/driveAssets.generated.js");
+  assert.equal(driveImageFiles["team-c1"].id, "1MAP0Alp3ucGCa-TyMGEt9fckz9kivMay");
+  assert.equal(driveImageFiles["team-c2"].id, "1MAAxUv_hSmEY_UZTZKnuOdLfCu-Idvx1");
+  assert.equal(driveFinalPresentation.id, "1TmXYrnLGQUQ-4KWPSDHCgw2rNxJqnOCr");
+  const { imageSrc } = await import("../src/data/images.js");
+  const url = imageSrc("team-c1");
+  assert.match(url, /&v=/);
+  assert.ok(url.includes(driveImageFiles["team-c1"].id));
 });

@@ -77,6 +77,7 @@ export default function ContactSection({ id = "contact", headingLevel = "h2" }) 
                     </span>
                     <ArrowUpRight size={16} aria-hidden="true" />
                   </a>
+                  <a className="contact-link" href={person.scholar} target="_blank" rel="noopener noreferrer">Google Scholar <ArrowUpRight size={16} /></a>
                 </li>
               ))}
             </ul>
@@ -103,6 +104,7 @@ export default function ContactSection({ id = "contact", headingLevel = "h2" }) 
                       </span>
                     </div>
                   )}
+                  <a className="contact-link" href={person.github} target="_blank" rel="noopener noreferrer"><Github size={15} /> GitHub profile</a>
                 </li>
               ))}
             </ul>

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Github, GraduationCap } from "lucide-react";
 import PageHero from "../components/ui/PageHero";
 import Reveal from "../components/ui/Reveal";
 import ImageSlot from "../components/ui/ImageSlot";
@@ -31,10 +31,7 @@ export default function Team() {
           <div className="grid-4">
             {team.map((person, index) => (
               <Reveal key={person.id} delay={index * 0.08}>
-                <Link
-                  className="card link-card person-card"
-                  to={`/components/${slugFor(person.component)}`}
-                >
+                <article className="card link-card person-card">
                   <ImageSlot
                     name={person.photo}
                     alt={`Portrait of ${person.name}`}
@@ -54,8 +51,12 @@ export default function Team() {
                       )}
                     </h3>
                     <p>{person.role}</p>
+                    <div className="person-links">
+                      <Link className="contact-link" to={`/components/${slugFor(person.component)}`}>Research component <ArrowUpRight size={16} /></Link>
+                      <a className="contact-link" href={person.github} target="_blank" rel="noopener noreferrer"><Github size={16} /> GitHub profile <ArrowUpRight size={16} /></a>
+                    </div>
                   </div>
-                </Link>
+                </article>
               </Reveal>
             ))}
           </div>
@@ -92,8 +93,9 @@ export default function Team() {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  View profile <ArrowUpRight size={16} />
+                  University profile <ArrowUpRight size={16} />
                 </a>
+                <a className="contact-link" href={person.scholar} target="_blank" rel="noopener noreferrer"><GraduationCap size={16} /> Google Scholar <ArrowUpRight size={16} /></a>
               </Reveal>
             ))}
           </div>

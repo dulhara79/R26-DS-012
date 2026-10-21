@@ -5,7 +5,6 @@ import Reveal from "../components/ui/Reveal";
 import SectionHead from "../components/ui/SectionHead";
 import {
   literatureThemes,
-  methodology,
   objectives,
   overview,
   problems,
@@ -15,6 +14,7 @@ import {
   timescales,
 } from "../data/research";
 import { componentBySlug, components } from "../data/components";
+import { groupMethodology, methodologyReferences } from "../data/methodologyDetail";
 
 export default function Research() {
   const slugFor = (id) =>
@@ -169,27 +169,64 @@ export default function Research() {
         </div>
       </section>
 
-      <section
-        className="section section--paper2"
-        aria-labelledby="method-title"
-      >
+      <section className="section section--paper2" aria-labelledby="method-title">
         <div className="shell">
           <SectionHead
             id="method-title"
             eyebrow="Methodology"
-            title="From problem to prototype, with validation at every step."
+            title="Integrated research methodology."
+            lead="One group workflow, from evidence acquisition and model development through quality-gated fusion, application integration and validation."
           />
-          <Reveal as="ol" className="method-steps">
-            {methodology.map((item) => (
-              <li key={item.step}>
-                <strong>{item.step}</strong>
-                <span className="muted">{item.detail}</span>
-              </li>
-            ))}
+          <Reveal className="body-copy group-method-intro">
+            <p>{groupMethodology.introduction}</p>
           </Reveal>
+          <div className="group-method-stages">
+            {groupMethodology.stages.map((stage, index) => (
+              <Reveal key={stage.title} className="group-method-stage">
+                <div className="group-method-stage-heading">
+                  <span className="card-kicker">{String(index + 1).padStart(2, "0")}</span>
+                  <h3 className="card-title">{stage.title}</h3>
+                </div>
+                <div className="body-copy group-method-body">
+                  {stage.paragraphs.map((paragraph, paragraphIndex) => (
+                    <p key={paragraphIndex}>
+                      {paragraph.split(/(\[\d+\])/g).map((part, partIndex) => {
+                        const match = /^\[(\d+)\]$/.exec(part);
+                        return match ? (
+                          <a key={partIndex} className="ieee-inline-citation" href={`#reference-${match[1]}`} aria-label={`Reference ${match[1]}`}>{part}</a>
+                        ) : part;
+                      })}
+                    </p>
+                  ))}
+                </div>
+              </Reveal>
+            ))}
+          </div>
         </div>
       </section>
-
+      <section className="section" aria-labelledby="method-references-title">
+        <div className="shell">
+          <SectionHead
+            id="method-references-title"
+            eyebrow="References"
+            title="References"
+            lead="Numbered IEEE references to published datasets, foundational methods, assessment instruments and reporting guidance. Internal thesis drafts are not included in this bibliography."
+          />
+          <ol className="methodology-references ieee-reference-list">
+            {methodologyReferences.map((reference) => (
+              <li key={reference.number} id={`reference-${reference.number}`}>
+                <span className="ieee-reference-number">[{reference.number}]</span>
+                <div>
+                  <p>{reference.citation}</p>
+                  <a className="contact-link" href={reference.url} target="_blank" rel="noopener noreferrer">
+                    View source <ArrowRight size={16} aria-hidden="true" />
+                  </a>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
       <section className="section" aria-labelledby="tech-title">
         <div className="shell">
           <SectionHead
