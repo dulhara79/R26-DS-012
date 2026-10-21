@@ -1,0 +1,16 @@
+.git
+.github
+**/.env
+**/.env.*
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+**/__pycache__
+**/*.pyc
+**/*.pem
+**/*.key
+**/*secret*
+data/
+notebooks/
+*.csv
+*.ipynb
