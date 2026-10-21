@@ -1,3 +1,4 @@
+import { driveFinalPresentation } from "./driveAssets.generated.js";
 // Assessment-stage records. Only link exact files present in the shared
 // project Drive folder; do not infer assessment dates from upload timestamps.
 import { components } from "./components.js";
@@ -58,18 +59,21 @@ export const documents = [
     group: documentStages[4],
     type: "Group presentation slides",
     title: "R26-DS-012 final presentation",
-    meta: "Presentation file not yet available in shared Drive",
-    url: null,
+    meta: "Final presentation PPTX · October 2026",
+    url: driveFinalPresentation?.id ? driveFile(driveFinalPresentation.id) : null,
   },
 ];
 
-// Requirements named by Website.pdf. These files have not been verified in
-// the supplied Drive archive. Never point to an unrelated document or folder.
-export const pendingDocuments = [
-  { title: "Project Charter", description: "One project charter document", url: null },
-  { title: "Project Checklists", description: "Completed checklist documents", url: null },
-  { title: "Final Individual Reports", description: "Four individual final reports", url: null },
-  { title: "Final Group Report", description: "One main final report", url: null },
+export const publishedAdditionalDocuments = [
+  { group: "Project Checklists", type: "Checklist evidence", title: "Research-paper master sheet", url: driveFile("1sk5KqAuHIwiRpk8eALrz1mOdozjvonxA"), meta: "Checklist 1 · Excel workbook" },
+  { group: "Project Checklists", type: "Checklist evidence", title: "Data Analysis Report", url: driveFile("1tMMLm79HJ3BbSWL6t5fjge_kYmr0hYm7"), meta: "Checklist 2 · Word document" },
+  { group: "Project Checklists", type: "Checklist evidence", title: "Ethical Analysis Report", url: driveFile("17VnKTTedkRSQy6hiGM2W8Ljnpqt7ywCe"), meta: "Checklist 3 · Word document" },
+  { group: "Project Checklists", type: "Checklist evidence", title: "MLOps Report", url: driveFile("1mQpCBTro7Qdv_cVyWffBLmUcGgHTgi2z"), meta: "Checklist 4 · PDF" },
+  { group: "Final Individual Reports", type: "Draft report", title: "IT22130648 draft report", url: driveFile("1MQtKVWmsgCmU1m5UGApDLUetgTTT3sjh"), meta: "October 2026 · Draft" },
+  { group: "Final Individual Reports", type: "Draft report", title: "IT22171542 draft report", url: driveFile("1Zbiz_uGHt4PtcRo2MvsMp7fake8zRdeQ"), meta: "October 2026 · Draft" },
+  { group: "Final Individual Reports", type: "Draft report", title: "IT22107596 draft report", url: driveFile("1beh1ZdJceaAtNsMFh5UOEK9LMPebfW2j"), meta: "October 2026 · Draft" },
+  { group: "Final Individual Reports", type: "Draft report", title: "IT22093950 draft report", url: driveFile("1ldETZqTbNAZQySrahpnLDGHceE59UreU"), meta: "October 2026 · Draft" },
+  { group: "Final Group Report", type: "Draft report", title: "R26-DS-012 group report draft", url: driveFile("1fbC7q_hvMMiJWNE7qjp19znk3b3kSHZF"), meta: "October 2026 · Draft" },
 ];
 
 export const publicationNote =
@@ -130,7 +134,7 @@ export const milestones = [
     deadline: "13 May 2026",
     from: "2026-05-13", to: "2026-05-13", weights: [],
     detail: "Scheduled checklist submission. No separate percentage is specified for this step in the supplied module outline.",
-    href: "/documents#pending-documents-title",
+    href: "/documents#docs-title",
   },
   {
     id: "pp1",
@@ -154,7 +158,7 @@ export const milestones = [
     deadline: "11 October 2026",
     from: "2026-10-11", to: "2026-10-11", weights: ["final-report"],
     detail: "Draft thesis submission deadline. The module outline's 19% refers to the Final Report category, not an independent draft-thesis mark.",
-    href: "/documents#pending-documents-title",
+    href: "/documents#docs-title",
   },
   {
     id: "website-submission",
@@ -170,7 +174,7 @@ export const milestones = [
     deadline: "14 October 2026",
     from: "2026-10-14", to: "2026-10-14", weights: [],
     detail: "Scheduled final checklist submission. No separate percentage is listed for the checklist in the supplied module outline.",
-    href: "/documents#pending-documents-title",
+    href: "/documents#docs-title",
   },
   {
     id: "final-presentation-viva",
@@ -194,15 +198,15 @@ export const milestones = [
     deadline: "23 October 2026",
     from: "2026-10-23", to: "2026-10-23", weights: ["paper"],
     detail: "Scheduled paper submission deadline. The older module outline calls the assessed category 'Research Paper (published)' (10%); submission alone should not be represented as verified publication.",
-    href: "/documents#pending-documents-title",
+    href: "/documents#docs-title",
   },
   {
     id: "final-thesis",
     title: "Final Thesis Submission",
     deadline: "28 October 2026",
     from: "2026-10-28", to: "2026-10-28", weights: ["final-report"],
-    detail: "Scheduled final thesis submission deadline. The module outline lists Final Report as 19%. Final reports are not yet available in the reviewed Drive folder.",
-    href: "/documents#pending-documents-title",
+    detail: "Scheduled final thesis submission deadline. The module outline lists Final Report as 19%. Draft individual and group reports are linked on the Documents page.",
+    href: "/documents#docs-title",
   },
   {
     id: "publication-evidence",
@@ -210,6 +214,6 @@ export const milestones = [
     deadline: "1 December 2026",
     from: "2026-12-01", to: "2026-12-01", weights: ["paper"],
     detail: "Scheduled publication-evidence submission deadline. The module outline's 10% is for the published Research Paper category; acceptance or publication of the team's paper is not established by this timetable.",
-    href: "/documents#pending-documents-title",
+    href: "/documents#docs-title",
   },
 ];

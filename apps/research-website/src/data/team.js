@@ -1,6 +1,6 @@
 // Source: R26-DS-012 root README (Research Team, Supervisors). Supervisor
-// profile links supplied by the team. Add an `email` to any person to show it
-// on the Contact page; people without one are listed without an address.
+// Contact, GitHub and Scholar URLs were supplied by the research team.
+// Scholar IDs are mapped in supplied order; ownership needs independent confirmation.
 
 export const team = [
   {
@@ -9,7 +9,8 @@ export const team = [
     component: "C3",
     role: "Clinical NLP / TC-WPN for Few-Shot Anxiety Detection",
     photo: "team-c3",
-    email: "it22130648@my.sliit.lk",
+    email: "dulhara.kaushalya79@gmail.com",
+    github: "https://github.com/dulhara79",
   },
   {
     name: "Layathma B.M.A.S.",
@@ -17,7 +18,8 @@ export const team = [
     component: "C2",
     role: "Spatio-Temporal Behavioural Graph Learning",
     photo: "team-c2",
-    email: "it22171542@my.sliit.lk",
+    email: "senuvilayathma20@gmail.com",
+    github: "https://github.com/SENUVI20",
   },
   {
     name: "Sendanayake H.D.",
@@ -25,7 +27,8 @@ export const team = [
     component: "C1",
     role: "Wearable Biosensor Forecasting",
     photo: "team-c1",
-    email: "it22107596@my.sliit.lk",
+    email: "hdsendanayake01@gmail.com",
+    github: "https://github.com/DewduSendanayake",
   },
   {
     name: "Seneviratne K.A.U.A.",
@@ -33,7 +36,8 @@ export const team = [
     component: "C4",
     role: "Contextual Modelling, Multimodal Fusion & RAG",
     photo: "team-c4",
-    email: "it22093950@my.sliit.lk",
+    email: "uvisends24946@gmail.com",
+    github: "https://github.com/UVINDUSEN",
   },
 ];
 
@@ -44,6 +48,7 @@ export const supervisors = [
     affiliation: "Senior Professor, Department of Computer Systems Engineering, Faculty of Computing",
     photo: "sup-1",
     profile: "https://www.sliit.lk/academic/academic-staff/samantha.t",
+    scholar: "https://scholar.google.com/citations?user=_I6MLzcAAAAJ&hl=en",
     email: "samantha.t@my.sliit.lk",
   },
   {
@@ -52,6 +57,7 @@ export const supervisors = [
     affiliation: "Senior Lecturer (Higher Grade), Department of Computer Science, Faculty of Computing",
     photo: "sup-2",
     profile: "https://www.sliit.lk/academic/academic-staff/mahima.w",
+    scholar: "https://scholar.google.com/citations?user=_8a_hOEAAAAJ&hl=en",
     email: "mahima.w@my.sliit.lk",
   },
   {
@@ -61,6 +67,7 @@ export const supervisors = [
       "Professor of Psychiatry, Faculty of Medicine, University of Colombo / NHSL",
     photo: "sup-3",
     profile: "https://www.res.cmb.ac.lk/medicine/chathurie-suraweera/",
+    scholar: "https://scholar.google.com/citations?user=Pn5cuN0AAAAJ&hl=en",
     email: "chathurie@psych.cmb.ac.lk",
   },
 ];

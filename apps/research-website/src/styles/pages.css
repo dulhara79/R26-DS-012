@@ -1775,3 +1775,39 @@
  .milestone-detail-panel .assessment-facts {grid-template-columns:minmax(0,1fr);}
 }
 @media(prefers-reduced-motion:reduce) {.road-stop-card {transition:none;}}
+
+/* Component-level methods and compact profile actions */
+.person-links { display:flex; flex-wrap:wrap; gap: 12px 18px; margin-top:18px; }
+.person-links .contact-link { display:inline-flex; align-items:center; gap:6px; }
+.person-card > .contact-link + .contact-link { margin-top:14px; }
+.methodology-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; margin-top:24px; }
+.methodology-card { padding:clamp(20px,3vw,36px); background:#fff; border:1px solid rgba(30,45,55,.16); border-radius:18px; min-width:0; }
+.methodology-heading { display:flex; align-items:flex-start; gap:16px; margin-bottom:20px; }
+.methodology-heading h3 { margin:0; }
+.methodology-heading p { margin:8px 0 0; }
+.methodology-details { margin:0; }
+.methodology-details div { border-top:1px solid rgba(40,50,65,.15); padding:14px 0; }
+.methodology-details dt { font-size:.9rem; font-weight:700; margin-bottom:5px; }
+.methodology-details dd { margin:0; line-height:1.7; overflow-wrap:anywhere; }
+.methodology-boundary { border-left:3px solid currentColor; padding-left:14px; line-height:1.7; }
+.methodology-citations { font-size:.9rem; }
+.methodology-references { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 24px; margin:0; padding:0; list-style:none; }
+.methodology-references li { border-top:1px solid rgba(40,50,65,.22); padding:20px 3px; scroll-margin-top:110px; }
+.methodology-references strong { display:block; line-height:1.5; margin-top:8px; }
+.methodology-references p { margin:9px 0; }
+@media (max-width:850px) { .methodology-grid,.methodology-references { grid-template-columns:1fr; } }
+
+/* Integrated group methodology: one readable research narrative. */
+.group-method-intro { max-width: 860px; margin: 20px 0 32px; }
+.group-method-stages { display: grid; gap: 0; }
+.group-method-stage { display: grid; grid-template-columns: minmax(170px, 28%) minmax(0, 1fr); gap: 24px; border-top: 1px solid rgba(50,60,70,.18); padding: 28px 0; }
+.group-method-stage-heading .card-kicker { display: block; margin-bottom: 12px; }
+.group-method-stage-heading .card-title { margin: 0; line-height: 1.3; }
+.group-method-body p { margin: 0 0 16px; line-height: 1.75; }
+.group-method-body p:last-child { margin-bottom: 0; }
+.ieee-inline-citation { white-space: nowrap; text-decoration: underline; text-underline-offset: 3px; font-weight: 600; }
+.ieee-reference-list { grid-template-columns: 1fr; gap: 0; }
+.ieee-reference-list li { display: grid; grid-template-columns: 44px 1fr; gap: 12px; scroll-margin-top: 100px; }
+.ieee-reference-list li p { margin: 0 0 10px; line-height: 1.65; }
+.ieee-reference-number { font-weight: 700; font-variant-numeric: tabular-nums; }
+@media (max-width: 750px) { .group-method-stage { grid-template-columns: 1fr; gap: 14px; } }

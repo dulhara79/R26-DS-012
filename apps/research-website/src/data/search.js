@@ -2,12 +2,13 @@
 // component evidence and linked-document metadata. No remote search service.
 import { navigation, site } from "./site.js";
 import { components } from "./components.js";
-import { documents, milestones } from "./documents.js";
+import { documents, milestones, publishedAdditionalDocuments } from "./documents.js";
 import {
   overview, problems, timescales, literatureThemes, researchGap,
   researchQuestion, objectives, methodology, techStack, commitments,
 } from "./research.js";
 import { architecture, aura, clinanx } from "./system.js";
+import { groupMethodology, methodologyReferences } from "./methodologyDetail.js";
 import { team, supervisors } from "./team.js";
 import { cinematicIntro, cinematicPanels } from "./cinematicStory.js";
 
@@ -48,7 +49,7 @@ export const searchIndex = [
     [site.title, cinematicIntro, cinematicPanels, overview, problems, researchQuestion],
     "home research introduction research prototype"),
   page("Research", "/research", "Research domain, literature, objectives and methodology.",
-    [overview, problems, timescales, literatureThemes, researchGap, objectives, methodology, techStack],
+    [overview, problems, timescales, literatureThemes, researchGap, objectives, methodology, groupMethodology, methodologyReferences, techStack],
     "domain literature survey research gap objectives technologies"),
   page("Components", "/components", "The four research components and how their signals connect.",
     components, "C1 C2 C3 C4"),
@@ -60,7 +61,7 @@ export const searchIndex = [
   page("Milestones", "/milestones", "Assessment stages, recorded dates and pending marks.", milestones, "timeline viva final assessment marks"),
   page("Slides", "/slides", "Proposal, progress and final presentation slides.", documents.filter(d => d.type.includes("slides")), "downloads presentations pptx"),
   page("Documents", "/documents", "TAF, proposals, progress presentations, final presentation and citation.",
-    [documents, milestones], "downloads files reports slides PDF milestones"),
+    [documents, publishedAdditionalDocuments, milestones], "downloads files reports slides PDF milestones"),
   page("Team", "/team", "The researchers and their academic and clinical supervisors.",
     [team, supervisors], "people authors researchers"),
   page("Contact", "/contact", "Project repository, SLIIT and research-team contact information.",
@@ -83,8 +84,9 @@ export const searchIndex = [
     "Main research question and component-specific objectives.", [researchQuestion, objectives],
     "research question specific objectives"),
   section("Research methodology", "/research#method-title",
-    "Research process, datasets, leakage controls and evaluation.", methodology,
+    "Research process, datasets, leakage controls and evaluation.", [groupMethodology, methodologyReferences],
     "method design approach dataset validation"),
+  section("Methodology references", "/research#method-references-title", "Published IEEE-style external sources.", methodologyReferences),
   section("Technologies used", "/research#tech-title",
     "Technical tools and modelling technologies.", techStack),
   section("Fusion and eligibility", "/components#integration-title",
@@ -158,6 +160,7 @@ export const searchIndex = [
         [c.title, c.modality, c.fusionRole]),
     ];
   }),
+  ...publishedAdditionalDocuments.map((doc, i) => record("Document", doc.title, "/documents#additional-document-" + i, doc.meta, [doc.group, doc.type, doc.meta], "checklist report draft", doc.url)),
   ...documents.map((doc, i) => record(
     "Document", doc.title,
     "/documents#document-" + i,
