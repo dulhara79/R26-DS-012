@@ -60,7 +60,7 @@ Deployed model versions:
 
 ---
 
-## Locked 10-feature contract
+## 10-feature contract
 
 Extracted over **non-overlapping 60-second** windows:
 
@@ -90,17 +90,6 @@ Self-supervised Physiological Biosensors/
 ├── frontend/           # Static Aura Bio Monitor demo
 └── requirements.txt    # Research / notebook dependencies
 ```
-
-### Research notebooks
-
-| Notebook | What it does | Status |
-|----------|--------------|--------|
-| `01_WESAD_EDA.ipynb` | WESAD chest-signal EDA → 10-feature windows, baseline z-norm | Complete |
-| `02_AffectiveROAD_EDA.ipynb` | AffectiveROAD → same feature contract (external validation set) | Complete |
-| `03_LSTM_AE_Training.ipynb` | Unmasked LSTM-AE, WESAD LOSO, AffectiveROAD external test | Complete · **deployed AE** |
-| `04_Masked_LSTM_AE_Training.ipynb` | 20% input-mask ablation under the same protocol | Complete · ablation |
-| `05_Forecasting_Module.ipynb` | Direct Ridge score forecast at +5 / +10 min | Complete · **deployed forecaster** |
-| `09_Data_Hoarder_Pipeline.ipynb` | Prototype: Influx → Parquet → HF sensor archive | Scaffold |
 
 ### Live system
 
