@@ -8,7 +8,7 @@ include Dockerfile
 include compose.yaml
 include .env.example
 recursive-include config *.yaml *.yml
-recursive-include data *.jsonl *.notice *.md *.txt
+recursive-include data *.jsonl *.notice *.md *.txt *.csv *.json
 recursive-include docs *.md
 recursive-include examples *.yaml *.yml *.md *.txt *.json
 recursive-include scripts *.py *.sh

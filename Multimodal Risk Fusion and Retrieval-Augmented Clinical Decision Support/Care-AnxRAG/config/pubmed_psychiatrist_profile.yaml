@@ -1,0 +1,17 @@
+# Import manually into the pubmed_anxiety source settings for a controlled backfill.
+# This is a discovery profile, NOT human clinical adjudication.
+query: >-
+  ("Anxiety Disorders"[Mesh] OR "generalized anxiety disorder"[Title]
+   OR "generalised anxiety disorder"[Title] OR "panic disorder"[Title]
+   OR "social anxiety disorder"[Title] OR "agoraphobia"[Title]
+   OR "specific phobia"[Title] OR "separation anxiety disorder"[Title])
+  AND ("Systematic Review"[Publication Type] OR "Meta-Analysis"[Publication Type]
+   OR "Randomized Controlled Trial"[Publication Type] OR "Practice Guideline"[Publication Type])
+  AND english[Language] NOT "Retracted Publication"[Publication Type]
+initial_lookback_days: 60
+overlap_days: 2
+max_records_per_sync: 500
+search_batch_size: 200
+fetch_batch_size: 100
+# The connector uses modified-date windows, not a publication date filter.
+# Start with --dry-run and verify NCBI count <= cap; narrow the window if needed.

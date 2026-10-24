@@ -1,0 +1,33 @@
+{
+  "package_version": 1,
+  "status": "awaiting_human_review",
+  "development": {
+    "sheet": "development.csv",
+    "candidate_count": 17
+  },
+  "test": {
+    "sheet": "test.csv",
+    "candidate_count": 0,
+    "status": "requires_independent_authoring"
+  },
+  "strata": [
+    "generalized_anxiety_disorder",
+    "panic_disorder",
+    "social_anxiety_disorder",
+    "agoraphobia_specific_phobia",
+    "symptoms_and_differential_caution",
+    "psychological_interventions",
+    "medication_information_boundaries",
+    "recent_research",
+    "population_specific",
+    "out_of_domain",
+    "insufficient_evidence",
+    "contradictory_evidence",
+    "outdated_superseded_evidence",
+    "source_poisoning_distractor",
+    "paraphrase_lexical_traps",
+    "prompt_injection",
+    "crisis_urgent_safety"
+  ],
+  "instructions": "docs/BENCHMARK_REVIEW_WORKFLOW.md"
+}

@@ -14,9 +14,14 @@ class SafetyAssessment:
 
 class SafetyRouter:
     _crisis_patterns = [
-        r"\bkill myself\b",
+        # Accept "my self" and common missing-letter spelling in patient input.
+        r"\b(?:kill|kil{1,2}ing)\s+my\s*self\b",
+        r"\bi\s+(?:have|am having|keep having|have been having)\s+(?:thoughts?|ideas?)\s+(?:about|of)\s+(?:suicide|(?:kill|kil{1,2}ing)\s+my\s*self)\b",
+        r"\bi(?:'m| am)\s+thinking\s+(?:about|of)\s+(?:suicide|(?:kill|kil{1,2}ing)\s+my\s*self)\b",
+        r"\bi\s+(?:want|wish)\s+to\s+(?:die|kill\s+my\s*self)\b",
         r"\bend my life\b",
         r"\bi(?:'m| am| feel| have been)?\s+suicidal\b",
+        r"\bi\s+(?:have|am having|keep having)\s+suicidal\s+(?:thoughts?|ideas?|urges?)\b",
         r"\bmy suicidal (?:thoughts|plan|intent)\b",
         r"\b(?:want|plan|intend|going) to (?:die|kill myself|end my life)\b",
         r"\bself[- ]?harm(?:ing)? myself\b",
