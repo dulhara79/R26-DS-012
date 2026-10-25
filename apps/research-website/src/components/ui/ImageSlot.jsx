@@ -3,16 +3,19 @@ import { imageDriveIds, imageSrc, images } from "../../data/images";
 
 export default function ImageSlot({ name, alt = "", className = "", ratio }) {
   const slot = images[name];
-  const [missing, setMissing] = useState(false);
+  const [failedSrc, setFailedSrc] = useState(null);
   if (!slot) return null;
   const fileId = imageDriveIds[name];
+  const src = imageSrc(name, import.meta.env.BASE_URL);
+  // Switching from C1 to C2, etc. must not preserve a previous image failure.
+  const missing = failedSrc === src;
   return (
     <div className={`image-slot ${missing ? "image-slot--missing" : ""} ${className}`} style={{ aspectRatio: ratio ?? slot.ratio }}>
       {!missing && (
-        <img src={imageSrc(name, import.meta.env.BASE_URL)} alt={alt}
+        <img src={src} alt={alt}
           loading={name.startsWith("banner") ? "eager" : "lazy"}
           decoding="async" referrerPolicy="no-referrer"
-          onError={() => setMissing(true)} />
+          onError={() => setFailedSrc(src)} />
       )}
       {missing && fileId && (
         <a className="image-slot-guide"

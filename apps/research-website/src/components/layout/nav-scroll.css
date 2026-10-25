@@ -1,0 +1,50 @@
+/* Smart floating navbar: full at the top, tucked away on downward
+   reading scroll, compact when the visitor navigates upward. */
+.site-nav {
+  transition: top .24s ease, transform .24s cubic-bezier(.22, 1, .36, 1);
+}
+.site-nav .site-nav-bar {
+  transition: width .24s cubic-bezier(.22, 1, .36, 1),
+    min-height .24s ease,
+    padding .24s ease,
+    background-color .24s ease,
+    box-shadow .24s ease;
+}
+.site-nav--compact { top: 10px; }
+.site-nav--compact .site-nav-bar {
+  width: min(1120px, calc(100% - 40px));
+  min-height: 52px;
+  padding: 0 9px 0 18px;
+  background: rgba(253, 241, 225, .94);
+  box-shadow: 0 10px 32px rgba(19, 47, 47, .16);
+}
+/* Icon-only brand when the scroll-aware navbar is compact. */
+.site-nav--compact .brand-text { display: none; }
+.site-nav--compact .brand { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.site-nav--compact .logo-mark { flex: 0 0 auto; }
+.site-nav--compact .nav-links > .nav-item > a,
+.site-nav--compact .nav-primary-entry > a { min-height: 38px; }
+.site-nav--hidden {
+  transform: translate3d(0, calc(-100% - 24px), 0);
+  pointer-events: none;
+}
+.site-nav--hidden .site-nav-bar { pointer-events: none; }
+
+/* Keyboard navigation may enter the navbar even when it was hidden.
+   Reveal it immediately so focused links never remain above the viewport. */
+.site-nav--hidden:focus-within {
+  transform: translate3d(0, 0, 0);
+}
+.site-nav--hidden:focus-within .site-nav-bar { pointer-events: auto; }
+
+@media (max-width: 1180px) {
+  .site-nav--compact .site-nav-bar { min-height: 52px; }
+  /* Preserve generous touch targets in the mobile hamburger/search controls. */
+  .site-nav--compact .nav-toggle,
+  .site-nav--compact .nav-icon { min-width: 44px; min-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-nav,
+  .site-nav .site-nav-bar { transition: none; }
+}

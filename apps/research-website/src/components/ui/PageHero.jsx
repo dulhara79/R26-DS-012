@@ -1,45 +1,20 @@
-import {
-  motion,
-  useReducedMotion,
-  useScroll,
-  useTransform,
-} from "framer-motion";
-import { useRef } from "react";
-import SignalRidge from "./SignalRidge";
+import { motion, useReducedMotion } from "framer-motion";
 import ImageSlot from "./ImageSlot";
 
-// Inner-page header: dawn sky (or a banner image), signal ridge and a serif title,
-// echoing the opening frame of the landing scroll.
-export default function PageHero({ eyebrow, title, lead, image, meta = [] }) {
-  const ref = useRef(null);
+// Preserve the existing landscape photography. Keep the copy readable
+// with a dark, left-weighted overlay instead of a decorative ECG ridge.
+export default function PageHero({ eyebrow, title, lead, image, meta = [], featureImage, featureAlt = "" }) {
   const reduced = useReducedMotion();
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start start", "end start"],
-  });
-  const ridgeY = useTransform(scrollYProgress, [0, 1], [0, reduced ? 0 : 80]);
-  const copyY = useTransform(scrollYProgress, [0, 1], [0, reduced ? 0 : -60]);
-  const copyOpacity = useTransform(
-    scrollYProgress,
-    [0, 0.8],
-    [1, reduced ? 1 : 0],
-  );
 
   return (
-    <header className="page-hero" ref={ref}>
+    <header className={"page-hero" + (featureImage ? " page-hero--component" : "")}>
       {image && (
         <div className="page-hero-media" aria-hidden="true">
           <ImageSlot name={image} />
         </div>
       )}
-      <motion.div
-        className="page-hero-ridge"
-        style={{ y: ridgeY }}
-        aria-hidden="true"
-      >
-        <SignalRidge />
-      </motion.div>
-      <motion.div className="shell" style={{ y: copyY, opacity: copyOpacity }}>
+      <div className={"shell page-hero-content" + (featureImage ? " page-hero-content--split" : "")}>
+        <div className="page-hero-copy">
         {eyebrow && <p className="eyebrow">{eyebrow}</p>}
         <motion.h1
           className="display display--xl"
@@ -72,7 +47,14 @@ export default function PageHero({ eyebrow, title, lead, image, meta = [] }) {
             ))}
           </div>
         )}
-      </motion.div>
+        </div>
+        {featureImage && (
+          <div className="page-hero-feature">
+            <ImageSlot key={featureImage} name={featureImage} alt={featureAlt} className="page-hero-feature-image" />
+            <span className="page-hero-feature-caption">Research component · R26-DS-012</span>
+          </div>
+        )}
+      </div>
     </header>
   );
 }

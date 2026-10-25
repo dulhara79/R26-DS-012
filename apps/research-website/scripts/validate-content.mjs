@@ -2,6 +2,7 @@
 // no longer supports, and checks that IMAGES.md lists every image slot.
 import fs from "node:fs";
 import path from "node:path";
+import { unsupportedClinicalValidationClaims } from "./contentGuards.mjs";
 
 const root = path.resolve(".");
 const files = [];
@@ -23,7 +24,6 @@ const forbidden = [
   "Adaptive Intervention Engine",
   "KNN BallTree",
   "diagnoses anxiety",
-  "clinically validated",
   "images.unsplash.com",
   "pexels.com",
 ];
@@ -37,6 +37,7 @@ const required = [
 ];
 
 const bad = forbidden.filter((term) => text.includes(term));
+if (unsupportedClinicalValidationClaims(text).length) bad.push("unsupported clinical-validation claim");
 const missing = required.filter((term) => !text.includes(term));
 
 const { images } = await import(new URL("../src/data/images.js", import.meta.url));

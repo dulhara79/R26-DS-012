@@ -102,7 +102,7 @@ export default function Team() {
         </div>
       </section>
 
-      <ContactSection />
+      <ContactSection variant="team" />
     </>
   );
 }

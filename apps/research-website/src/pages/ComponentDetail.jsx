@@ -129,6 +129,9 @@ export default function ComponentDetail() {
         eyebrow={`${c.id} · ${c.modality}`}
         title={c.title}
         lead={c.tagline}
+        image="bannerComponents"
+        featureImage={c.image}
+        featureAlt={c.modality + " research component illustration"}
         meta={[`${c.owner} · ${c.studentId}`, c.timescale]}
       />
 

@@ -14,6 +14,10 @@ const proposalPdf = {
 export const documentStages = [
   "TAF (Topic Assessment Form)",
   "Proposal",
+];
+
+export const presentationStages = [
+  "Proposal",
   "Progress Presentation 1",
   "Progress Presentation 2",
   "Final Presentation",
@@ -34,29 +38,33 @@ export const documents = [
     meta: `${component.id} · ${component.owner} · March 2026`,
     url: proposalPdf[component.id] ? driveFile(proposalPdf[component.id]) : null,
   })),
+];
+
+// Presentation files are listed only on the dedicated Slides page.
+export const presentationSlides = [
   {
-    group: documentStages[1],
+    stage: presentationStages[0],
     type: "Group presentation slides",
     title: "R26-DS-012 proposal presentation",
     meta: "Archived slide deck (its printed date differs from the March proposal reports)",
     url: driveFile("1ApTHMyhwy_7qyqKdU8I2nJRCmJH1xrsz"),
   },
   {
-    group: documentStages[2],
+    stage: presentationStages[1],
     type: "Group presentation slides",
     title: "R26-DS-012 progress presentation 1",
     meta: "Slides dated 11 May 2026 · Assessment date not independently verified",
     url: driveFile("1d0QkKTgOnnZ8BQhqOKrd6PtT-kcIIXmw"),
   },
   {
-    group: documentStages[3],
+    stage: presentationStages[2],
     type: "Group presentation slides",
     title: "R26-DS-012 progress presentation 2",
     meta: "Slides available · Assessment date not verified",
     url: driveFile("1JXDryh9IUuU4EOtHUDQ9rJEmxSJaDY_v"),
   },
   {
-    group: documentStages[4],
+    stage: presentationStages[3],
     type: "Group presentation slides",
     title: "R26-DS-012 final presentation",
     meta: "Final presentation PPTX · October 2026",

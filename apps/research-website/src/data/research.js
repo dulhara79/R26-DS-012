@@ -2,14 +2,34 @@
 // table, privacy commitments, tech stack) and the curated literature synthesis
 // carried over from the v1 site. Keep every statement traceable to those sources.
 
-export const overview = {
-  lead: "Anxiety disorders affect millions of people worldwide, while access to continuous and personalized mental-health monitoring remains limited.",
-  body: [
-    "Clinical appointments provide important but episodic snapshots, and anxiety-related changes can also appear in physiology, everyday behaviour and clinical documentation at different timescales.",
-    "This research investigates a multimodal alternative: four complementary components whose outputs are combined only when they are available, recent and validated.",
+// Website-ready group abstract, grounded in the October 2026 R26-DS-012
+// Final Group Report (abstract; chapters 3, 6 and 8). Retain the report's
+// uncertainty about clinical validity and audited benchmark performance.
+export const groupAbstract = {
+  paragraphs: [
+    "Anxiety-related vulnerability cannot be characterized adequately by isolated clinical observations or a single digital signal. Physiological activity, everyday behaviour, clinical narratives and contextual factors vary in measurement frequency, reliability and clinical meaning. This study presents R26-DS-012, a modular multimodal digital-biomarker research framework for investigating personalized vulnerability mapping and short-horizon physiological change in young adults with anxiety disorders. Its central premise is that evidence should contribute to an integrated assessment only when its provenance, recency and validation status support its use.",
+    "Using distinct retrospective research datasets rather than a jointly measured patient cohort, the group developed wearable-based physiological anomaly modelling with +5- and +10-minute anomaly-index forecasting; longitudinal passive-sensing graph analysis; few-shot anxiety-related clinical-note classification; and reliability-aware fusion supported by contextual inputs and source-grounded retrieval. The integration layer applies eligibility, freshness and coverage checks, preserves unavailable evidence as missing, and supports abstention and traceable explanations across participant- and clinician-facing research applications.",
+    "Evaluation provided component-specific rather than unified clinical evidence. The final behavioural graph model achieved a held-out AUROC of 0.5205 (permutation p = 0.255), resulting in its exclusion from active fusion. Archived clinical NLP experiments indicated note-classification potential, although a subsequent audit identified leakage risks requiring independently verified evaluation under corrected protocols. The group also reported data collection involving eight patients at the National Hospital of Sri Lanka; however, linked outcome records and prospective validation of the integrated score were not available for audit. The principal contribution is therefore an auditable, evidence-sensitive architecture with explicit failure safeguards, not a clinically validated diagnostic or acute-event prediction system.",
   ],
-  paradigms:
-    "The components do not all use the same learning paradigm. Component 1 is primarily self-supervised; Components 2 and 3 use labelled benchmark data for evaluation and training; Component 4 combines eligible component outputs with contextual information and evidence retrieval.",
+  keywords: [
+    "Anxiety disorders",
+    "Digital biomarkers",
+    "Multimodal fusion",
+    "Physiological anomaly forecasting",
+    "Clinical natural language processing",
+    "Evidence-aware decision support",
+  ],
+  source: "R26-DS-012 Final Group Report · October 2026",
+};
+
+// Concise group-level introduction for the homepage. The full paper-style
+// abstract remains exclusive to the Domain page.
+export const homeContext = {
+  lead: "Anxiety-related vulnerability unfolds across physiological changes, everyday behaviour and clinical context—not within a single observation.",
+  body: [
+    "R26-DS-012 investigates wearable physiology, longitudinal behavioural signals and clinical notes as complementary but differently timed research evidence. Each component is evaluated on its own datasets and under its own limitations.",
+    "The integrated prototype is designed to admit only eligible, sufficiently reliable evidence and to withhold unsupported conclusions. It is not a clinically validated diagnostic or acute-event prediction system.",
+  ],
 };
 
 export const problems = [
@@ -46,44 +66,50 @@ export const timescales = [
   ["Background", "Context", "Demographic and contextual factors"],
 ].map(([when, stream, detail]) => ({ when, stream, detail }));
 
-export const literatureThemes = [
-  [
-    "Physiological sensing",
-    "Physiological signals can capture short-timescale change, but baselines differ substantially across people.",
-    "Population-level thresholds may not represent an individual baseline.",
-    "Motivates personalized anomaly modelling in C1.",
+// Group-level synthesis adapted from R26-DS-012 Final Group Report
+// (October 2026), Chapter 1 and Chapter 2.2 "Root causes and overall research gap".
+// Citation numbers intentionally refer to methodologyReferences on this page,
+// NOT the numbering used in the group-report PDF.
+export const groupLiteratureReview = {
+  introduction: [
+    "The literature motivating R26-DS-012 concerns more than the prediction of anxiety from an individual sensor. It asks how clinical assessment, repeated digital observations and recorded patient context can inform one another without assuming that any single measurement is a clinical diagnosis. Screening instruments such as the PHQ-4 and GAD-7 capture defined constructs [5] [6], while digital datasets offer different windows onto physiology, behaviour and clinical documentation [1] [3] [4].",
+    "Taken together, these sources point to three connected challenges. First, clinical encounters and digital measurements observe different parts of an individual's experience. Second, apparent predictive performance may not generalize across participants, populations, collection settings or outcome definitions. Third, integrating evidence into a decision-support workflow requires explicit treatment of quality, uncertainty and provenance rather than simply combining model scores.",
   ],
-  [
-    "Passive behavioural sensing",
-    "Everyday sensing can encode longer-term behavioural patterns.",
-    "Signals are noisy, cohort-dependent and vulnerable to leakage or weak external generalization.",
-    "Motivates the participant-grouped C2 evaluation and its explicit exclusion when evidence is weak.",
+  themes: [
+    {
+      id: "observation",
+      number: "01",
+      title: "Clinical assessment and longitudinal observation",
+      paragraphs: [
+        "Traditional clinical assessment draws on patient history, interviews and purpose-specific screening instruments. The PHQ-4 and GAD-7 are useful examples of standardized measures, but neither turns an isolated digital observation into a verified diagnosis or a forecast of an acute event [5] [6]. Repeated measurements may reveal changes between appointments, yet they must be interpreted within the clinical and personal context in which they were collected.",
+        "Published research resources illustrate both the opportunity and the constraint. WESAD records stress- and affect-related wearable signals in a laboratory setting [1]; AffectiveROAD documents physiological sensing in a driving environment [2]; GLOBEM supplies multi-year longitudinal behavioural measurements [3]; and MIMIC-IV provides hospital electronic health records [4]. These are complementary research sources, not one matched cohort with common anxiety-escalation labels. Their observations span different people, settings, outcomes and timescales.",
+      ],
+    },
+    {
+      id: "validity",
+      number: "02",
+      title: "Predictive validity, dataset shift and evaluation",
+      paragraphs: [
+        "Model performance is meaningful only in relation to the population, label and evaluation protocol that produced it. Stress-related physiology, retrospective behavioural associations and anxiety-coded clinical notes are not interchangeable targets. Evidence drawn from wearable, longitudinal sensing and hospital-record datasets therefore cannot be pooled into a single claim of clinical anxiety-prediction accuracy [1] [3] [4].",
+        "The research literature and reporting guidance make careful validation central to interpretation: subject or patient overlap, missing observations, changes in collection conditions, weak comparison baselines and uncertain calibration can each distort conclusions. TRIPOD+AI emphasizes transparent reporting of prediction-model development and evaluation [12]. In a multimodal project, this means that an apparently sophisticated model is not automatically a trustworthy input to a combined assessment.",
+      ],
+    },
+    {
+      id: "integration",
+      number: "03",
+      title: "Evidence integration, uncertainty and explainability",
+      paragraphs: [
+        "Combining heterogeneous outputs presents a distinct problem from training their underlying models. Physiological deviations may be available over minutes, behavioural summaries over weeks, clinical notes at encounters and contextual factors over longer intervals. Missing or stale inputs must not be silently converted into reassuring scores, and unaligned numerical outputs should not be interpreted as calibrated probabilities of the same clinical event.",
+        "Evidence retrieval adds another layer of responsibility. Retrieval-augmented generation provides a framework for consulting external material [11], but a retrieved passage can still be irrelevant, outdated or contradictory. Transparent prediction-model reporting [12] and explicit source provenance support the case for indicating when evidence is insufficient, where it came from and why an integrated output may need to be withheld. These are design and validation requirements, not evidence that a finished clinical system has been validated.",
+      ],
+    },
   ],
-  [
-    "Clinical NLP",
-    "Clinical documentation can contain relevant anxiety-related evidence.",
-    "Label scarcity, patient overlap and text-derived labels can inflate apparent performance.",
-    "Motivates patient-disjoint few-shot evaluation in C3.",
-  ],
-  [
-    "Multimodal modelling",
-    "Different evidence streams can be complementary.",
-    "Availability, timescale and validation quality differ between modalities.",
-    "Motivates reliability-aware fusion rather than equal weighting.",
-  ],
-  [
-    "Uncertainty and reliability",
-    "Weak or missing evidence must remain visible as uncertainty.",
-    "A numeric output can create false certainty if quality gates are hidden.",
-    "Motivates masking, abstention and explicit evidence states.",
-  ],
-  [
-    "Evidence-aware decision support",
-    "Retrieval can connect outputs with external evidence.",
-    "Retrieved evidence can be stale, conflicting or low authority.",
-    "Motivates CARE-AnxRAG provenance, contradiction checks, citation validation and abstention.",
-  ],
-].map(([theme, shows, limits, relevance]) => ({ theme, shows, limits, relevance }));
+  synthesis: {
+    title: "What the literature means for the group research",
+    summary: "The shared gap is not simply that no single application combines four data types. It is the lack of an adequately validated, uncertainty-aware process for deciding which differently timed signals can contribute to an interpretable assessment—and which should be excluded or left undecided.",
+    boundary: "The reviewed sources motivate an integrated research framework; they do not establish prospective clinical effectiveness. R26-DS-012 evaluates its streams on separate datasets and retains explicit evidence-quality and fusion boundaries.",
+  },
+};
 
 export const researchGap = {
   headline:
