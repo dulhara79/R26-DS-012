@@ -1,0 +1,43 @@
+{
+  "experiment": "missingness_mask_ablation",
+  "description": "Same held-out graphs, 40 missingness-mask channels removed; own 50-draw participant-label permutation null",
+  "source": "Transcribed from the printed output of the v8 notebook (Stage 7b); not re-computed",
+  "config": {
+    "node_feature_dim": 40,
+    "view_dim_dual": 80,
+    "view_dim_dual_with_mask": 160,
+    "params_no_mask": 16497,
+    "params_with_mask": 26737,
+    "n_permutations": 50,
+    "preserved_prevalence": 0.19,
+    "null_note": "v7 used randint (prevalence 0.500); corrected to preserve prevalence",
+    "null_draws_file": "outputs_v8/permutation_draws_nomask.json"
+  },
+  "no_mask": {
+    "repeat_aurocs": [
+      0.5142,
+      0.5067,
+      0.5479
+    ],
+    "auroc": 0.5229,
+    "ci95": [
+      0.49,
+      0.562
+    ],
+    "null_mean": 0.4977,
+    "null_sd": 0.0331,
+    "null_p95": 0.5534,
+    "empirical_p": 0.176
+  },
+  "with_mask": {
+    "auroc": 0.5238,
+    "ci95": [
+      0.488,
+      0.562
+    ],
+    "null_mean": 0.4992,
+    "empirical_p": 0.157
+  },
+  "delta_nomask_minus_mask": -0.0009,
+  "conclusion": "Mask channels contribute negligibly; both configurations are within protocol-matched chance."
+}

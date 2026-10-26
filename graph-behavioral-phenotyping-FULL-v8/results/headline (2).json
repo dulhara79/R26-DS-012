@@ -1,0 +1,52 @@
+{
+  "experiment": "headline_final_heldout",
+  "source": "Compiled from the thesis headline table (Table 6.1) and Section 6.1.1; the notebook output for this run was not saved. A later repeat run gave AUROC 0.5238 (p = 0.157).",
+  "evaluation": {
+    "cohorts": [
+      "INS-W_2",
+      "INS-W_3",
+      "INS-W_4"
+    ],
+    "windows": 4735,
+    "participants": 547,
+    "config_selected_on": "INS-W_1",
+    "config_adjusted_since": false
+  },
+  "repeat_aurocs": [
+    0.5172,
+    0.5317,
+    0.5126
+  ],
+  "auroc": 0.5205,
+  "ci95": [
+    0.485,
+    0.56
+  ],
+  "permutation_null": {
+    "n_draws": 50,
+    "mean": 0.4991,
+    "sd": 0.0333,
+    "p95": 0.5609,
+    "preserved_prevalence": 0.19,
+    "draws_file": "outputs_v8/permutation_draws.json"
+  },
+  "empirical_p": 0.255,
+  "auprc": 0.227,
+  "prevalence": 0.22,
+  "brier": 0.1847,
+  "brier_skill": -0.0752,
+  "resolution": 0.00064,
+  "ece": 0.084,
+  "repeat_run": {
+    "auroc": 0.5238,
+    "ci95": [
+      0.488,
+      0.562
+    ],
+    "null_mean": 0.4992,
+    "empirical_p": 0.157,
+    "auprc": 0.2285,
+    "brier_skill": -0.0651
+  },
+  "decision": "NOT DISTINGUISHABLE FROM CHANCE (CI includes 0.50; p = 0.255; Brier skill negative)"
+}
