@@ -4,17 +4,45 @@ import PageHero from "../components/ui/PageHero";
 import Reveal from "../components/ui/Reveal";
 import SectionHead from "../components/ui/SectionHead";
 import {
-  literatureThemes,
+  groupLiteratureReview,
   objectives,
-  overview,
+  groupAbstract,
   problems,
   researchGap,
   researchQuestion,
   techStack,
-  timescales,
 } from "../data/research";
 import { componentBySlug, components } from "../data/components";
 import { groupMethodology, methodologyReferences } from "../data/methodologyDetail";
+
+const domainSections = [
+  ["Abstract", "overview-title"],
+  ["Problem", "problem-title"],
+  ["Literature", "literature-title"],
+  ["Research gap", "gap-title"],
+  ["Objectives", "question-title"],
+  ["Methodology", "method-title"],
+  ["References", "method-references-title"],
+  ["Technologies", "tech-title"],
+];
+
+// Citation numbers here link to the public IEEE bibliography already used on
+// this page. They are independent source identifiers, not component result IDs.
+function CitedLiterature({ text }) {
+  return text.split(/(\[\d+\])/g).map((part, index) => {
+    const match = /^\[(\d+)\]$/.exec(part);
+    return match ? (
+      <a
+        key={index}
+        className="ieee-inline-citation"
+        href={"#reference-" + match[1]}
+        aria-label={"Reference " + match[1]}
+      >
+        {part}
+      </a>
+    ) : part;
+  });
+}
 
 export default function Research() {
   const slugFor = (id) =>
@@ -28,31 +56,39 @@ export default function Research() {
         image="bannerResearch"
       />
 
-      <section className="section" aria-labelledby="overview-title">
-        <div className="shell split" style={{ alignItems: "start" }}>
-          <Reveal>
-            <p className="eyebrow">Overview</p>
-            <h2 className="display" id="overview-title">
-              Change unfolds on different clocks.
-            </h2>
-          </Reveal>
-          <Reveal className="body-copy" delay={0.1}>
-            <p>{overview.lead}</p>
-            {overview.body.map((paragraph) => (
-              <p key={paragraph}>{paragraph}</p>
-            ))}
-            <p>{overview.paradigms}</p>
-          </Reveal>
-        </div>
+
+      <nav className="section section--tight domain-index" aria-label="Explore the research domain">
         <div className="shell">
-          <Reveal className="timescale-row">
-            {timescales.map((item) => (
-              <div className="timescale" key={item.stream}>
-                <span className="timescale-when">{item.when}</span>
-                <strong>{item.stream}</strong>
-                <span className="muted">{item.detail}</span>
-              </div>
+          <p className="eyebrow">On this page</p>
+          <div className="domain-index-links">
+            {domainSections.map(([label, id]) => (
+              <Link key={id} to={"/research#" + id}>{label} <ArrowRight size={15} aria-hidden="true" /></Link>
             ))}
+          </div>
+          <div className="domain-next-links">
+            <span>Continue exploring</span>
+            <Link to="/components">Four components <ArrowRight size={16} aria-hidden="true" /></Link>
+            <Link to="/system">Architecture & apps <ArrowRight size={16} aria-hidden="true" /></Link>
+            <Link to="/findings">Experimental findings <ArrowRight size={16} aria-hidden="true" /></Link>
+          </div>
+        </div>
+      </nav>
+
+      <section className="section research-abstract" aria-labelledby="overview-title">
+        <div className="shell">
+          <Reveal className="research-abstract-heading">
+            <p className="eyebrow">R26-DS-012 · Integrated group study</p>
+            <h2 className="display" id="overview-title">Abstract</h2>
+            <p className="research-abstract-source">{groupAbstract.source}</p>
+          </Reveal>
+          <Reveal as="article" className="research-abstract-body" delay={0.08}>
+            {groupAbstract.paragraphs.map((paragraph, index) => (
+              <p key={index}>{paragraph}</p>
+            ))}
+            <div className="research-abstract-keywords">
+              <strong>Keywords</strong>
+              <p>{groupAbstract.keywords.join(" · ")}</p>
+            </div>
           </Reveal>
         </div>
       </section>
@@ -90,32 +126,47 @@ export default function Research() {
         </div>
       </section>
 
-      <section className="section" aria-labelledby="literature-title">
+      <section className="section literature-review" aria-labelledby="literature-title">
         <div className="shell">
           <SectionHead
             id="literature-title"
-            eyebrow="Literature landscape"
-            title="Every signal is informative. Every signal has a failure mode."
-            lead="A synthesis of the themes that motivated each component, and the limits each one carries."
+            eyebrow="Group literature review"
+            title="From clinical observation to trustworthy multimodal evidence."
+            lead="An integrated synthesis of published research and the three interconnected challenges identified in the R26-DS-012 group report."
           />
-          <div className="grid-3">
-            {literatureThemes.map((theme, index) => (
-              <Reveal
-                className="card lit-card"
-                key={theme.theme}
-                delay={(index % 3) * 0.06}
-              >
-                <h3 className="card-title">{theme.theme}</h3>
-                <dl>
-                  <dt>Shows</dt>
-                  <dd>{theme.shows}</dd>
-                  <dt>Limits</dt>
-                  <dd>{theme.limits}</dd>
-                  <dt>In this project</dt>
-                  <dd>{theme.relevance}</dd>
-                </dl>
+          <div className="literature-review-layout">
+            <div className="literature-review-main">
+              <Reveal className="literature-review-intro body-copy">
+                <p className="eyebrow">The shared research context</p>
+                {groupLiteratureReview.introduction.map((paragraph, index) => (
+                  <p key={index}><CitedLiterature text={paragraph} /></p>
+                ))}
               </Reveal>
-            ))}
+              <div className="literature-review-themes">
+                {groupLiteratureReview.themes.map((theme) => (
+                  <Reveal as="article" className="literature-review-theme" key={theme.id} id={"literature-" + theme.id}>
+                    <div className="literature-review-theme-heading">
+                      <span className="literature-review-number" aria-hidden="true">{theme.number}</span>
+                      <h3 className="serif-title">{theme.title}</h3>
+                    </div>
+                    <div className="body-copy">
+                      {theme.paragraphs.map((paragraph, index) => (
+                        <p key={index}><CitedLiterature text={paragraph} /></p>
+                      ))}
+                    </div>
+                  </Reveal>
+                ))}
+              </div>
+            </div>
+            <aside className="literature-review-aside" aria-label="Literature synthesis">
+              <p className="eyebrow">Literature synthesis</p>
+              <h3 className="serif-title">{groupLiteratureReview.synthesis.title}</h3>
+              <p>{groupLiteratureReview.synthesis.summary}</p>
+              <p className="literature-review-caution">{groupLiteratureReview.synthesis.boundary}</p>
+              <a href="#method-references-title" className="literature-review-reference-link">
+                Review the cited literature <ArrowRight size={16} aria-hidden="true" />
+              </a>
+            </aside>
           </div>
         </div>
       </section>

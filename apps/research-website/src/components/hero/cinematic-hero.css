@@ -3,7 +3,7 @@
 
 .cinema-scroll {
   position: relative;
-  height: calc(100vh + 2400px);
+  height: calc(100vh + clamp(1200px, 160vh, 1750px));
   color: var(--paper);
   background: var(--teal-deep);
 }
@@ -403,6 +403,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .hero-video video {
+    display: none;
     transition: none;
   }
 

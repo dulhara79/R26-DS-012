@@ -3,7 +3,83 @@ import assert from "node:assert/strict";
 import { components } from "../src/data/components.js";
 import { images, imageDriveIds, imageSrc } from "../src/data/images.js";
 import { supervisors, team } from "../src/data/team.js";
-import { documents, documentStages, milestones, assessmentWeights } from "../src/data/documents.js";
+import { documents, presentationSlides, presentationStages, publishedAdditionalDocuments, documentStages, milestones, assessmentWeights } from "../src/data/documents.js";
+
+
+
+test("homepage gives C1–C4 equal visual treatment with correct evidence boundaries", async () => {
+  const { homeEvidenceHighlights } = await import("../src/data/homeResearch.js");
+  assert.deepEqual(Object.keys(homeEvidenceHighlights), ["C1", "C2", "C3", "C4"]);
+  for (const component of components) {
+    const highlight = homeEvidenceHighlights[component.id];
+    assert.ok(highlight.title.length > 5);
+    assert.ok(highlight.description.length > 25);
+    assert.ok(highlight.imageAlt.length > 10);
+    assert.ok(highlight.status.length > 15);
+  }
+  assert.match(homeEvidenceHighlights.C2.status, /0\.5205.*0\.0/);
+  assert.match(homeEvidenceHighlights.C3.status, /leakage-audited verification/i);
+  assert.match(homeEvidenceHighlights.C4.status, /not clinically validated/i);
+  const { readFileSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const homepage = readFileSync(fileURLToPath(new URL("../src/pages/Home.jsx", import.meta.url)), "utf8");
+  assert.match(homepage, /components\.map\(\(component, index\)/);
+  assert.doesNotMatch(homepage, /home-research-integration|home-research-bridge|homeFusionHighlight/);
+  assert.match(homepage, /name=\{component\.image\}/);
+  assert.match(homepage, /to=\{"\/components\/" \+ component\.slug\}/);
+});
+
+test("homepage group context matches the current research export", async () => {
+  const { homeContext, groupAbstract } = await import("../src/data/research.js");
+  assert.ok(homeContext.lead.length > 60);
+  assert.equal(homeContext.body.length, 2);
+  assert.match(homeContext.body.join(" "), /not a clinically validated diagnostic/i);
+  assert.equal(groupAbstract.paragraphs.length, 3);
+
+  const { readFileSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const homeFile = fileURLToPath(new URL("../src/pages/Home.jsx", import.meta.url));
+  const page = readFileSync(homeFile, "utf8");
+  assert.match(page, /import \{ homeContext, timescales \} from ["']\.\.\/data\/research["']/);
+  assert.doesNotMatch(page, /\boverview\.(?:lead|body)\b/);
+});
+
+test("group abstract preserves group-level evidence and clinical boundaries", async () => {
+  const { groupAbstract } = await import("../src/data/research.js");
+  assert.equal(groupAbstract.paragraphs.length, 3);
+  const content = groupAbstract.paragraphs.join(" ");
+  assert.match(content, /physiological|wearable/i);
+  assert.match(content, /behavioural graph|passive-sensing graph/i);
+  assert.match(content, /clinical-note classification/i);
+  assert.match(content, /reliability-aware fusion/i);
+  assert.match(content, /0\.5205/);
+  assert.match(content, /p = 0\.255/);
+  assert.match(content, /leakage risks/i);
+  assert.match(content, /eight patients/);
+  assert.match(content, /not a clinically validated diagnostic/i);
+  assert.ok(groupAbstract.keywords.length >= 5);
+});
+
+test("group literature review is an integrated, properly cited synthesis", async () => {
+  const { groupLiteratureReview } = await import("../src/data/research.js");
+  const { methodologyReferences } = await import("../src/data/methodologyDetail.js");
+  assert.equal(groupLiteratureReview.themes.length, 3);
+  assert.deepEqual(groupLiteratureReview.themes.map((theme) => theme.id),
+    ["observation", "validity", "integration"]);
+  const allParagraphs = [
+    ...groupLiteratureReview.introduction,
+    ...groupLiteratureReview.themes.flatMap((theme) => theme.paragraphs),
+  ];
+  assert.ok(allParagraphs.every((paragraph) => paragraph.length > 110));
+  assert.ok(allParagraphs.every((paragraph) => !/\bC[1-4]\b/.test(paragraph)),
+    "Group literature should not be organized as individual component reports.");
+  const citations = allParagraphs.flatMap((paragraph) =>
+    [...paragraph.matchAll(/\[(\d+)\]/g)].map((m) => Number(m[1])));
+  assert.ok(citations.length >= 10);
+  assert.ok(citations.every((number) =>
+    methodologyReferences.some((reference) => reference.number === number)));
+  assert.match(groupLiteratureReview.synthesis.boundary, /not establish prospective clinical effectiveness/i);
+});
 
 test("component slugs and ids are unique", () => {
   assert.equal(new Set(components.map((c) => c.slug)).size, components.length);
@@ -47,17 +123,31 @@ test("each declared image slot has its Drive file ID", () => {
 
 test("project's published documents use public Drive file URLs", () => {
   const publicationFiles = documents.filter(d => d.url && !["Repository","Diagram"].includes(d.type));
-  assert.ok(publicationFiles.length >= 8);
+  assert.ok(publicationFiles.length >= 5);
   for (const item of publicationFiles) {
     assert.match(item.url, /^https:\/\/drive\.google\.com\/file\/d\//);
   }
-  assert.match(documents.find(d => d.group === "Final Presentation").url, /^https:\/\/drive\.google\.com\/file\/d\//);
+  assert.match(presentationSlides.find(d => d.stage === "Final Presentation").url, /^https:\/\/drive\.google\.com\/file\/d\//);
+});
+
+test("presentation decks live only on Slides, with no duplicate document links", () => {
+  assert.equal(presentationSlides.length, 4);
+  assert.ok(documents.every((doc) => doc.type !== "Group presentation slides"));
+  assert.ok(publishedAdditionalDocuments.every((doc) => doc.type !== "Group presentation slides"));
+  assert.deepEqual(new Set(documents.map((doc) => doc.group)), new Set(documentStages));
+  const documentUrls = new Set([...documents, ...publishedAdditionalDocuments].map((doc) => doc.url).filter(Boolean));
+  for (const slide of presentationSlides) {
+    assert.match(slide.url, /^https:\/\/drive\.google\.com\/file\/d\//);
+    assert.equal(documentUrls.has(slide.url), false, "Presentation duplicated in Documents: " + slide.title);
+  }
 });
 
 test("university navigation and milestones have honest placeholders", async () => {
   const { navigation } = await import("../src/data/site.js");
   assert.deepEqual(navigation.map((item) => item.label), ["Home","Domain","Milestones","Documents","Slides","About Us","Contact Us"]);
-  assert.deepEqual(documentStages, ["TAF (Topic Assessment Form)","Proposal","Progress Presentation 1","Progress Presentation 2","Final Presentation"]);
+  assert.deepEqual(documentStages, ["TAF (Topic Assessment Form)", "Proposal"]);
+  assert.deepEqual(presentationStages, ["Proposal", "Progress Presentation 1", "Progress Presentation 2", "Final Presentation"]);
+  assert.deepEqual(presentationSlides.map((slide) => slide.stage), presentationStages);
   assert.deepEqual([...new Set(documents.map((item) => item.group))], documentStages);
   assert.deepEqual(milestones.map((item) => item.id), ["taf","proposal-submission","proposal-presentation","checklist-submission","pp1","pp2","draft-thesis","website-submission","final-checklist","final-presentation-viva","website-evaluation-logbook","research-paper-submission","final-thesis","publication-evidence"]);
   assert.equal(assessmentWeights.reduce((sum, item) => sum + item.percent, 0), 100);

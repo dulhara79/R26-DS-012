@@ -7,10 +7,10 @@
   --paper-3: #efdcc4;
   --ink: #13201f;
   --ink-soft: #4a5b59;
-  --ink-faint: #7b8a88;
+  --ink-faint: #566663;
   --teal-deep: #132f2f;
   --teal: #24524f;
-  --teal-mid: #3f7b77;
+  --teal-mid: #326762;
   --teal-bright: #4e9892;
   --sky: #86bdd4;
   --mist: #a9c8d5;
@@ -651,86 +651,114 @@ h3.card-title,
   word-break: break-all;
 }
 
-/* Page hero */
-
+/* Inner-page banners: preserve the original landscape identity, remove the
+   decorative ECG ridge, and give white text a consistently dark reading zone. */
 .page-hero {
   position: relative;
   display: flex;
-  align-items: flex-end;
-  min-height: min(86vh, 860px);
+  align-items: center;
+  min-height: clamp(540px, 69vh, 740px);
   overflow: hidden;
-  padding: 160px 0 clamp(120px, 18vh, 200px);
+  padding: 150px 0 88px;
   color: var(--paper);
-  background: linear-gradient(180deg, #5b9dbf 0%, #86bdd4 36%, #bfd9de 62%, #efd3c0 86%, #f2c6ab 100%);
+  background: #173a40;
   isolation: isolate;
 }
-
 .page-hero-media {
   position: absolute;
   inset: 0;
   z-index: -2;
 }
-
 .page-hero-media .image-slot {
   height: 100%;
+  width: 100%;
   border-radius: 0;
   background: transparent;
 }
-
-.page-hero-media .image-slot--missing::after,
-.page-hero-media .image-slot-guide {
-  display: none;
-}
-
-.page-hero-ridge {
-  position: absolute;
-  right: -4vw;
-  bottom: -2px;
-  left: -4vw;
-  z-index: -1;
-}
-
-.page-hero-ridge svg {
+.page-hero-media .image-slot img {
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
 }
-
+.page-hero-media .image-slot--missing::after,
+.page-hero-media .image-slot-guide { display: none; }
 .page-hero::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: linear-gradient(180deg, rgba(19, 47, 47, 0.28), rgba(19, 47, 47, 0) 40%, rgba(19, 47, 47, 0.22));
   pointer-events: none;
+  background:
+    linear-gradient(90deg,
+      rgba(12, 39, 43, .94) 0%,
+      rgba(12, 39, 43, .88) 34%,
+      rgba(12, 39, 43, .76) 51%,
+      rgba(12, 39, 43, .30) 78%,
+      rgba(12, 39, 43, .08) 100%),
+    linear-gradient(0deg, rgba(12, 39, 43, .2), transparent 56%);
 }
-
+.page-hero-content { position: relative; z-index: 1; }
 .page-hero .eyebrow {
-  color: var(--paper);
-  opacity: 0.9;
+  color: #c5e3d9;
+  font-weight: 700;
+  opacity: 1;
+  letter-spacing: .16em;
 }
-
 .page-hero .display {
   max-width: 16ch;
-  text-shadow: 0 16px 38px rgba(0, 0, 0, 0.22);
+  font-size: clamp(2.8rem, 5.8vw, 5.7rem);
+  line-height: 1.04;
+  color: #fff9ef;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .12);
 }
-
 .page-hero .lead {
-  color: rgba(253, 241, 225, 0.94);
+  max-width: 56ch;
+  margin-top: 24px;
+  color: #f1f6f2;
   font-weight: 500;
-  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.35);
+  font-size: clamp(1.02rem, 1.3vw, 1.16rem);
+  line-height: 1.65;
+  text-shadow: none;
 }
-
 .page-hero-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 28px;
 }
-
 .page-hero-meta .pill {
   color: var(--ink);
-  background: var(--paper);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.14);
+  background: rgba(253, 241, 225, .96);
+  box-shadow: none;
+}
+@media (max-width: 900px) {
+  .page-hero {
+    min-height: 560px;
+    padding: 135px 0 70px;
+  }
+  .page-hero::before {
+    background: linear-gradient(90deg,
+      rgba(12, 39, 43, .94) 0%,
+      rgba(12, 39, 43, .87) 60%,
+      rgba(12, 39, 43, .46) 100%);
+  }
+  .page-hero .display { max-width: 17ch; font-size: clamp(2.7rem, 7.2vw, 4.5rem); }
+  .page-hero .lead { max-width: 53ch; }
+}
+@media (max-width: 640px) {
+  .page-hero {
+    min-height: 460px;
+    padding: 122px 0 62px;
+  }
+  .page-hero::before {
+    background: linear-gradient(180deg,
+      rgba(12, 39, 43, .92) 0%,
+      rgba(12, 39, 43, .85) 50%,
+      rgba(12, 39, 43, .77) 100%);
+  }
+  .page-hero .display { font-size: clamp(2.5rem, 10vw, 3.8rem); max-width: 16ch; }
+  .page-hero .lead { font-size: 1rem; line-height: 1.6; }
 }
 
 /* Navbar */
@@ -959,10 +987,6 @@ h3.card-title,
     display: none;
   }
 
-  .page-hero {
-    min-height: 78vh;
-    padding-top: 130px;
-  }
 
   .data-table th,
   .data-table td {
@@ -1024,4 +1048,57 @@ h3.card-title,
   .brand-text span {
     display: none;
   }
+}
+
+/* Consistent accessible keyboard focus and in-page anchor clearance */
+[id] { scroll-margin-top: 110px; }
+:focus-visible { outline-color: #326762; }
+
+
+/* Component detail page heroes: same landscape banner, plus research-specific art.
+   Keep the text over the dark contrast area; artwork is a separate framed image. */
+.page-hero-content--split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.28fr) minmax(260px, .72fr);
+  align-items: center;
+  gap: clamp(28px, 4.5vw, 76px);
+}
+.page-hero-copy { min-width: 0; }
+.page-hero--component .display { max-width: 13ch; font-size: clamp(2.7rem, 5vw, 5rem); }
+.page-hero--component .lead { max-width: 55ch; }
+.page-hero-feature {
+  width: 100%;
+  min-width: 0;
+  align-self: center;
+  padding: 12px;
+  border: 1px solid rgba(253, 241, 225, .5);
+  border-radius: 25px;
+  background: rgba(253, 241, 225, .95);
+  box-shadow: 0 18px 55px rgba(8, 32, 35, .26);
+}
+.page-hero-feature .page-hero-feature-image {
+  border-radius: 16px;
+  overflow: hidden;
+  background: #d3e3df;
+}
+.page-hero-feature .image-slot img { width: 100%; height: 100%; object-fit: cover; }
+.page-hero-feature .image-slot-guide { display:flex; align-items:center; justify-content:center; min-height: 160px; color: #24524f; }
+.page-hero-feature-caption {
+  display: block;
+  margin: 14px 8px 5px;
+  color: #24524f;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-size: .68rem;
+  font-weight: 700;
+}
+@media (max-width: 850px) {
+  .page-hero-content--split { grid-template-columns: minmax(0, 1fr); gap: 30px; }
+  .page-hero-feature { max-width: 460px; }
+  .page-hero--component { min-height: 0; padding-bottom: 58px; }
+}
+@media (max-width: 640px) {
+  .page-hero--component .display { font-size: clamp(2.35rem, 9vw, 3.6rem); }
+  .page-hero-feature { max-width: 100%; padding: 9px; border-radius: 18px; }
+  .page-hero-feature .page-hero-feature-image { border-radius: 12px; }
 }

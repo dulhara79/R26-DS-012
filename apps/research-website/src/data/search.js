@@ -2,9 +2,9 @@
 // component evidence and linked-document metadata. No remote search service.
 import { navigation, site } from "./site.js";
 import { components } from "./components.js";
-import { documents, milestones, publishedAdditionalDocuments } from "./documents.js";
+import { documents, milestones, presentationSlides, publishedAdditionalDocuments } from "./documents.js";
 import {
-  overview, problems, timescales, literatureThemes, researchGap,
+  groupAbstract, problems, timescales, groupLiteratureReview, researchGap,
   researchQuestion, objectives, methodology, techStack, commitments,
 } from "./research.js";
 import { architecture, aura, clinanx } from "./system.js";
@@ -46,10 +46,10 @@ const section = (title, href, description, content, keywords = "") =>
 
 export const searchIndex = [
   page("Overview", "/", "Project introduction and the multimodal anxiety research story.",
-    [site.title, cinematicIntro, cinematicPanels, overview, problems, researchQuestion],
+    [site.title, cinematicIntro, cinematicPanels, groupAbstract, problems, researchQuestion],
     "home research introduction research prototype"),
   page("Research", "/research", "Research domain, literature, objectives and methodology.",
-    [overview, problems, timescales, literatureThemes, researchGap, objectives, methodology, groupMethodology, methodologyReferences, techStack],
+    [groupAbstract, problems, timescales, groupLiteratureReview, researchGap, objectives, methodology, groupMethodology, methodologyReferences, techStack],
     "domain literature survey research gap objectives technologies"),
   page("Components", "/components", "The four research components and how their signals connect.",
     components, "C1 C2 C3 C4"),
@@ -59,9 +59,9 @@ export const searchIndex = [
     components.map(c => [c.id, c.results, c.evaluation, c.status, c.baselines]),
     "results experiments AUROC F1 benchmark ablation evidence"),
   page("Milestones", "/milestones", "Assessment stages, recorded dates and pending marks.", milestones, "timeline viva final assessment marks"),
-  page("Slides", "/slides", "Proposal, progress and final presentation slides.", documents.filter(d => d.type.includes("slides")), "downloads presentations pptx"),
-  page("Documents", "/documents", "TAF, proposals, progress presentations, final presentation and citation.",
-    [documents, publishedAdditionalDocuments, milestones], "downloads files reports slides PDF milestones"),
+  page("Slides", "/slides", "Proposal, progress and final presentation slides.", presentationSlides, "downloads presentations pptx"),
+  page("Documents", "/documents", "Written reports, proposal records, checklists and citation.",
+    [documents, publishedAdditionalDocuments], "downloads files reports proposals PDF thesis checklists"),
   page("Team", "/team", "The researchers and their academic and clinical supervisors.",
     [team, supervisors], "people authors researchers"),
   page("Contact", "/contact", "Project repository, SLIIT and research-team contact information.",
@@ -71,13 +71,14 @@ export const searchIndex = [
   section("Research challenge", "/#problem-title",
     "Why single observations do not describe anxiety across time.", problems,
     "anxiety problem motivation"),
-  section("Research overview", "/research#overview-title",
-    "Multiple signals and timescales.", [overview, timescales]),
+  section("Group research abstract", "/research#overview-title",
+    "Integrated purpose, methods, findings and clinical-validation boundaries.", groupAbstract,
+    "abstract summary group research anxiety biomarker"),
   section("Research problem", "/research#problem-title",
     "The limits of episodic assessment and isolated signals.", problems),
-  section("Literature survey", "/research#literature-title",
-    "The physiological, behavioural, clinical and evidence-aware literature.", literatureThemes,
-    "literature landscape related work review"),
+  section("Group literature review", "/research#literature-title",
+    "Published evidence synthesized across observation, validation and uncertainty.", groupLiteratureReview,
+    "literature landscape related work synthesis review"),
   section("Research gap", "/research#gap-title",
     researchGap.headline, researchGap, "validation uncertainty reliability"),
   section("Research objectives", "/research#question-title",
@@ -113,10 +114,10 @@ export const searchIndex = [
     "Scope of the study and restrictions on interpreting predictions.",
     [components.map(c => c.status), commitments], "not diagnostic generalization"),
   section("Documents and downloads", "/documents#docs-title",
-    "Assessment records from TAF to the final presentation.", documents,
-    "download PDF PPT proposal"),
-  section("Presentation archive", "/slides#slides-title", "Presentation slides and their publication status.", documents.filter(d => d.type.includes("slides"))),
-  section("Research milestones", "/milestones#assessment-title",
+    "Written research records, proposal reports, checklists and draft theses.",
+    [documents, publishedAdditionalDocuments], "download PDF reports proposal thesis checklist"),
+  section("Presentation archive", "/slides#slides-title", "Presentation slides and their publication status.", presentationSlides),
+  section("Research milestones", "/milestones#milestones-title",
     "Topic assessment, proposals, progress presentations and final presentation.", milestones,
     "timeline milestones assessment"),
   section("Cite this research", "/documents#cite-title",
@@ -160,13 +161,21 @@ export const searchIndex = [
         [c.title, c.modality, c.fusionRole]),
     ];
   }),
+  ...presentationSlides.map((slide, i) => record(
+    "Presentation", slide.title,
+    "/slides#slide-" + i,
+    [slide.stage, slide.type, slide.meta].filter(Boolean).join(" · "),
+    [slide.stage, slide.type, slide.meta],
+    ["presentation", "slides", "pptx", slide.stage],
+    slide.url && slide.url.startsWith("https://drive.google.com/file/d/") ? slide.url : null,
+  )),
   ...publishedAdditionalDocuments.map((doc, i) => record("Document", doc.title, "/documents#additional-document-" + i, doc.meta, [doc.group, doc.type, doc.meta], "checklist report draft", doc.url)),
   ...documents.map((doc, i) => record(
     "Document", doc.title,
     "/documents#document-" + i,
     [doc.group, doc.type, doc.meta].filter(Boolean).join(" · "),
     [doc.group, doc.type, doc.meta],
-    ["download", "file", "report", "slides", "TAF", "presentation"],
+    ["download", "file", "report", "TAF", "proposal"],
     doc.url && doc.url.startsWith("https://drive.google.com/file/d/") ? doc.url : null,
   )),
   ...team.map(person => record("Person", person.name, "/team#team-title",
@@ -223,7 +232,7 @@ export function searchSite(query, { category = "All", limit = 60 } = {}) {
     if (title.includes(phrase)) score += 100;
     if (description.includes(phrase)) score += 35;
     if (keywords.includes(phrase)) score += 16;
-    if (item.category === "Document" && /^(document|proposal|progress|taf|slide|report|presentation)/.test(phrase)) score += 8;
+    if ((item.category === "Document" || item.category === "Presentation") && /^(document|proposal|progress|taf|slide|report|presentation)/.test(phrase)) score += 8;
     score += (coverage / terms.length) * 35;
     results.push({ ...item, score, excerpt: excerpt(item, terms) });
   }
@@ -232,5 +241,5 @@ export function searchSite(query, { category = "All", limit = 60 } = {}) {
     .slice(0, limit);
 }
 
-export const searchCategories = ["All", "Page", "Section", "Component", "Finding", "Document", "Person"];
+export const searchCategories = ["All", "Page", "Section", "Component", "Finding", "Document", "Presentation", "Person"];
 export const suggestedSearches = ["Clinical NLP", "Results", "Proposal", "Fusion"];

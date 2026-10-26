@@ -122,7 +122,7 @@ function HeroVideo({ sectionRef }) {
           poster={heroVideo.poster}
           muted
           playsInline
-          preload={index === 0 ? "auto" : "metadata"}
+          preload={index === 0 ? "metadata" : "none"}
           onTimeUpdate={() => onTimeUpdate(index)}
           onEnded={(event) => event.currentTarget.pause()}
         />
