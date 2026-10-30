@@ -32,7 +32,7 @@ import os
 from typing import Optional
 
 from sqlalchemy import (JSON, DateTime, Float, ForeignKey, Index, Integer,
-                        String, UniqueConstraint, create_engine, Text)
+                        String, UniqueConstraint, create_engine, Text, Boolean, text)
 from sqlalchemy.orm import (DeclarativeBase, Mapped, mapped_column, relationship,
                             sessionmaker)
 
@@ -101,6 +101,59 @@ class SubjectAlias(Base):
     subject: Mapped[Subject] = relationship(back_populates="aliases")
 
 
+class PatientCredential(Base):
+    """Proof that one Aura installation owns one canonical subject session.
+
+    Only a salted PBKDF2 digest is persisted. The installation secret itself
+    stays in the patient's secure mobile storage.
+    """
+
+    __tablename__ = "patient_credentials"
+
+    subject_id: Mapped[str] = mapped_column(
+        ForeignKey("subjects.subject_id"), primary_key=True
+    )
+    secret_hash: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    last_issued_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+
+class Clinician(Base):
+    __tablename__ = "clinicians"
+    clinician_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    display_name: Mapped[str] = mapped_column(String(128))
+    role: Mapped[str] = mapped_column(String(32), default="clinician")
+    password_hash: Mapped[str] = mapped_column(String(255))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ClinicianSubjectAssignment(Base):
+    __tablename__ = "clinician_subject_assignments"
+    __table_args__ = (UniqueConstraint("clinician_id", "subject_id", name="uq_clinician_subject"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    clinician_id: Mapped[str] = mapped_column(ForeignKey("clinicians.clinician_id"), index=True)
+    subject_id: Mapped[str] = mapped_column(ForeignKey("subjects.subject_id"), index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    assigned_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    ended_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime(timezone=True))
+
+
+class ClinicianAssignmentInvite(Base):
+    """Patient-authorized, short-lived, single-use invitation; plaintext is never stored."""
+    __tablename__ = "clinician_assignment_invites"
+    code_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    subject_id: Mapped[str] = mapped_column(ForeignKey("subjects.subject_id"), index=True)
+    expires_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
+    redeemed_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime(timezone=True))
+    redeemed_by: Mapped[Optional[str]] = mapped_column(String(64))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class PairingCode(Base):
     """Short-lived code the clinician reads aloud to the patient.
 
@@ -160,6 +213,58 @@ class FusionResult(Base):
     computed_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class ForecastResult(Base):
+    __tablename__ = "forecast_results"
+    __table_args__ = (Index("ix_forecast_lookup", "subject_id", "generated_at"),)
+    forecast_result_id: Mapped[str] = mapped_column(String(48), primary_key=True)
+    subject_id: Mapped[str] = mapped_column(ForeignKey("subjects.subject_id"), index=True)
+    source_reading_id: Mapped[Optional[int]] = mapped_column(ForeignKey("modality_readings.id"))
+    source_fusion_result_id: Mapped[Optional[int]] = mapped_column(ForeignKey("fusion_results.id"), index=True)
+    scope: Mapped[str] = mapped_column(String(32), default="physiological")
+    horizon_minutes: Mapped[int] = mapped_column(Integer)
+    score: Mapped[Optional[float]] = mapped_column(Float)
+    tier: Mapped[Optional[str]] = mapped_column(String(16))
+    escalation_probability: Mapped[Optional[float]] = mapped_column(Float)
+    escalation_predicted: Mapped[bool] = mapped_column(Boolean, default=False)
+    generated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    valid_until: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
+    model_version: Mapped[Optional[str]] = mapped_column(String(64))
+
+
+class EscalationEpisode(Base):
+    __tablename__ = "escalation_episodes"
+    __table_args__ = (Index("uq_active_episode_subject", "subject_id", unique=True,
+                            sqlite_where=text("status = 'active'"),
+                            postgresql_where=text("status = 'active'")),)
+    episode_id: Mapped[str] = mapped_column(String(48), primary_key=True)
+    subject_id: Mapped[str] = mapped_column(ForeignKey("subjects.subject_id"), index=True)
+    status: Mapped[str] = mapped_column(String(16), default="active")
+    opened_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    closed_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime(timezone=True))
+
+
+class AttentionEvent(Base):
+    __tablename__ = "attention_events"
+    __table_args__ = (Index("ix_attention_lookup", "subject_id", "status", "created_at"),)
+    id: Mapped[str] = mapped_column(String(48), primary_key=True)
+    subject_id: Mapped[str] = mapped_column(ForeignKey("subjects.subject_id"), index=True)
+    fusion_result_id: Mapped[Optional[int]] = mapped_column(ForeignKey("fusion_results.id"))
+    forecast_result_id: Mapped[Optional[str]] = mapped_column(ForeignKey("forecast_results.forecast_result_id"))
+    episode_id: Mapped[Optional[str]] = mapped_column(ForeignKey("escalation_episodes.episode_id"), unique=True)
+    event_type: Mapped[str] = mapped_column(String(48), default="acute_escalation_forecast")
+    severity: Mapped[str] = mapped_column(String(16))
+    reason: Mapped[str] = mapped_column(String(255))
+    forecast_horizon: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16), default="OPEN")
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    acknowledged_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime(timezone=True))
+    acknowledged_by: Mapped[Optional[str]] = mapped_column(String(64))
+    resolved_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime(timezone=True))
+    resolved_by: Mapped[Optional[str]] = mapped_column(String(64))
+    resolution_note: Mapped[Optional[str]] = mapped_column(String(255))
+    policy_version: Mapped[str] = mapped_column(String(32), default="escalation-v1")
+
+
 class Verdict(Base):
     """The clinician's HITL tier judgement for one fusion result.
 
@@ -195,6 +300,37 @@ class AuditLog(Base):
     event: Mapped[str] = mapped_column(String(48))
     actor: Mapped[Optional[str]] = mapped_column(String(64))
     detail: Mapped[Optional[dict]] = mapped_column(JSON)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class DeviceToken(Base):
+    """Encrypted FCM token bound to one authenticated app principal."""
+    __tablename__ = "device_tokens"
+    __table_args__ = (UniqueConstraint("token_hash", name="uq_device_token_hash"),)
+    id: Mapped[str] = mapped_column(String(48), primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    token_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    owner_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    owner_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    platform: Mapped[str] = mapped_column(String(16), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    registered_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class NotificationDelivery(Base):
+    """Durable, idempotent and retryable push-delivery intent."""
+    __tablename__ = "notification_deliveries"
+    __table_args__ = (UniqueConstraint("event_id", "device_id", name="uq_event_device_delivery"),)
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    event_id: Mapped[str] = mapped_column(ForeignKey("attention_events.id"), index=True)
+    device_id: Mapped[str] = mapped_column(ForeignKey("device_tokens.id"), index=True)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_attempt_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    claim_id: Mapped[Optional[str]] = mapped_column(String(48))
+    claimed_until: Mapped[Optional[dt.datetime]] = mapped_column(DateTime(timezone=True))
+    sent_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime(timezone=True))
+    failure_code: Mapped[Optional[str]] = mapped_column(String(32))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

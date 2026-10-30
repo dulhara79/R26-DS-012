@@ -1,0 +1,1 @@
+"""Local deployable model adapters."""
