@@ -129,6 +129,34 @@ def content_tokens(text: str) -> list[str]:
     return [token for token in tokens(text) if len(token) >= 2 and token not in _STOPWORDS]
 
 
+_ABBREVIATION_END = re.compile(
+    r"(?:\b(?:vs|etc|dr|mr|ms|mrs|prof|fig)\.|\be\.g\.|\bi\.e\.|\bet al\.)$",
+    re.I,
+)
+
+
+def source_sentences(text: str) -> list[str]:
+    """Split source/answer text without ending a claim at a common abbreviation.
+
+    Returned spans preserve normalized source wording, including decimal values,
+    comparators, negation, and within-sentence limitations.
+    """
+    normalized = normalize_whitespace(text)
+    sentences: list[str] = []
+    start = 0
+    for boundary in re.finditer(r"(?<=[.!?])(?:\s+|$)|\n+", normalized):
+        if _ABBREVIATION_END.search(normalized[start:boundary.start()]):
+            continue
+        sentence = normalized[start:boundary.start()].strip()
+        if sentence:
+            sentences.append(sentence)
+        start = boundary.end()
+    remaining = normalized[start:].strip()
+    if remaining:
+        sentences.append(remaining)
+    return sentences
+
+
 def fts_query(text: str, max_terms: int = 24) -> str:
     terms: list[str] = []
     seen: set[str] = set()
